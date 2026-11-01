@@ -132,6 +132,7 @@ export default function StudentDashboard() {
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(''); // "YYYY-MM-DD|HH:MM"
   const [weekOffset, setWeekOffset] = useState(0); // 0 = the current week; the booking window is 4 weeks ahead
+  const [movedNote, setMovedNote] = useState(false); // true when the calendar jumped ahead by itself
   const [aptReason, setAptReason] = useState('');
   const [aptPurpose, setAptPurpose] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -196,6 +197,7 @@ export default function StudentDashboard() {
     setSelectedSlot('');
     setConfirmOpen(false);
     setWeekOffset(0);
+    setMovedNote(false);
     if (!selectedFaculty) { setSlots([]); setBusy([]); return; }
     let alive = true;
     const load = (first: boolean) => {
@@ -206,6 +208,13 @@ export default function StudentDashboard() {
           if (alive && Array.isArray(data.slots)) {
             setSlots(data.slots); setBusy(Array.isArray(data.busy) ? data.busy : []);
             setMaxPending(data.maxPending || 3); setLeadHours(data.leadHours || BOOKING_LEAD_HOURS);
+            // First load only (never on the 15-second refresh, so the student is not moved while looking):
+            // if this week has nothing left to request, open the first week that does.
+            if (first) {
+              const firstOpen = data.slots.find((sl: any) => !sl.full); // the server sorts slots by date and time
+              const jump = firstOpen ? weeksBetween(mondayOf(manilaToday()), mondayOf(firstOpen.date)) : 0;
+              if (jump > 0) { setWeekOffset(jump); setMovedNote(true); }
+            }
           }
         })
         .catch(() => { if (alive && first) { setSlots([]); setBusy([]); } })
@@ -573,10 +582,13 @@ export default function StudentDashboard() {
                 {selectedFaculty && !scheduleLoading && slots.length > 0 && (
                   <VStack align="stretch" spacing={4}>
                     <Flex align="center" justify="space-between" gap={2}>
-                      <ChakraButton size="sm" variant="outline" isDisabled={weekOffset === 0} visibility={weekOffset === 0 ? 'hidden' : 'visible'} onClick={() => setWeekOffset(w => Math.max(0, w - 1))}>‹ Previous Week</ChakraButton>
+                      <ChakraButton size="sm" variant="outline" isDisabled={weekOffset === 0} visibility={weekOffset === 0 ? 'hidden' : 'visible'} onClick={() => { setMovedNote(false); setWeekOffset(w => Math.max(0, w - 1)); }}>‹ Previous Week</ChakraButton>
                       <Text fontWeight="700" fontSize="sm" color={textColor} textAlign="center">{weekLabel(weekStart)}</Text>
-                      <ChakraButton size="sm" variant="outline" isDisabled={weekOffset >= maxWeekOffset} onClick={() => setWeekOffset(w => Math.min(maxWeekOffset, w + 1))}>Next Week ›</ChakraButton>
+                      <ChakraButton size="sm" variant="outline" isDisabled={weekOffset >= maxWeekOffset} onClick={() => { setMovedNote(false); setWeekOffset(w => Math.min(maxWeekOffset, w + 1)); }}>Next Week ›</ChakraButton>
                     </Flex>
+                    {movedNote && (
+                      <Text fontSize="xs" color={mutedText} textAlign="center">Nothing is left to request in the current week, so the calendar moved to the first week with open hours.</Text>
+                    )}
                     <WeeklyBookingCalendar
                       slots={slots} busy={busy} weekStart={weekStart} leadHours={leadHours} maxPending={maxPending}
                       selectedKey={selectedSlot} onPick={pickSlot}
