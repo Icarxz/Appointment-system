@@ -37,7 +37,7 @@ const StatusHistory = require('../models/StatusHistory');
 const crypto = require('crypto'); // Built-in Node.js module for secure hashes
 const ConsultationHours = require('../models/ConsultationHours');
 const AddedConsultationHours = require('../models/AddedConsultationHours');
-const { buildSlots, insideConsultHours, maxDurationAt, addDays, dayOfWeekOf, overlaps, MAX_PENDING_PER_SLOT } = require('../utils/slots');
+const { buildSlots, buildBusy, insideBookableHours, maxDurationAt, addDays, dayOfWeekOf, overlaps, MAX_PENDING_PER_SLOT } = require('../utils/slots');
 const { isOverlapping } = require('../utils/timeMath');
 const { requireAuth } = require('../middleware/auth');
 
@@ -224,7 +224,7 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
       // Get day of week (0 = Sunday, 1 = Monday) to check against recurring classes
       const dayOfWeek = aptDate.getDay(); 
 
-      // Must still fall inside official or added consultation hours
+      // Must still fall inside the consultation hours (official or added) or the vacant window (Mon-Fri, 8 AM-5 PM)
       const [official, added] = await Promise.all([
         ConsultationHours.find({ facultyId }).lean(),
         AddedConsultationHours.find({ facultyId, dayOfWeek: { $gte: 1 } }).lean(),
@@ -241,8 +241,8 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
         targetApt.duration = newDuration;
       }
 
-      if (!insideConsultHours({ date: targetApt.date, time: targetApt.time, duration: targetApt.duration, official, added })) {
-        return res.status(400).json({ error: 'This time is outside the faculty member\'s consultation hours.' });
+      if (!insideBookableHours({ date: targetApt.date, time: targetApt.time, duration: targetApt.duration, official, added })) {
+        return res.status(400).json({ error: 'This time is outside the faculty member\'s consultation hours and the Monday to Friday, 8 AM to 5 PM booking window.' });
       }
 
       // 1b. Fetch faculty's immovable teaching schedule for this day
@@ -394,7 +394,9 @@ router.get('/announcements/:section', requireAuth(ALL_ROLES), async (req, res) =
   }
 });
 
-// Bookable slots for one faculty member over the next 4 weeks (hourly pieces of official + added hours).
+// Bookable slots for one faculty member over the next 4 weeks: hourly pieces of the official and added consultation
+// hours, plus vacant hours (Mon-Fri, 8 AM-5 PM). `busy` lists the class and approved-appointment times (no names)
+// so the calendar can show why a cell is not bookable.
 async function loadSlots(facultyId, flaggedDate = '') {
   const today = manilaNow().dateStr;
   const horizon = addDays(today, 28);
@@ -404,14 +406,18 @@ async function loadSlots(facultyId, flaggedDate = '') {
     Schedule.find({ facultyId }).lean(),
     Appointment.find({ facultyId, status: { $in: ['PENDING', 'APPROVED'] }, date: { $gte: today, $lt: horizon } }).lean(),
   ]);
-  return buildSlots({ official, added, classes, appointments, today, nowMs: Date.now(), weeks: 4, leadHours: BOOKING_LEAD_HOURS, flaggedDate });
+  return {
+    slots: buildSlots({ official, added, classes, appointments, today, nowMs: Date.now(), weeks: 4, leadHours: BOOKING_LEAD_HOURS, flaggedDate }),
+    busy: buildBusy({ classes, appointments, today, weeks: 4, flaggedDate }),
+  };
 }
 
 router.get('/slots/:facultyId', requireAuth(ALL_ROLES), async (req, res) => {
   try {
     const faculty = await User.findOne({ _id: req.params.facultyId, role: 'FACULTY' }).select('flaggedDate');
     if (!faculty) return res.status(404).json({ error: 'Faculty member not found.' });
-    res.json({ maxPending: MAX_PENDING_PER_SLOT, slots: await loadSlots(faculty._id, faculty.flaggedDate) });
+    const { slots, busy } = await loadSlots(faculty._id, faculty.flaggedDate);
+    res.json({ maxPending: MAX_PENDING_PER_SLOT, leadHours: BOOKING_LEAD_HOURS, slots, busy });
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching consultation slots.' });
   }
@@ -495,12 +501,12 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
     const { facultyId, date, time, studentName, studentSection, reason } = req.body;
     const studentId = req.user.userId; // from the verified login token, not the request body
 
-    // The request must match a real, open slot (official or added consultation hours): this covers
+    // The request must match a real, open slot (consultation hours or a vacant hour, Mon-Fri 8 AM-5 PM): this covers
     // the 1-hour lead time, operating hours, classes, approved appointments and the faculty's
     // out-of-office date. The duration comes from the slot, not from the student.
     const faculty = await User.findOne({ _id: facultyId, role: 'FACULTY' }).select('flaggedDate');
     if (!faculty) return res.status(404).json({ error: 'Faculty member not found.' });
-    const slot = (await loadSlots(faculty._id, faculty.flaggedDate)).find(x => x.date === date && x.start === time);
+    const slot = (await loadSlots(faculty._id, faculty.flaggedDate)).slots.find(x => x.date === date && x.start === time);
     if (!slot) {
       return res.status(400).json({ error: 'That time slot is not available. Please choose one from the faculty\'s consultation hours.' });
     }

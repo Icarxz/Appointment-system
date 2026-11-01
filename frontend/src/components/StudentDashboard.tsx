@@ -7,7 +7,7 @@ import OnboardingModal from './OnboardingModal';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 import {
   Box, Heading, Text, Button as ChakraButton, Table, Thead, Tbody, Tr, Th, Td, TableContainer,
-  Badge, Input, Select, VStack, HStack, useToast, FormControl, FormLabel, Textarea, Flex,
+  Badge, Input, Select, VStack, HStack, useToast, FormControl, FormLabel, Flex,
   useColorMode, useColorModeValue,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure
 } from '@chakra-ui/react';
@@ -24,7 +24,9 @@ import WeeklyCalendar from './WeeklyCalendar';
 import SidebarIdentity from './SidebarIdentity';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
-import { manilaToday, addDaysIso, mondayOf, weeksBetween, weekLabel, dayHeading } from '../utils/weekUtils';
+import { manilaToday, addDaysIso, mondayOf, weeksBetween, weekLabel } from '../utils/weekUtils';
+import WeeklyBookingCalendar from './WeeklyBookingCalendar';
+import BookingConfirmModal from './BookingConfirmModal';
 
 const PURPOSE_OPTIONS = [
   'Capstone / Thesis Consultation',
@@ -123,6 +125,9 @@ export default function StudentDashboard() {
   const [facultySearch, setFacultySearch] = useState('');
   // Bookable slots for the chosen professor (hourly pieces of official + added consultation hours, next 4 weeks)
   const [slots, setSlots] = useState<any[]>([]);
+  const [busy, setBusy] = useState<any[]>([]);           // class and already-booked times (no names), for the calendar
+  const [leadHours, setLeadHours] = useState(BOOKING_LEAD_HOURS);
+  const [confirmOpen, setConfirmOpen] = useState(false); // the "Request this consultation" panel
   const [maxPending, setMaxPending] = useState(3);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(''); // "YYYY-MM-DD|HH:MM"
@@ -189,15 +194,21 @@ export default function StudentDashboard() {
   // pending counts and taken slots stay current while the student is choosing.
   useEffect(() => {
     setSelectedSlot('');
+    setConfirmOpen(false);
     setWeekOffset(0);
-    if (!selectedFaculty) { setSlots([]); return; }
+    if (!selectedFaculty) { setSlots([]); setBusy([]); return; }
     let alive = true;
     const load = (first: boolean) => {
       if (first) setScheduleLoading(true);
       authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/slots/${selectedFaculty}`)
         .then(res => res.json())
-        .then(data => { if (alive && Array.isArray(data.slots)) { setSlots(data.slots); setMaxPending(data.maxPending || 3); } })
-        .catch(() => { if (alive && first) setSlots([]); })
+        .then(data => {
+          if (alive && Array.isArray(data.slots)) {
+            setSlots(data.slots); setBusy(Array.isArray(data.busy) ? data.busy : []);
+            setMaxPending(data.maxPending || 3); setLeadHours(data.leadHours || BOOKING_LEAD_HOURS);
+          }
+        })
+        .catch(() => { if (alive && first) { setSlots([]); setBusy([]); } })
         .finally(() => { if (alive && first) setScheduleLoading(false); });
     };
     load(true);
@@ -205,24 +216,33 @@ export default function StudentDashboard() {
     return () => { alive = false; clearInterval(id); };
   }, [selectedFaculty]);
 
-  // Slots grouped by date for the weekly-hours panel.
-  const slotsByDate = React.useMemo(() => {
-    const m: Record<string, any[]> = {};
-    slots.forEach(sl => { (m[sl.date] = m[sl.date] || []).push(sl); });
-    return Object.entries(m);
-  }, [slots]);
-
   // Week-by-week view: Monday to Sunday, never earlier than the current week, never past the booking window.
   const todayIso = manilaToday();
   const thisMonday = mondayOf(todayIso);
   const maxWeekOffset = weeksBetween(thisMonday, mondayOf(addDaysIso(todayIso, 27)));
   const weekStart = addDaysIso(thisMonday, weekOffset * 7);
-  const weekEnd = addDaysIso(weekStart, 6);
-  const weekSlotsByDate = slotsByDate.filter(([date]) => date >= weekStart && date <= weekEnd);
 
   const slotKey = (sl: any) => `${sl.date}|${sl.start}`;
   const slotLabel = (sl: any) => `${formatDatePreview(sl.date)} · ${formatTime(sl.start)} – ${formatTime(sl.end)}`;
   const chosenSlot = slots.find(sl => slotKey(sl) === selectedSlot);
+
+  // Clicking a calendar cell: choose that hour and open the confirm panel (read-only mode cannot book).
+  const pickSlot = (sl: any) => {
+    if (!profileComplete) {
+      toast({ title: 'Read-only mode', description: 'Complete your profile details and ID verification to unlock consultation requests.', status: 'warning', position: 'top' });
+      return;
+    }
+    setSelectedSlot(slotKey(sl));
+    setConfirmOpen(true);
+  };
+
+  // If the chosen hour is taken or closes while the panel is open (the list refreshes every 15 seconds), say so.
+  useEffect(() => {
+    if (confirmOpen && selectedSlot && !chosenSlot) {
+      setConfirmOpen(false); setSelectedSlot('');
+      toast({ title: 'That time is no longer available', description: 'Someone else got it, or it is too close to the start time. Please choose another hour.', status: 'info', position: 'top' });
+    }
+  }, [confirmOpen, selectedSlot, chosenSlot]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Professors the student has booked before, most recent first (shown by default and pinned to the top).
   const recommendedIds: string[] = React.useMemo(() => {
@@ -323,6 +343,7 @@ export default function StudentDashboard() {
         isClosable: true
       });
       
+      setConfirmOpen(false);
       setSelectedFaculty(''); setSelectedSlot(''); setAptReason(''); setAptPurpose('');
       setActivePage('requests'); 
       fetchData(); 
@@ -489,8 +510,7 @@ export default function StudentDashboard() {
                     <ChakraButton size="sm" colorScheme="orange" onClick={onProfileOpen}>Complete profile</ChakraButton>
                   </Box>
                 )}
-                <form onSubmit={handleAppointmentSubmit}>
-                  <VStack spacing={4}>
+                <VStack spacing={4} align="stretch">
                     <FormControl isRequired>
                       <FormLabel color={textColor}>Your Section</FormLabel>
                       <Input value={studentSection} isReadOnly color={textColor} borderColor={borderColor} bg={useColorModeValue('gray.50', 'whiteAlpha.100')} cursor="not-allowed" />
@@ -534,104 +554,33 @@ export default function StudentDashboard() {
                         <ChakraButton size="xs" variant="link" colorScheme="blue" onClick={() => { setSelectedFaculty(''); setFacultySearch(''); }}>Change professor</ChakraButton>
                       )}
                     </FormControl>
-                    <FormControl isRequired>
-                      <FormLabel color={textColor}>Time</FormLabel>
-                      <Select
-                        placeholder={!selectedFaculty ? 'Choose a professor first' : slots.length ? 'Select an available slot' : 'No open slots'}
-                        value={selectedSlot}
-                        onChange={(e) => setSelectedSlot(e.target.value)}
-                        isDisabled={!selectedFaculty || slots.length === 0}
-                        color={textColor} borderColor={borderColor}
-                      >
-                        {slots.map(sl => (
-                          <option key={slotKey(sl)} value={slotKey(sl)} disabled={sl.full}>
-                            {slotLabel(sl)}{sl.kind === 'ADDED' ? ' (added hours)' : ''}{sl.full ? ' (full)' : ''}
-                          </option>
-                        ))}
-                      </Select>
-                      <Text fontSize="xs" color={mutedText} mt={1}>
-                        Pick from the list or click a slot on the right. Requests close {BOOKING_LEAD_HOURS} hour before the start time. Default length is {chosenSlot ? `${chosenSlot.duration} minutes` : '1 hour'}; your professor can shorten it when accepting.
-                      </Text>
-                    </FormControl>
-                    <FormControl isRequired><FormLabel color={textColor}>Purpose of Meeting</FormLabel>
-                      <Select
-                        placeholder="Select a purpose"
-                        value={aptPurpose}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setAptPurpose(value);
-                          // For every option except "Others", the dropdown selection IS the reason
-                          // sent to the backend. "Others" clears it so the student must type one in.
-                          setAptReason(value === 'Others' ? '' : value);
-                        }}
-                        color={textColor} borderColor={borderColor}
-                      >
-                        {PURPOSE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </Select>
-                      {aptPurpose === 'Others' && (
-                        <Textarea
-                          mt={2}
-                          placeholder="Please specify your purpose..."
-                          value={aptReason}
-                          onChange={(e) => setAptReason(e.target.value)}
-                          color={textColor} borderColor={borderColor}
-                        />
-                      )}
-                    </FormControl>
-                    <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={isSubmitting} isDisabled={!profileComplete} size="lg" title={profileComplete ? undefined : 'Complete your profile details and ID verification to unlock consultation requests.'}>Submit Appointment Request</ChakraButton>
-                  </VStack>
-                </form>
+                </VStack>
               </Box>
 
-              <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1" minW="280px">
+              <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1" minW="320px">
                 <Heading size="sm" color={textColor} mb={4}>
-                  {selectedFacultyObj ? `${selectedFacultyObj.name}'s Weekly Hours` : 'Select a professor to view their hours'}
+                  {selectedFacultyObj ? `${selectedFacultyObj.name}'s Weekly Calendar` : 'Select a professor to view their calendar'}
                 </Heading>
                 {!selectedFaculty && (
-                  <Text fontSize="sm" color={mutedText}>Search and choose a professor on the left to see their open consultation slots.</Text>
+                  <Text fontSize="sm" color={mutedText}>Search and choose a professor on the left to see when they can be booked.</Text>
                 )}
                 {selectedFaculty && scheduleLoading && (
                   <Text fontSize="sm" color={mutedText}>Loading schedule...</Text>
                 )}
-                {selectedFaculty && !scheduleLoading && slotsByDate.length === 0 && (
-                  <Text fontSize="sm" color={mutedText}>No open consultation slots in the next 4 weeks.</Text>
+                {selectedFaculty && !scheduleLoading && slots.length === 0 && (
+                  <Text fontSize="sm" color={mutedText}>No open hours in the next 4 weeks.</Text>
                 )}
-                {selectedFaculty && !scheduleLoading && slotsByDate.length > 0 && (
+                {selectedFaculty && !scheduleLoading && slots.length > 0 && (
                   <VStack align="stretch" spacing={4}>
                     <Flex align="center" justify="space-between" gap={2}>
                       <ChakraButton size="sm" variant="outline" isDisabled={weekOffset === 0} visibility={weekOffset === 0 ? 'hidden' : 'visible'} onClick={() => setWeekOffset(w => Math.max(0, w - 1))}>‹ Previous Week</ChakraButton>
                       <Text fontWeight="700" fontSize="sm" color={textColor} textAlign="center">{weekLabel(weekStart)}</Text>
                       <ChakraButton size="sm" variant="outline" isDisabled={weekOffset >= maxWeekOffset} onClick={() => setWeekOffset(w => Math.min(maxWeekOffset, w + 1))}>Next Week ›</ChakraButton>
                     </Flex>
-                    <Text fontSize="xs" color={mutedText} textAlign="center">Official and added consultation hours, in 1-hour slots. Up to {maxPending} students can request the same slot; the professor accepts one.</Text>
-                    {weekSlotsByDate.length === 0 ? (
-                      <Text fontSize="sm" color={mutedText} textAlign="center" py={6}>No open consultation slots this week.</Text>
-                    ) : (
-                      <VStack spacing={5} align="center">
-                        {weekSlotsByDate.map(([date, list]) => (
-                          <VStack key={date} spacing={2} align="center" w="100%">
-                            <Text fontWeight="700" fontSize="sm" color={textColor}>{dayHeading(date)}</Text>
-                            {list.map((sl: any) => {
-                              const active = slotKey(sl) === selectedSlot;
-                              return (
-                                <ChakraButton
-                                  key={slotKey(sl)}
-                                  size="sm"
-                                  w="100%" maxW="260px"
-                                  variant={active ? 'solid' : 'outline'}
-                                  colorScheme={sl.kind === 'ADDED' ? 'purple' : 'green'}
-                                  isDisabled={sl.full}
-                                  onClick={() => setSelectedSlot(slotKey(sl))}
-                                  title={sl.full ? 'Full: 3 pending requests' : `${sl.pending} of ${maxPending} request spots taken`}
-                                >
-                                  {formatTime(sl.start)} – {formatTime(sl.end)}{sl.pending > 0 && !sl.full ? ` (${sl.pending}/${maxPending})` : ''}{sl.full ? ' (full)' : ''}
-                                </ChakraButton>
-                              );
-                            })}
-                          </VStack>
-                        ))}
-                      </VStack>
-                    )}
+                    <WeeklyBookingCalendar
+                      slots={slots} busy={busy} weekStart={weekStart} leadHours={leadHours} maxPending={maxPending}
+                      selectedKey={selectedSlot} onPick={pickSlot}
+                    />
                   </VStack>
                 )}
               </Box>
@@ -735,6 +684,22 @@ export default function StudentDashboard() {
         }}
       />
       <PrivacyPolicyModal isOpen={isPrivacyOpen} onClose={onPrivacyClose} />
+      <BookingConfirmModal
+        isOpen={confirmOpen && !!chosenSlot}
+        onClose={() => { setConfirmOpen(false); setSelectedSlot(''); }}
+        facultyName={selectedFacultyObj ? selectedFacultyObj.name : ''}
+        slot={chosenSlot}
+        whenLabel={chosenSlot ? slotLabel(chosenSlot) : ''}
+        maxPending={maxPending}
+        purposeOptions={PURPOSE_OPTIONS}
+        purpose={aptPurpose}
+        // For every purpose except "Others" the dropdown choice IS the reason sent to the server; "Others" clears it so one must be typed.
+        onPurposeChange={(value) => { setAptPurpose(value); setAptReason(value === 'Others' ? '' : value); }}
+        reason={aptReason}
+        onReasonChange={setAptReason}
+        isSubmitting={isSubmitting}
+        onSubmit={handleAppointmentSubmit}
+      />
       <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
       <Modal isOpen={isMasterOpen} onClose={onMasterClose} size="4xl" isCentered scrollBehavior="inside">
         <ModalOverlay />
