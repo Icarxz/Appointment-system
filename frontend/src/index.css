@@ -56,7 +56,16 @@
   #printable-log { position: absolute; left: 0; top: 0; width: 100%; }
   .no-print { display: none !important; }
   @page { size: landscape; margin: 10mm; }
+
+  /* Analytics reports: ExportBar adds this class to <body> while the print dialog is open. */
+  body.printing-report #printable-report,
+  body.printing-report #printable-report * { visibility: visible; }
+  body.printing-report #printable-report { position: absolute; left: 0; top: 0; width: 100%; }
+  .print-only { display: block !important; }
 }
+
+/* A line that exists only on paper (title and date of a printed report) */
+.print-only { display: none; }
 
 #root {
   /* width: 1126px; */

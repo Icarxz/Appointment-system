@@ -4,6 +4,7 @@ import {
   TabPanel, TabPanels, Table, Tabs, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useDisclosure,
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
+import ExportBar from './ExportBar';
 import SimpleBarChart from './SimpleBarChart';
 import { ChartCard, HBarChart, Heatmap, KpiTile, LineChart, StackedBar } from './AnalyticsCharts';
 import type { HeatmapData, LV } from './AnalyticsCharts';
@@ -254,10 +255,14 @@ export default function AnalyticsReport() {
   );
 
   return (
-    <VStack align="stretch" spacing={4}>
-      <HStack justify="space-between" className="no-print">
+    <VStack align="stretch" spacing={4} id="printable-report">
+      <Text className="print-only" fontWeight="700" fontSize="lg" color="black">CCIS Sync: Reports &amp; Analytics (generated {new Date(data.generatedAt).toLocaleString()})</Text>
+      <HStack justify="space-between" className="no-print" flexWrap="wrap">
         <Text fontSize="xs" color={muted}>Updated {new Date(data.generatedAt).toLocaleTimeString()}</Text>
-        <Button size="xs" variant="outline" onClick={load} isLoading={loading}>Refresh</Button>
+        <HStack spacing={2}>
+          <ExportBar csvPath="/api/analytics/report.csv" fileBase="ccis-sync-report" />
+          <Button size="xs" variant="outline" onClick={load} isLoading={loading}>Refresh</Button>
+        </HStack>
       </HStack>
       {/* Printing shows every tab's content one after another, without the tab buttons. */}
       <Tabs variant="soft-rounded" size="sm" colorScheme="blue"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Box, Heading, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react';
+import { Box, Heading, HStack, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
+import ExportBar from './ExportBar';
 import { ChartCard, HBarChart, KpiTile, PieChart } from './AnalyticsCharts';
 import type { HeatmapData, LV } from './AnalyticsCharts';
 import { AppealsByReason, CohortTable, DrilldownDrawer } from './AnalyticsTables';
@@ -9,6 +10,7 @@ import { useColorModeValue } from '@chakra-ui/react';
 
 interface Window { total: number; last4: number; prev4: number }
 interface Data {
+  generatedAt: string;
   kpis: { requests: Window; completed: Window; approved: Window & { declined: number; expired: number }; missed: Window & { student: number; faculty: number }; cancelled: { student: number; faculty: number }; completionRate: number | null; missedRate: number | null };
   drilldown: { requests: Drilldown; completed: Drilldown; approved: Drilldown; missed: Drilldown; cancelled: Drilldown };
   outcomes: {
@@ -47,8 +49,12 @@ export default function FacultyAnalytics() {
   const open = (title: string, d: Drilldown, split?: [string, string]) => { setPanel({ title, data: d, split }); drawer.onOpen(); };
 
   return (
-    <VStack align="stretch" spacing={6}>
-      <Heading size="md" color={text}>My Analytics</Heading>
+    <VStack align="stretch" spacing={6} id="printable-report">
+      <HStack justify="space-between" flexWrap="wrap">
+        <Heading size="md" color={text}>My Analytics</Heading>
+        <ExportBar csvPath="/api/analytics/me.csv" fileBase="my-analytics" />
+      </HStack>
+      <Text className="print-only" fontSize="sm" color="black">Generated {new Date(data.generatedAt).toLocaleString()}</Text>
 
       <SimpleGrid columns={{ base: 2, md: 3 }} spacing={4}>
         <KpiTile label="Requests" value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="Requests you reviewed or that happened. Requests still waiting for your answer are not counted."
