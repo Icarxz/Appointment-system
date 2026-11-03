@@ -1,44 +1,124 @@
-const nodemailer = require('nodemailer');
 const { emailLink } = require('./notifyLink');
 
-// Lazily builds a transporter only if real SMTP credentials are present in .env.
-// Without them, sendMail() below falls back to printing the link to the server
-// console instead of crashing — useful for local development/demo before the
-// group has a real mailbox wired up, and safe because nothing is silently lost:
-// the link is still fully functional, just delivered to the terminal instead of
-// an inbox.
-let transporter = null;
-if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
-  transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_APP_PASSWORD
-    }
+// HOW MAIL SETTINGS ARE READ (this matters)
+// The settings come from backend/.env. They are read when an email is SENT, never when this file is loaded:
+// server.js loads the cron jobs (which load this file) before dotenv has read .env, so reading at load time
+// found nothing and every email silently fell back to "print to the console" mode.
+// The transport is built on first use and kept; nodemailer itself is also loaded then, so the tests can run
+// without it.
+//
+//   EMAIL_USER          the Gmail address that SENDS (2-Step Verification on)
+//   EMAIL_APP_PASSWORD  its 16-character App Password (spaces are ignored)
+//   EMAIL_HOST / EMAIL_PORT / EMAIL_SECURE   optional; default smtp.gmail.com, 465, secure (TLS from the start).
+//                       Try EMAIL_PORT=587 and EMAIL_SECURE=false if port 465 is blocked on the network.
+//   EMAIL_NOTIFICATIONS=off   stop emailing notifications (in-app ones are unaffected)
+let transport; // undefined = not built yet
+
+function mailConfig() {
+  const port = Number(process.env.EMAIL_PORT) || 465;
+  const secureEnv = String(process.env.EMAIL_SECURE || '').trim().toLowerCase();
+  return {
+    user: String(process.env.EMAIL_USER || '').trim(),
+    pass: String(process.env.EMAIL_APP_PASSWORD || '').replace(/\s+/g, ''), // Google shows the app password in 4 groups with spaces
+    host: String(process.env.EMAIL_HOST || 'smtp.gmail.com').trim(),
+    port,
+    secure: secureEnv ? secureEnv !== 'false' && secureEnv !== '0' : port === 465,
+  };
+}
+const isConfigured = (c = mailConfig()) => !!(c.user && c.pass);
+
+function getTransport() {
+  if (transport !== undefined) return transport;
+  const c = mailConfig();
+  if (!isConfigured(c)) return null; // not cached: .env may simply not be loaded yet
+  transport = require('nodemailer').createTransport({
+    host: c.host, port: c.port, secure: c.secure,
+    auth: { user: c.user, pass: c.pass },
+    // Never hang a request or a cron run on a dead network.
+    connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 30000,
   });
+  return transport;
+}
+
+// Turn nodemailer's terse codes into something the person running the server can act on. Keeps the code.
+function explainMailError(err) {
+  const c = mailConfig();
+  const code = err && err.code ? String(err.code) : '';
+  const raw = (err && err.message) || String(err);
+  let why = raw;
+  if (code === 'EAUTH' || /535|Username and Password not accepted|Invalid login/i.test(raw)) {
+    why = `Gmail rejected the login for ${c.user || '(no EMAIL_USER)'}. EMAIL_APP_PASSWORD must be a 16-character App Password (Google Account > Security > 2-Step Verification > App passwords), not the normal account password. (${raw})`;
+  } else if (['ECONNECTION', 'ETIMEDOUT', 'ESOCKET', 'ECONNREFUSED', 'ENOTFOUND', 'EDNS'].includes(code)) {
+    why = `Cannot reach ${c.host}:${c.port}. Check the internet connection and any firewall; if port ${c.port} is blocked try EMAIL_PORT=587 with EMAIL_SECURE=false. (${raw})`;
+  } else if (code === 'EENVELOPE' || /^55[0-4]/.test(raw)) {
+    why = `The mail server refused the recipient or sender address. (${raw})`;
+  }
+  const e = new Error(why);
+  e.code = code || undefined;
+  e.cause = err;
+  return e;
 }
 
 // With no SMTP credentials (and not in production) nothing is emailed. sendMail() then returns
 // { preview: true } so the calling route can hand the link to the page to show in a window.
-const LOCAL_PREVIEW = !transporter && process.env.NODE_ENV !== 'production';
+const isLocalPreview = () => !isConfigured() && process.env.NODE_ENV !== 'production';
 
-async function sendMail({ to, subject, html }) {
-  if (!transporter) {
+let warnedUnconfigured = false;
+
+async function sendMail({ to, subject, html, text }) {
+  const t = getTransport();
+  if (!t) {
+    if (!warnedUnconfigured) {
+      warnedUnconfigured = true;
+      console.warn('[email] EMAIL_USER / EMAIL_APP_PASSWORD are not set (or .env was not loaded): emails are only PRINTED below, nobody receives them.');
+    }
     console.log('\n[DEV MODE: no EMAIL_USER/EMAIL_APP_PASSWORD set in .env]');
     console.log(`Would send email to: ${to}`);
     console.log(`Subject: ${subject}`);
     console.log(`${html}\n`);
-    return { preview: LOCAL_PREVIEW };
+    return { preview: isLocalPreview() };
   }
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to,
-    subject,
-    html
-  });
-  return { preview: false };
+  try {
+    const info = await t.sendMail({ from: `"CCIS Sync" <${mailConfig().user}>`, to, subject, html, text });
+    return { preview: false, messageId: info && info.messageId };
+  } catch (err) {
+    throw explainMailError(err);
+  }
 }
+
+// A safe summary of the settings (the password is never shown, only how long it is).
+function mailerStatus() {
+  const c = mailConfig();
+  return {
+    configured: isConfigured(c), user: c.user, host: c.host, port: c.port, secure: c.secure,
+    passwordLength: c.pass.length, notificationsOff: process.env.EMAIL_NOTIFICATIONS === 'off',
+  };
+}
+
+// Ask the mail server whether these settings work (logs in, sends nothing).
+async function verifyMailer() {
+  if (!isConfigured()) return { ok: false, configured: false, reason: 'EMAIL_USER / EMAIL_APP_PASSWORD are not set.' };
+  try {
+    await getTransport().verify();
+    return { ok: true, configured: true };
+  } catch (err) {
+    return { ok: false, configured: true, reason: explainMailError(err).message };
+  }
+}
+
+// One clear line at server start, so a mail problem is visible immediately and not weeks later.
+async function logMailerStatus() {
+  const st = mailerStatus();
+  if (st.notificationsOff) return console.warn('[email] EMAIL_NOTIFICATIONS=off: notifications are in-app only, no emails are sent.');
+  const r = await verifyMailer();
+  if (r.ok) console.log(`[email] ready: sending as ${st.user} through ${st.host}:${st.port}.`);
+  else if (!r.configured) console.warn(`[email] NOT configured: ${r.reason} Emails will only be printed in this console.`);
+  else console.error(`[email] NOT working: ${r.reason}`);
+}
+
+// For the tests only: put a fake transport in place (undefined puts the real, lazy one back).
+function _setTransportForTests(t) { transport = t; warnedUnconfigured = false; }
 
 async function sendVerificationEmail(to, link) {
   return sendMail({
@@ -85,6 +165,8 @@ async function sendNotificationEmail(to, { title, message, link }) {
   return sendMail({
     to,
     subject: `CCIS Sync: ${title}`,
+    // A plain-text version next to the HTML helps mail apps and spam filters.
+    text: `${title}\n\n${message}\n\n${link ? 'View in CCIS Sync' : 'Open CCIS Sync'}: ${appUrl}\n\nYou are receiving this because it is also in your CCIS Sync notifications.\n`,
     html: `<p><b>${esc(title)}</b></p>
            <p>${esc(message)}</p>
            <p><a href="${esc(appUrl)}">${link ? 'View in CCIS Sync' : 'Open CCIS Sync'}</a></p>
@@ -92,4 +174,4 @@ async function sendNotificationEmail(to, { title, message, link }) {
   });
 }
 
-module.exports = { sendMail, sendVerificationEmail, sendApprovedEmail, sendResetEmail, sendNotificationEmail };
+module.exports = { sendMail, sendVerificationEmail, sendApprovedEmail, sendResetEmail, sendNotificationEmail, mailerStatus, verifyMailer, logMailerStatus, _setTransportForTests };

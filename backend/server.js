@@ -1,3 +1,6 @@
+// Load backend/.env BEFORE anything else: the job files below load the mailer, which needs EMAIL_USER and
+// EMAIL_APP_PASSWORD. (Loading .env later left the mailer without credentials, so no email was ever sent.)
+require('dotenv').config();
 const startStatusUpdater = require('./jobs/statusUpdater');
 const startConsultationReminder = require('./jobs/consultationReminder');
 const startMissedAppointments = require('./jobs/missedAppointments');
@@ -5,7 +8,6 @@ const startPendingExpiry = require('./jobs/pendingExpiry');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-require('dotenv').config(); // This loads variables from the .env file
 
 // Initialize the Express app
 const app = express();
@@ -51,6 +53,9 @@ mongoose.connect(process.env.MONGO_URI)
     startConsultationReminder();
     startMissedAppointments();
     startPendingExpiry();
+
+    // Say plainly at startup whether email works (it never blocks or stops the server).
+    require('./utils/mailer').logMailerStatus().catch(err => console.error('[email] status check failed:', err.message));
 
     // Only start listening for requests AFTER the database connects
     const PORT = process.env.PORT || 5000;
