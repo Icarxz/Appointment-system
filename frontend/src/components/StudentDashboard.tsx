@@ -1,27 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { cohortConfig } from '../data/cohortConfig';
 import { formatDate, formatDateTime } from './dateUtils';
 import BroadcastBanner from './BroadcastBanner';
 import OnboardingModal from './OnboardingModal';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 import {
-  Box, Heading, Text, Button as ChakraButton, Table, Thead, Tbody, Tr, Th, Td, TableContainer,
+  Box, Grid, Heading, Text, Button as ChakraButton, Table, Thead, Tbody, Tr, Th, Td, TableContainer,
   Badge, Input, Select, VStack, HStack, useToast, FormControl, FormLabel, Flex,
-  useColorMode, useColorModeValue,
+  useColorModeValue,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
-import LogoutConfirm from './LogoutConfirm';
 import { statusColor, statusLabel, isBeforeCutoff, hasStarted, BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
-import NotificationBell from './NotificationBell';
+import type { RequestRow } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import CancelReasonPicker, { STUDENT_CANCEL_REASONS } from './CancelReasonPicker';
 import AppealControls from './AppealControls';
 import BulkCancelModal from './BulkCancelModal';
 import WeeklyCalendar from './WeeklyCalendar';
-import SidebarIdentity from './SidebarIdentity';
+import DashboardShell from './DashboardShell';
+import PageTitle from './PageTitle';
+import { PAGE_PAD, CARD_PAD } from '../utils/uiTokens';
+import ByWidth from './ByWidth';
+import RequestCard from './RequestCard';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
 import { manilaToday, addDaysIso, mondayOf, weeksBetween, weekLabel } from '../utils/weekUtils';
@@ -78,8 +80,6 @@ const getStatusLabel = (status: string) => {
 
 // Matches the dayOfWeek convention used on the faculty side (1 = Mon ... 6 = Sat)
 export default function StudentDashboard() {
-  const navigate = useNavigate();
-  const [logoutOpen, setLogoutOpen] = useState(false);
   const toast = useToast();
   const userName = localStorage.getItem('userName') || 'Student';
   const userId = localStorage.getItem('userId') || '';
@@ -88,7 +88,6 @@ export default function StudentDashboard() {
   const { isOpen: isProfileOpen, onOpen: onProfileOpen, onClose: onProfileClose } = useDisclosure();
   const { isOpen: isPrivacyOpen, onOpen: onPrivacyOpen, onClose: onPrivacyClose } = useDisclosure();
   useEffect(() => { if (!profileComplete) onProfileOpen(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const { colorMode, toggleColorMode } = useColorMode();
 
   const [activePage, setActivePage] = useState('home');
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
@@ -143,23 +142,12 @@ export default function StudentDashboard() {
   const [summaryApt, setSummaryApt] = useState<any>(null);
   const viewAccomplishment = (apt: any) => { setSummaryApt(apt); onSummaryOpen(); };
 
-  // ── Custom Theme Tokens ───────────────────────────────────────────────
-  const dk = colorMode === 'dark';
-  const C = {
-    pageBg:    dk ? "#0c1421" : "#eef2f7",
-    sidebar:   dk ? "#070e1b" : "#0f2240",
-    text:      dk ? "#e8f0fe" : "#0f2240",
-    navText:   dk ? "#7a93b0" : "#8eaecb",
-    navActive: dk ? "#ffffff" : "#ffffff",
-    navBg:     dk ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.10)",
-  };
-  const btnBase: React.CSSProperties = { border: "none", cursor: "pointer", fontFamily: "inherit", letterSpacing:"0.01em" };
-
   const cardBg = useColorModeValue('#ffffff', '#111d30');
   const borderColor = useColorModeValue('#dde3ec', '#1e3048');
   const textColor = useColorModeValue('#0f2240', '#e8f0fe');
   const mutedText = useColorModeValue('#6b7fa0', '#7a93b0');
   const facultyRowHoverBg = useColorModeValue('gray.50', 'whiteAlpha.100');
+  const readOnlyFieldBg = useColorModeValue('gray.50', 'whiteAlpha.100'); // hooks must run on every render, never inside conditional JSX
 
   const fetchData = () => {
     authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status`)
@@ -399,59 +387,64 @@ export default function StudentDashboard() {
     } finally { setCancelBusy(false); }
   };
 
+  // The status, notes and buttons of one request. The table (wide screens) and the cards (phones) both call these,
+  // so the two layouts always show the same thing.
+  const requestBadge = (apt: RequestRow) => (
+    <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
+  );
+  const requestNotes = (apt: RequestRow) => (
+    <>
+      {['CANCELLED BY FACULTY', 'CANCELLED BY STUDENT', 'REJECTED'].includes(apt.status) && apt.cancelReason && (
+        <Text fontSize="xs" color={mutedText} mt={1}>Reason: {apt.cancelReason}</Text>
+      )}
+      <AppealControls apt={apt} role="STUDENT" onChanged={fetchData} />
+    </>
+  );
+  const hasRequestActions = (apt: RequestRow) => ['PENDING', 'APPROVED', 'COMPLETED'].includes(apt.status);
+  const requestActions = (apt: RequestRow) => (
+    <>
+      {apt.status === 'PENDING' && (
+        isBeforeCutoff(apt.date, apt.time) ? (
+          <ChakraButton size="xs" colorScheme="gray" variant="outline" onClick={() => { setCancelReason(''); setCancelTarget(apt); }}>Cancel Request</ChakraButton>
+        ) : !hasStarted(apt.date, apt.time) && (
+          <Text fontSize="xs" color={mutedText}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before the requested time).</Text>
+        )
+      )}
+      {apt.status === 'APPROVED' && (
+        isBeforeCutoff(apt.date, apt.time) ? (
+          <ChakraButton size="xs" colorScheme="red" variant="outline" onClick={() => { setCancelReason(''); setCancelTarget(apt); }}>Cancel Appointment</ChakraButton>
+        ) : !hasStarted(apt.date, apt.time) && (
+          <Text fontSize="xs" color={mutedText}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before the appointment).</Text>
+        )
+      )}
+      {apt.status === 'COMPLETED' && (
+        <ChakraButton size="xs" colorScheme="green" variant="outline" onClick={() => viewAccomplishment(apt)}>View Accomplishment</ChakraButton>
+      )}
+    </>
+  );
+
   return (
-    <div style={{ display: "flex", height: "100vh", backgroundColor: C.pageBg, fontFamily: "'Segoe UI', system-ui, sans-serif", color: C.text, overflow: "hidden" }}>
-      
-      {/* ── Custom Sidebar ── */}
-      <aside style={{ width: "196px", flexShrink: 0, background: C.sidebar, display: "flex", flexDirection: "column", padding: "22px 14px" }}>
-        <div style={{ padding: "4px 8px 28px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "0.14em", color: "#fff", textTransform: "uppercase" }}>Student Portal</span>
-          <div style={{ marginTop: "7px", width: "20px", height: "3px", background: "#2563eb", borderRadius: "2px" }} />
-        </div>
-
-        <SidebarIdentity name={userName} onClick={() => setActivePage('profile')} active={activePage === 'profile'} />
-        <NotificationBell navText={C.navText} navBg={C.navBg} />
-
-        <nav style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-          {[
-            { page: "home", label: "Faculty Status" },
-            { page: "appointments", label: "Book Consultation" },
-            { page: "requests", label: "My Requests" }
-          ].map(({ page, label }) => {
-            const active = activePage === page;
-            return (
-              <button key={page} onClick={() => setActivePage(page)} style={{
-                  ...btnBase, display: "flex", alignItems: "center", gap: "10px", padding: "9px 10px", borderRadius: "7px",
-                  background: active ? C.navBg : "transparent", color: active ? C.navActive : C.navText,
-                  fontWeight: active ? 600 : 400, fontSize: "13px", textAlign: "left",
-                  borderLeft: active ? "2px solid #2563eb" : "2px solid transparent", transition: "all 0.15s ease",
-                }}>
-                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: active ? "#60a5fa" : "transparent", border: active ? "none" : "1.5px solid #3a5373", flexShrink: 0 }} />
-                {label}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div style={{ flex: 1 }} />
-        <button onClick={toggleColorMode} style={{ ...btnBase, padding: "9px 12px", borderRadius: "7px", border: `1px solid ${dk ? "#1e3048" : "rgba(255,255,255,0.12)"}`, background: "transparent", color: C.navText, fontSize: "12px", textAlign: "left", display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-          <span>{dk ? "☀" : "☾"}</span> {dk ? "Light Mode" : "Dark Mode"}
-        </button>
-        <button onClick={() => setLogoutOpen(true)} style={{ ...btnBase, padding: "9px 12px", borderRadius: "7px", background: "#dc2626", color: "#fff", fontSize: "12px", fontWeight: 600 }}>Logout</button>
-        <LogoutConfirm isOpen={logoutOpen} onClose={() => setLogoutOpen(false)} onConfirm={() => { localStorage.clear(); navigate('/'); }} />
-      </aside>
-
-      {/* ── Main Content ── */}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+    <>
+    <DashboardShell
+      portalLabel="Student Portal"
+      userName={userName}
+      nav={[
+        { key: 'home', label: 'Faculty Status', active: activePage === 'home', onClick: () => setActivePage('home') },
+        { key: 'appointments', label: 'Book Consultation', active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
+        { key: 'requests', label: 'My Requests', active: activePage === 'requests', onClick: () => setActivePage('requests') },
+      ]}
+      onOpenProfile={() => setActivePage('profile')}
+      profileActive={activePage === 'profile'}
+    >
         <WelcomeHeader name={userName} />
         <BroadcastBanner userRole="STUDENT" />
-        <div style={{ padding: "32px", overflowY: "auto", height: "100%" }}>
-          <h1 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "20px", color: textColor }}>
+        <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
+          <PageTitle>
             {activePage === 'home' && "Live Faculty Status"}
             {activePage === 'appointments' && "Schedule a Consultation"}
             {activePage === 'requests' && "My Appointment Requests"}
             {activePage === 'profile' && "My Profile"}
-          </h1>
+          </PageTitle>
 
           {activePage === 'profile' && <ProfilePage />}
 
@@ -510,8 +503,8 @@ export default function StudentDashboard() {
           )}
 
           {activePage === 'appointments' && (
-            <Flex gap={6} align="flex-start" wrap="wrap">
-              <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" w="600px" maxW="100%">
+            <Grid templateColumns={{ base: 'minmax(0, 1fr)', xl: '340px minmax(0, 1fr)' }} gap={6} alignItems="start">
+              <Box bg={cardBg} p={CARD_PAD} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
                 {!profileComplete && (
                   <Box mb={4} p={4} borderRadius="md" bg="orange.50" borderWidth="1px" borderColor="orange.300" color="orange.900">
                     <Text fontWeight="bold" mb={1}>Read-only mode</Text>
@@ -522,7 +515,7 @@ export default function StudentDashboard() {
                 <VStack spacing={4} align="stretch">
                     <FormControl isRequired>
                       <FormLabel color={textColor}>Your Section</FormLabel>
-                      <Input value={studentSection} isReadOnly color={textColor} borderColor={borderColor} bg={useColorModeValue('gray.50', 'whiteAlpha.100')} cursor="not-allowed" />
+                      <Input value={studentSection} isReadOnly color={textColor} borderColor={borderColor} bg={readOnlyFieldBg} cursor="not-allowed" />
                       <Text fontSize="xs" color={mutedText} mt={1}>From your account registration. Contact an admin if this is wrong.</Text>
                     </FormControl>
                     <FormControl isRequired>
@@ -566,7 +559,7 @@ export default function StudentDashboard() {
                 </VStack>
               </Box>
 
-              <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1" minW="320px">
+              <Box bg={cardBg} p={CARD_PAD} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" minW={0}>
                 <Heading size="sm" color={textColor} mb={4}>
                   {selectedFacultyObj ? `${selectedFacultyObj.name}'s Weekly Calendar` : 'Select a professor to view their calendar'}
                 </Heading>
@@ -596,60 +589,58 @@ export default function StudentDashboard() {
                   </VStack>
                 )}
               </Box>
-            </Flex>
+            </Grid>
           )}
 
           {activePage === 'requests' && (
-            <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+            <Box bg={cardBg} p={CARD_PAD} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
               <Flex justify="flex-end" mb={3}>
                 <ChakraButton size="sm" colorScheme="red" variant="outline" onClick={() => setBulkOpen(true)}>Cancel several…</ChakraButton>
               </Flex>
               <BulkCancelModal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} role="STUDENT" appointments={myRequests} onDone={fetchData} />
-              <TableContainer>
-                <Table variant="simple" size="sm">
-                  <Thead><Tr><Th color={mutedText}>Professor</Th><Th color={mutedText}>Date/Time</Th><Th color={mutedText}>Reason</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
-                  <Tbody>
+              {/* A table when this box is wide enough for five columns, one card per request when it is not. */}
+              <ByWidth
+                min={760}
+                wide={(
+                  <TableContainer>
+                    <Table variant="simple" size="sm">
+                      <Thead><Tr><Th color={mutedText}>Professor</Th><Th color={mutedText}>Date/Time</Th><Th color={mutedText}>Reason</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+                      <Tbody>
+                        {myRequests.map(apt => (
+                          <Tr key={apt._id}>
+                            <Td fontWeight="bold" color={textColor}>{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Td>
+                            <Td color={textColor}>{formatDate(apt.date)} at {formatTime(apt.time)}</Td>
+                            <Td maxW="200px" isTruncated color={textColor}>{apt.reason}</Td>
+                            <Td>{requestBadge(apt)}{requestNotes(apt)}</Td>
+                            <Td>{requestActions(apt)}</Td>
+                          </Tr>
+                        ))}
+                        {myRequests.length === 0 && <Tr><Td colSpan={5} textAlign="center" py={10} color={mutedText}>You have no appointment requests.</Td></Tr>}
+                      </Tbody>
+                    </Table>
+                  </TableContainer>
+                )}
+                narrow={(
+                  <VStack align="stretch" spacing={3}>
                     {myRequests.map(apt => (
-                      <Tr key={apt._id}>
-                        <Td fontWeight="bold" color={textColor}>{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Td>
-                        <Td color={textColor}>{formatDate(apt.date)} at {formatTime(apt.time)}</Td>
-                        <Td maxW="200px" isTruncated color={textColor}>{apt.reason}</Td>
-                        <Td>
-                          <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
-                          {['CANCELLED BY FACULTY', 'CANCELLED BY STUDENT', 'REJECTED'].includes(apt.status) && apt.cancelReason && (
-                            <Text fontSize="xs" color={mutedText} mt={1}>Reason: {apt.cancelReason}</Text>
-                          )}
-                          <AppealControls apt={apt} role="STUDENT" onChanged={fetchData} />
-                        </Td>
-                        <Td>
-                          {apt.status === 'PENDING' && (
-                            isBeforeCutoff(apt.date, apt.time) ? (
-                              <ChakraButton size="xs" colorScheme="gray" variant="outline" onClick={() => { setCancelReason(''); setCancelTarget(apt); }}>Cancel Request</ChakraButton>
-                            ) : !hasStarted(apt.date, apt.time) && (
-                              <Text fontSize="xs" color={mutedText}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before the requested time).</Text>
-                            )
-                          )}
-                          {apt.status === 'APPROVED' && (
-                            isBeforeCutoff(apt.date, apt.time) ? (
-                              <ChakraButton size="xs" colorScheme="red" variant="outline" onClick={() => { setCancelReason(''); setCancelTarget(apt); }}>Cancel Appointment</ChakraButton>
-                            ) : !hasStarted(apt.date, apt.time) && (
-                              <Text fontSize="xs" color={mutedText}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before the appointment).</Text>
-                            )
-                          )}
-                          {apt.status === 'COMPLETED' && (
-                            <ChakraButton size="xs" colorScheme="green" variant="outline" onClick={() => viewAccomplishment(apt)}>View Accomplishment</ChakraButton>
-                          )}
-                        </Td>
-                      </Tr>
+                      <RequestCard
+                        key={apt._id}
+                        title={apt.facultyId ? apt.facultyId.name : 'Unknown'}
+                        when={`${formatDate(apt.date)} at ${formatTime(apt.time)}`}
+                        reason={apt.reason}
+                        status={requestBadge(apt)}
+                        extra={requestNotes(apt)}
+                        actions={hasRequestActions(apt) ? requestActions(apt) : undefined}
+                      />
                     ))}
-                    {myRequests.length === 0 && <Tr><Td colSpan={5} textAlign="center" py={10} color={mutedText}>You have no appointment requests.</Td></Tr>}
-                  </Tbody>
-                </Table>
-              </TableContainer>
+                    {myRequests.length === 0 && <Text textAlign="center" py={8} color={mutedText}>You have no appointment requests.</Text>}
+                  </VStack>
+                )}
+              />
             </Box>
           )}
-        </div>
-      </main>
+        </Box>
+    </DashboardShell>
 
       {/* Cancel dialog: reason is required (dropdown, or "Others" to type one) */}
       <Modal isOpen={!!cancelTarget} onClose={() => !cancelBusy && setCancelTarget(null)} isCentered>
@@ -760,7 +751,7 @@ export default function StudentDashboard() {
           </ModalBody>
         </ModalContent>
       </Modal>
-    </div>
+    </>
 
   );
 }

@@ -36,3 +36,18 @@ export const isBeforeCutoff = (date: string, time: string): boolean =>
 // True once the appointment's start time has passed (appointment date/time are Philippine time).
 export const hasStarted = (date: string, time: string): boolean =>
   Date.now() >= new Date(`${date}T${time}:00+08:00`).getTime();
+
+/** The fields the request lists (table rows and phone cards) read from an appointment. The API sends more. */
+export interface RequestRow {
+  _id: string;
+  status: string;
+  date: string;
+  time: string;
+  duration?: number;
+  reason: string;
+  cancelReason?: string;
+  studentName?: string;
+  studentSection?: string;
+  /** The student view gets the professor as an object; older records may have none. */
+  facultyId?: { name: string } | null;
+}

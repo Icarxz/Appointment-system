@@ -1,21 +1,26 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { formatDate, formatDateTime } from './dateUtils';
 import {
-  Box, Heading, Table, Thead, Tbody, Tr, Th, Td, TableContainer,
-  Badge, Text, Button as ChakraButton, HStack, Flex, VStack,
-  useColorMode
+  Box, Heading, Table, Thead, Tbody, Tr, Th, Td,
+  Badge, Text, Button as ChakraButton, HStack
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
-import LogoutConfirm from './LogoutConfirm';
 import ProfileGate from './ProfileGate';
-import NotificationBell from './NotificationBell';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import AnalyticsReport from './AnalyticsReport';
 import DeanBroadcastPanel from './DeanBroadcastPanel';
 import DeanAppeals from './DeanAppeals';
-import SidebarIdentity from './SidebarIdentity';
+import DashboardShell from './DashboardShell';
+import PageTitle from './PageTitle';
+import ScrollTable from './ScrollTable';
+import WelcomeHeader from './WelcomeHeader';
+import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
+
+const PAGE_TITLES = {
+  reports: 'Reports & Analytics', roster: 'Faculty Roster', records: 'Consultation Records',
+  appeals: 'Faculty Appeals', broadcast: 'Executive Broadcast',
+} as const;
 
 // === Helper function for time formatting ===
 export const formatTime = (timeStr: string) => {
@@ -28,10 +33,6 @@ export const formatTime = (timeStr: string) => {
 };
 
 export default function DeanDashboard() {
-  const navigate = useNavigate();
-  const [logoutOpen, setLogoutOpen] = useState(false);
-  const { colorMode, toggleColorMode } = useColorMode();
-
   const userName = localStorage.getItem('userName');
 
   // Unified Page State
@@ -39,19 +40,8 @@ export default function DeanDashboard() {
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
   const { aptId, closeApt } = useDeepLink(['broadcast', 'roster', 'reports', 'records', 'appeals'] as const, setActivePage);
   
-  // Custom Navy Sidebar Color palette
-  const dk = colorMode === 'dark';
-  const C = {
-    pageBg:    dk ? "#0c1421" : "#eef2f7",
-    sidebar:   dk ? "#070e1b" : "#0f2240",
-    surface:   dk ? "#111d30" : "#ffffff",
-    border:    dk ? "#1e3048" : "#dde3ec",
-    text:      dk ? "#e8f0fe" : "#0f2240",
-    textMid:   dk ? "#7a93b0" : "#6b7fa0",
-    navText:   dk ? "#7a93b0" : "#8eaecb",
-    navActive: dk ? "#ffffff" : "#ffffff",
-    navBg:     dk ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.10)",
-  };
+  // Shared navy palette (same colours in every portal)
+  const C = useNavPalette();
 
   const [facultyRoster, setFacultyRoster] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -91,79 +81,6 @@ export default function DeanDashboard() {
     link.click();
   };
 
-  // --- UI COMPONENTS ---
-
-  const renderSidebar = () => (
-    <Box w="196px" bg={C.sidebar} p={6} h="100vh" position="sticky" top="0" display="flex" flexDir="column">
-      <Heading size="sm" mb={4} color="#fff" letterSpacing="tight">Dean's Office</Heading>
-      <SidebarIdentity name={userName || ''} />
-      <NotificationBell navText={C.navText} navBg={C.navBg} />
-      <VStack align="stretch" spacing={1} flex="1">
-        <button
-          onClick={() => setActivePage('reports')}
-          style={{
-            background: activePage === 'reports' ? C.navBg : 'transparent',
-            color: activePage === 'reports' ? C.navActive : C.navText,
-            border: 'none', textAlign: 'left', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer',
-            fontWeight: activePage === 'reports' ? 600 : 400
-          }}
-        >
-          Reports & Analytics
-        </button>
-        <button 
-          onClick={() => setActivePage('roster')}
-          style={{
-            background: activePage === 'roster' ? C.navBg : 'transparent',
-            color: activePage === 'roster' ? C.navActive : C.navText,
-            border: 'none', textAlign: 'left', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer',
-            fontWeight: activePage === 'roster' ? 600 : 400
-          }}
-        >
-          Faculty Roster
-        </button>
-        <button
-          onClick={() => setActivePage('records')}
-          style={{
-            background: activePage === 'records' ? C.navBg : 'transparent',
-            color: activePage === 'records' ? C.navActive : C.navText,
-            border: 'none', textAlign: 'left', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer',
-            fontWeight: activePage === 'records' ? 600 : 400
-          }}
-        >
-          Consultation Records
-        </button>
-        <button
-          onClick={() => setActivePage('appeals')}
-          style={{
-            background: activePage === 'appeals' ? C.navBg : 'transparent',
-            color: activePage === 'appeals' ? C.navActive : C.navText,
-            border: 'none', textAlign: 'left', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer',
-            fontWeight: activePage === 'appeals' ? 600 : 400
-          }}
-        >
-          Faculty Appeals
-        </button>
-        <button
-          onClick={() => setActivePage('broadcast')}
-          style={{
-            background: activePage === 'broadcast' ? C.navBg : 'transparent',
-            color: activePage === 'broadcast' ? C.navActive : C.navText,
-            border: 'none', textAlign: 'left', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer',
-            fontWeight: activePage === 'broadcast' ? 600 : 400
-          }}
-        >
-          Executive Broadcast
-        </button>
-      </VStack>
-      <VStack spacing={4} mt="auto">
-        <ChakraButton size="sm" variant="outline" color={C.navText} borderColor="gray.600" w="100%" onClick={toggleColorMode}>{colorMode === 'light' ? 'Dark Mode' : 'Light Mode'}</ChakraButton>
-        <ChakraButton size="sm" colorScheme="red" w="100%" onClick={() => setLogoutOpen(true)}>Logout</ChakraButton>
-        <ProfileGate role="DEAN" />
-        <LogoutConfirm isOpen={logoutOpen} onClose={() => setLogoutOpen(false)} onConfirm={() => { localStorage.clear(); navigate('/'); }} />
-      </VStack>
-    </Box>
-  );
-
   // Reports & Analytics charts now come from the backend (GET /api/analytics/report),
   // rendered by <AnalyticsReport />. Consultation Records below still uses `appointments`.
 
@@ -184,13 +101,23 @@ export default function DeanDashboard() {
   }, [consultationRecords, recordsSearch]);
 
   return (
-    <Flex minH="100vh" bg={C.pageBg}>
-      {renderSidebar()}
-      <Box flex="1" p={10} overflowY="auto">
-        <Box mb={8}>
-          <Heading size="lg" color={C.text} letterSpacing="tight">Dean Dashboard</Heading>
-          <Text color={C.textMid}>Welcome, {userName}</Text>
-        </Box>
+    <>
+    <DashboardShell
+      portalLabel="Dean's Office"
+      userName={userName || ''}
+      showMailbox
+      extras={<ProfileGate role="DEAN" />}
+      nav={[
+        { key: 'reports', label: 'Reports & Analytics', active: activePage === 'reports', onClick: () => setActivePage('reports') },
+        { key: 'roster', label: 'Faculty Roster', active: activePage === 'roster', onClick: () => setActivePage('roster') },
+        { key: 'records', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
+        { key: 'appeals', label: 'Faculty Appeals', active: activePage === 'appeals', onClick: () => setActivePage('appeals') },
+        { key: 'broadcast', label: 'Executive Broadcast', active: activePage === 'broadcast', onClick: () => setActivePage('broadcast') },
+      ]}
+    >
+      <WelcomeHeader name={userName || ''} />
+      <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
+        <PageTitle>{PAGE_TITLES[activePage]}</PageTitle>
 
         {(activePage === 'reports' || activePage === 'records') && (
           // See AdminDashboard.tsx for the same pattern, explained: hides
@@ -207,9 +134,8 @@ export default function DeanDashboard() {
 
         {activePage === 'reports' && (
           <Box id="print-area" bg={C.surface} p={6} borderRadius="lg" borderWidth="1px" borderColor={C.border} shadow="sm">
-            <HStack justifyContent="space-between" mb={6} className="no-print">
+            <HStack justifyContent="space-between" spacing={0} gap={3} flexWrap="wrap" mb={6} className="no-print">
               <Text color={C.textMid} fontSize="sm">Calculated live by the database.</Text>
-              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print Report</ChakraButton>
             </HStack>
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={C.text}>Reports & Analytics</Heading>
@@ -222,21 +148,21 @@ export default function DeanDashboard() {
 
         {activePage === 'records' && (
           <Box id="print-area" bg={C.surface} p={6} borderRadius="lg" borderWidth="1px" borderColor={C.border} shadow="sm">
-            <HStack justifyContent="space-between" mb={4} className="no-print">
+            <HStack justifyContent="space-between" spacing={0} gap={3} flexWrap="wrap" mb={4} className="no-print">
               <input
                 placeholder="Search by student, faculty, or reason..."
                 value={recordsSearch}
                 onChange={(e) => setRecordsSearch(e.target.value)}
-                style={{ maxWidth: '320px', padding: '8px 12px', borderRadius: '6px', border: `1px solid ${C.border}`, background: 'transparent', color: C.text }}
+                style={{ width: '100%', maxWidth: '320px', padding: '8px 12px', borderRadius: '6px', border: `1px solid ${C.border}`, background: 'transparent', color: C.text }}
               />
-              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print Report</ChakraButton>
+              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
             </HStack>
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={C.text}>Consultation Records</Heading>
               <Text fontSize="sm" color={C.textMid}>Generated {formatDateTime(new Date())}</Text>
             </Box>
 
-            <TableContainer>
+            <ScrollTable>
               <Table variant="simple" size="sm">
                 <Thead>
                   <Tr>
@@ -264,17 +190,17 @@ export default function DeanDashboard() {
                   ))}
                 </Tbody>
               </Table>
-            </TableContainer>
+            </ScrollTable>
           </Box>
         )}
 
         {activePage === 'roster' && (
           <Box bg={C.surface} p={6} borderRadius="lg" borderWidth="1px" borderColor={C.border} shadow="sm">
-            <HStack justifyContent="space-between" mb={6}>
+            <HStack justifyContent="space-between" spacing={0} gap={3} flexWrap="wrap" mb={6}>
               <Heading size="md" color={C.text}>CCIS Faculty Roster</Heading>
               <ChakraButton size="sm" colorScheme="blue" onClick={handleExportCSV}>Export CSV Report</ChakraButton>
             </HStack>
-            <TableContainer>
+            <ScrollTable>
               <Table variant="simple" size="sm">
                 <Thead><Tr><Th color={C.textMid}>Name</Th><Th color={C.textMid}>Position</Th><Th color={C.textMid}>Live Status</Th><Th color={C.textMid}>Location</Th></Tr></Thead>
                 <Tbody>
@@ -305,7 +231,7 @@ export default function DeanDashboard() {
                   ))}
                 </Tbody>
               </Table>
-            </TableContainer>
+            </ScrollTable>
           </Box>
         )}
 
@@ -315,7 +241,8 @@ export default function DeanDashboard() {
           <DeanBroadcastPanel C={C} />
         )}
       </Box>
-      <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
-    </Flex>
+    </DashboardShell>
+    <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
+    </>
   );
 }

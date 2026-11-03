@@ -9,7 +9,7 @@
 const LOCALE = 'en-PH';
 
 /**
- * "YYYY-MM-DD" or any ISO string → "Fri, Oct 9, 26"
+ * "YYYY-MM-DD" or any ISO string → "Fri, Oct 9, 2026"
  */
 export const formatDate = (val: string | null | undefined): string => {
   if (!val) return '—';
@@ -18,12 +18,12 @@ export const formatDate = (val: string | null | undefined): string => {
     weekday: 'short',
     month:   'short',
     day:     'numeric',
-    year:    '2-digit',
+    year:    'numeric',
   });
 };
 
 /**
- * Full ISO datetime string or Date object → "Fri, Oct 9, 26, 2:30 PM"
+ * Full ISO datetime string or Date object → "Fri, Oct 9, 2026, 2:30 PM"
  * Use for completedAt / generated-at timestamps.
  */
 export const formatDateTime = (val: string | Date | null | undefined): string => {
@@ -32,7 +32,7 @@ export const formatDateTime = (val: string | Date | null | undefined): string =>
     weekday: 'short',
     month:   'short',
     day:     'numeric',
-    year:    '2-digit',
+    year:    'numeric',
     hour:    'numeric',
     minute:  '2-digit',
     hour12:  true,

@@ -28,9 +28,10 @@ export const formatBadge = (n: number) => (n > 99 ? '99+' : String(n));
 interface Props {
   navText: string; // sidebar text color
   navBg: string;   // sidebar hover color
+  compact?: boolean; // phone top bar: icon and badge only, and the panel opens below it
 }
 
-export default function NotificationBell({ navText, navBg }: Props) {
+export default function NotificationBell({ navText, navBg, compact = false }: Props) {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const navigate = useNavigate();
@@ -108,13 +109,14 @@ export default function NotificationBell({ navText, navBg }: Props) {
   };
 
   return (
-    <Popover placement="right-start" isLazy isOpen={isOpen} onOpen={() => { onOpen(); load(); }} onClose={onClose}>
+    <Popover placement={compact ? 'bottom-end' : 'right-start'} isLazy isOpen={isOpen} onOpen={() => { onOpen(); load(); }} onClose={onClose}>
       <PopoverTrigger>
         <button
           aria-label={unread > 0 ? `Mail, ${unread} unread` : 'Mail'}
           style={{
-            display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-            padding: '9px 10px', marginBottom: '14px', borderRadius: '7px',
+            display: 'flex', alignItems: 'center', gap: '10px', width: compact ? 'auto' : '100%',
+            padding: compact ? '0 12px' : '9px 10px', minHeight: compact ? '44px' : undefined,
+            marginBottom: compact ? 0 : '14px', borderRadius: '7px',
             background: 'transparent', color: navText, border: 'none',
             cursor: 'pointer', fontSize: '13px', textAlign: 'left',
           }}
@@ -134,12 +136,12 @@ export default function NotificationBell({ navText, navBg }: Props) {
               </span>
             )}
           </span>
-          <span style={{ marginLeft: '6px' }}>Mail</span>
+          {!compact && <span style={{ marginLeft: '6px' }}>Mail</span>}
         </button>
       </PopoverTrigger>
 
       <Portal>
-        <PopoverContent w="340px" bg={panelBg} borderColor={panelBorder} color={textColor} _focus={{ outline: 'none' }}>
+        <PopoverContent w="min(340px, calc(100vw - 16px))" bg={panelBg} borderColor={panelBorder} color={textColor} _focus={{ outline: 'none' }}>
           <PopoverHeader borderColor={panelBorder}>
             <Flex justify="space-between" align="center">
               <Text fontWeight="700" fontSize="sm">Mail</Text>

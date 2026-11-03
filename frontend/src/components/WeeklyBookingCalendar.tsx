@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Box, Button, Grid, HStack, Text, useColorModeValue } from '@chakra-ui/react';
 import { buildWeekGrid, cellKey } from '../utils/weekGrid';
 import type { Busy, Slot } from '../utils/weekGrid';
@@ -8,6 +9,12 @@ import type { Busy, Slot } from '../utils/weekGrid';
 
 const hourLabel = (h: number) => `${((h + 11) % 12) + 1} ${h >= 12 ? 'PM' : 'AM'}`;
 const clock = (t: string) => { const [h, m] = t.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}`; };
+// Short forms for a phone, where five day columns must share about 320px: "9:00" -> "9", "1 PM" -> "1p".
+const clockShort = (t: string) => { const [h, m] = t.split(':').map(Number); return m === 0 ? String(((h + 11) % 12) + 1) : clock(t); };
+const hourLabelShort = (h: number) => `${((h + 11) % 12) + 1}${h >= 12 ? 'p' : 'a'}`;
+// Below this calendar width the five day columns shrink to fit. Above it they keep room for the full label.
+// (Measured on the calendar itself, not the window: the sidebar and the page padding take a different share at every size.)
+const COMPACT_BELOW = 560;
 const clockAmPm = (t: string) => `${clock(t)} ${Number(t.split(':')[0]) >= 12 ? 'PM' : 'AM'}`;
 const dayName = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
 const dayDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -36,6 +43,21 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
   const faintBg = useColorModeValue('#f1f5f9', '#162033');
   const lineColor = useColorModeValue('#e2e8f0', '#1e3048');
 
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const check = () => setCompact(el.clientWidth < COMPACT_BELOW);
+    check();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const range = (a: string, b: string) => (compact ? `${clockShort(a)}–${clockShort(b)}` : `${clock(a)}–${clock(b)}`);
+
   const grid = buildWeekGrid({ slots, busy, weekStart, nowMs: Date.now(), leadHours });
 
   const swatch = (bg: string, border: string, dashed = false) => (
@@ -43,7 +65,7 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
   );
 
   return (
-    <Box>
+    <Box ref={wrapRef}>
       <HStack spacing={4} flexWrap="wrap" mb={3} fontSize="xs" color={muted}>
         <HStack spacing={1}>{swatch(consultBg, consultBorder)}<Text>Consultation hours</Text></HStack>
         <HStack spacing={1}>{swatch(vacantBg, vacantBorder, true)}<Text>Vacant hour</Text></HStack>
@@ -52,8 +74,11 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
         <HStack spacing={1}>{swatch(faintBg, lineColor)}<Text>Not available</Text></HStack>
       </HStack>
 
+      {/* Safety net only: below 560px the compact layout fits all five days, and above it the columns have room. */}
       <Box overflowX="auto" pb={1}>
-        <Grid templateColumns={`52px repeat(${grid.dates.length}, minmax(88px, 1fr))`} gap="4px" minW="520px">
+        <Grid
+          templateColumns={compact ? `30px repeat(${grid.dates.length}, minmax(0, 1fr))` : `52px repeat(${grid.dates.length}, minmax(88px, 1fr))`}
+          gap={compact ? '3px' : '4px'} minW={compact ? undefined : '520px'}>
           <Box />
           {grid.dates.map(d => (
             <Box key={d} textAlign="center" pb={1}>
@@ -64,7 +89,7 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
 
           {grid.hours.map(h => (
             <Box key={`row-${h}`} display="contents">
-              <Text fontSize="11px" color={muted} textAlign="right" pr={1} pt="6px">{hourLabel(h)}</Text>
+              <Text fontSize={compact ? '10px' : '11px'} color={muted} textAlign="right" pr={compact ? 0 : 1} pt="6px">{compact ? hourLabelShort(h) : hourLabel(h)}</Text>
               {grid.dates.map(d => {
                 const cell = grid.cells[cellKey(d, h)];
                 return (
@@ -79,9 +104,9 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
                           <Button
                             key={slot.start}
                             variant="unstyled"
-                            h="auto" minH="44px" w="100%" px={1} py={1}
+                            h="auto" minH="44px" w="100%" px={compact ? '2px' : 1} py={1}
                             display="flex" flexDirection="column" alignItems="center" justifyContent="center"
-                            fontWeight="600" fontSize="11px" lineHeight="1.25" whiteSpace="normal" color={text}
+                            fontWeight="600" fontSize={compact ? '10px' : '11px'} lineHeight="1.25" whiteSpace="normal" color={text}
                             bg={consult ? consultBg : vacantBg}
                             borderWidth="1px" borderStyle={consult ? 'solid' : 'dashed'} borderColor={consult ? consultBorder : vacantBorder}
                             boxShadow={selected ? '0 0 0 2px #2563eb' : 'none'}
@@ -91,18 +116,18 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
                             aria-label={`${dayLong(slot.date)}, ${clockAmPm(slot.start)} to ${clockAmPm(slot.end)}, ${consult ? 'consultation hours' : 'vacant hour'}, ${spots}`}
                             aria-pressed={selected}
                           >
-                            <span>{clock(slot.start)}–{clock(slot.end)}</span>
-                            {slot.pending > 0 && <Text as="span" fontSize="10px" fontWeight="500" color={muted}>{slot.pending}/{maxPending} requested</Text>}
+                            <span>{range(slot.start, slot.end)}</span>
+                            {slot.pending > 0 && <Text as="span" fontSize="10px" fontWeight="500" color={muted}>{slot.pending}/{maxPending}{compact ? '' : ' requested'}</Text>}
                           </Button>
                         );
                       }
                       if (slot && part.state === 'FULL') {
                         return (
-                          <Box key={slot.start} minH="44px" px={1} py={1} borderRadius="md" bg={redBg} borderWidth="1px" borderColor={redBorder}
+                          <Box key={slot.start} minH="44px" px={compact ? '2px' : 1} py={1} borderRadius="md" bg={redBg} borderWidth="1px" borderColor={redBorder}
                             display="flex" flexDirection="column" alignItems="center" justifyContent="center" textAlign="center" fontSize="11px" color={text}
                             title={`${clockAmPm(slot.start)} to ${clockAmPm(slot.end)}. Full: ${maxPending} pending requests.`}
                             aria-label={`${dayLong(slot.date)}, ${clockAmPm(slot.start)} to ${clockAmPm(slot.end)}, full`}>
-                            <span>{clock(slot.start)}–{clock(slot.end)}</span>
+                            <span>{range(slot.start, slot.end)}</span>
                             <Text as="span" fontSize="10px" fontWeight="700">Full</Text>
                           </Box>
                         );

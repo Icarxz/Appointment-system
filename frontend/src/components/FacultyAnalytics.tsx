@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Box, Heading, HStack, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react';
+import { Box, HStack, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ExportBar from './ExportBar';
+import PageTitle from './PageTitle';
 import { ChartCard, HBarChart, KpiTile, PieChart } from './AnalyticsCharts';
 import type { HeatmapData, LV } from './AnalyticsCharts';
 import { AppealsByReason, CohortTable, DrilldownDrawer } from './AnalyticsTables';
@@ -33,7 +34,6 @@ export default function FacultyAnalytics() {
   const [error, setError] = useState('');
   const [panel, setPanel] = useState<{ title: string; data: Drilldown; split?: [string, string] } | null>(null);
   const drawer = useDisclosure();
-  const text = useColorModeValue('#0f2240', '#e8f0fe');
   const muted = useColorModeValue('#6b7fa0', '#7a93b0');
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function FacultyAnalytics() {
   return (
     <VStack align="stretch" spacing={6} id="printable-report">
       <HStack justify="space-between" flexWrap="wrap">
-        <Heading size="md" color={text}>My Analytics</Heading>
+        <PageTitle>My Analytics</PageTitle>
         <ExportBar csvPath="/api/analytics/me.csv" fileBase="my-analytics" />
       </HStack>
       <Text className="print-only" fontSize="sm" color="black">Generated {new Date(data.generatedAt).toLocaleString()}</Text>
