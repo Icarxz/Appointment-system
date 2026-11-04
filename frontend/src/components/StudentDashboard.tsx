@@ -11,19 +11,16 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
-import { statusColor, statusLabel, isBeforeCutoff, hasStarted, BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
-import type { RequestRow } from './appointmentStatus';
+import { BOOKING_LEAD_HOURS } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import CancelReasonPicker, { STUDENT_CANCEL_REASONS } from './CancelReasonPicker';
-import AppealControls from './AppealControls';
 import BulkCancelModal from './BulkCancelModal';
 import WeeklyCalendar from './WeeklyCalendar';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
 import { PAGE_PAD, CARD_PAD } from '../utils/uiTokens';
-import ByWidth from './ByWidth';
-import RequestCard from './RequestCard';
+import StudentRequestList from './StudentRequestList';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
 import { manilaToday, addDaysIso, mondayOf, weeksBetween, weekLabel } from '../utils/weekUtils';
@@ -136,6 +133,7 @@ export default function StudentDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [myRequests, setMyRequests] = useState<any[]>([]);
+  const [detailsId, setDetailsId] = useState<string | null>(null); // the request whose View Details panel is open
   const [bulkOpen, setBulkOpen] = useState(false);
   const { isOpen: isSummaryOpen, onOpen: onSummaryOpen, onClose: onSummaryClose } = useDisclosure();
   const [summaryApt, setSummaryApt] = useState<any>(null);
@@ -386,42 +384,6 @@ export default function StudentDashboard() {
     } finally { setCancelBusy(false); }
   };
 
-  // The status, notes and buttons of one request. The table (wide screens) and the cards (phones) both call these,
-  // so the two layouts always show the same thing.
-  const requestBadge = (apt: RequestRow) => (
-    <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
-  );
-  const requestNotes = (apt: RequestRow) => (
-    <>
-      {['CANCELLED BY FACULTY', 'CANCELLED BY STUDENT', 'REJECTED'].includes(apt.status) && apt.cancelReason && (
-        <Text fontSize="xs" color={mutedText} mt={1}>Reason: {apt.cancelReason}</Text>
-      )}
-      <AppealControls apt={apt} role="STUDENT" onChanged={fetchData} />
-    </>
-  );
-  const hasRequestActions = (apt: RequestRow) => ['PENDING', 'APPROVED', 'COMPLETED'].includes(apt.status);
-  const requestActions = (apt: RequestRow) => (
-    <>
-      {apt.status === 'PENDING' && (
-        isBeforeCutoff(apt.date, apt.time) ? (
-          <ChakraButton size="xs" colorScheme="gray" variant="outline" onClick={() => { setCancelReason(''); setCancelTarget(apt); }}>Cancel Request</ChakraButton>
-        ) : !hasStarted(apt.date, apt.time) && (
-          <Text fontSize="xs" color={mutedText}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before the requested time).</Text>
-        )
-      )}
-      {apt.status === 'APPROVED' && (
-        isBeforeCutoff(apt.date, apt.time) ? (
-          <ChakraButton size="xs" colorScheme="red" variant="outline" onClick={() => { setCancelReason(''); setCancelTarget(apt); }}>Cancel Appointment</ChakraButton>
-        ) : !hasStarted(apt.date, apt.time) && (
-          <Text fontSize="xs" color={mutedText}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before the appointment).</Text>
-        )
-      )}
-      {apt.status === 'COMPLETED' && (
-        <ChakraButton size="xs" colorScheme="green" variant="outline" onClick={() => viewAccomplishment(apt)}>View Accomplishment</ChakraButton>
-      )}
-    </>
-  );
-
   return (
     <>
     <DashboardShell
@@ -592,49 +554,17 @@ export default function StudentDashboard() {
           )}
 
           {activePage === 'requests' && (
-            <Box bg={cardBg} p={CARD_PAD} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+            <Box>
               <Flex justify="flex-end" mb={3}>
                 <ChakraButton size="sm" colorScheme="red" variant="outline" onClick={() => setBulkOpen(true)}>Cancel several…</ChakraButton>
               </Flex>
               <BulkCancelModal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} role="STUDENT" appointments={myRequests} onDone={fetchData} />
-              {/* A table when this box is wide enough for five columns, one card per request when it is not. */}
-              <ByWidth
-                min={760}
-                wide={(
-                  <TableContainer>
-                    <Table variant="simple" size="sm">
-                      <Thead><Tr><Th color={mutedText}>Professor</Th><Th color={mutedText}>Date/Time</Th><Th color={mutedText}>Reason</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
-                      <Tbody>
-                        {myRequests.map(apt => (
-                          <Tr key={apt._id}>
-                            <Td fontWeight="bold" color={textColor}>{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Td>
-                            <Td color={textColor}>{formatDate(apt.date)} at {formatTime(apt.time)}</Td>
-                            <Td maxW="200px" isTruncated color={textColor}>{apt.reason}</Td>
-                            <Td>{requestBadge(apt)}{requestNotes(apt)}</Td>
-                            <Td>{requestActions(apt)}</Td>
-                          </Tr>
-                        ))}
-                        {myRequests.length === 0 && <Tr><Td colSpan={5} textAlign="center" py={10} color={mutedText}>You have no appointment requests.</Td></Tr>}
-                      </Tbody>
-                    </Table>
-                  </TableContainer>
-                )}
-                narrow={(
-                  <VStack align="stretch" spacing={3}>
-                    {myRequests.map(apt => (
-                      <RequestCard
-                        key={apt._id}
-                        title={apt.facultyId ? apt.facultyId.name : 'Unknown'}
-                        when={`${formatDate(apt.date)} at ${formatTime(apt.time)}`}
-                        reason={apt.reason}
-                        status={requestBadge(apt)}
-                        extra={requestNotes(apt)}
-                        actions={hasRequestActions(apt) ? requestActions(apt) : undefined}
-                      />
-                    ))}
-                    {myRequests.length === 0 && <Text textAlign="center" py={8} color={mutedText}>You have no appointment requests.</Text>}
-                  </VStack>
-                )}
+              <StudentRequestList
+                requests={myRequests}
+                onViewDetails={setDetailsId}
+                onCancel={(apt) => { setCancelReason(''); setCancelTarget(apt); }}
+                onViewAccomplishment={viewAccomplishment}
+                onChanged={fetchData}
               />
             </Box>
           )}
@@ -701,7 +631,7 @@ export default function StudentDashboard() {
         isSubmitting={isSubmitting}
         onSubmit={handleAppointmentSubmit}
       />
-      <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
+      <AppointmentDetailsDrawer aptId={detailsId ?? aptId} onClose={() => { setDetailsId(null); closeApt(); }} />
       <Modal isOpen={isMasterOpen} onClose={onMasterClose} size="4xl" isCentered scrollBehavior="inside">
         <ModalOverlay />
         <ModalContent bg={cardBg}>
