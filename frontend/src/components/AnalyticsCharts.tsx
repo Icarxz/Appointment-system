@@ -18,7 +18,7 @@ const useTheme = () => ({
 export function ChartCard({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   const t = useTheme();
   return (
-    <Box bg={t.surface} p={5} borderRadius="lg" borderWidth="1px" borderColor={t.border} shadow="sm">
+    <Box bg={t.surface} p={5} borderRadius="lg" borderWidth="1px" borderColor={t.border} shadow="sm" h="100%">
       <Text fontWeight="700" fontSize="sm" color={t.text}>{title}</Text>
       {hint && <Text fontSize="xs" color={t.muted} mb={3}>{hint}</Text>}
       {!hint && <Box mb={3} />}

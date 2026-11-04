@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, HStack, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react';
+import { HStack, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ExportBar from './ExportBar';
 import PageTitle from './PageTitle';
@@ -69,7 +69,8 @@ export default function FacultyAnalytics() {
           onClick={() => open('Approved requests', data.drilldown.approved)} />
       </SimpleGrid>
 
-      <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={4}>
+      {/* Two equal-height cards side by side, then the wide cards one under the other. */}
+      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
         <ChartCard title="What happened to requests" hint="Finished and cancelled requests.">
           <PieChart segments={[
             { label: 'Completed', value: o.completed, color: '#16a34a' },
@@ -80,22 +81,20 @@ export default function FacultyAnalytics() {
             { label: 'Expired (no response)', value: o.expired, color: '#ca8a04' },
           ]} />
         </ChartCard>
-        <Box gridColumn={{ lg: 'span 2' }}>
-          <ChartCard title="Why students come" hint={`${s.purposes.total} requests, top reasons.`}>
-            <HBarChart color="#0891b2" items={s.purposes.items.map(p => ({ label: p.label, value: p.count, note: `${p.percent}%` }))} emptyText="No requests yet." />
-          </ChartCard>
-        </Box>
+        <ChartCard title="Students by year level and program" hint="Different students who asked you for a consultation.">
+          <CohortTable rows={s.cohorts} emptyText="No students yet." note="Counts each student once, even if they requested several times. Pending requests are not counted." />
+        </ChartCard>
       </SimpleGrid>
+
+      <ChartCard title="Why students come" hint={`${s.purposes.total} requests, top reasons.`}>
+        <HBarChart color="#0891b2" items={s.purposes.items.map(p => ({ label: p.label, value: p.count, note: `${p.percent}%` }))} emptyText="No requests yet." />
+      </ChartCard>
 
       <ChartCard title="Appeals from my students, by reason" hint="Reasons your students gave. Appeals do not remove a no-show from your totals.">
         <AppealsByReason rows={appeals.rows} reasons={appeals.reasons} />
         <Text fontSize="xs" color={muted} mt={2}>
           Appeal rate {pctText(appeals.summary.appealRate)} · student appeals: {appeals.summary.total} · my own appeals to the Dean: {appeals.summary.faculty.made}
         </Text>
-      </ChartCard>
-
-      <ChartCard title="Students by year level and program" hint="Different students who asked you for a consultation.">
-        <CohortTable rows={s.cohorts} emptyText="No students yet." note="Counts each student once, even if they requested several times. Pending requests are not counted." />
       </ChartCard>
       <DrilldownDrawer isOpen={drawer.isOpen} onClose={drawer.onClose} title={panel?.title || ''} data={panel?.data || null} studentLabel={panel?.split?.[0] || "Students"} facultyLabel={panel?.split?.[1]} studentsOnly={!panel?.split} />
     </VStack>
