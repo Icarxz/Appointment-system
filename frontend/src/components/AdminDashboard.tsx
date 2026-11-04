@@ -3,7 +3,7 @@ import { cohortConfig } from '../data/cohortConfig';
 import { formatDate, formatDateTime } from './dateUtils';
 import { 
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
-  useToast, Select, HStack, Divider, Table, Thead, Tbody, Tr, Th, Td, Badge, useColorModeValue,
+  useToast, Select, HStack, Table, Thead, Tbody, Tr, Th, Td, Badge, useColorModeValue,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
@@ -199,21 +199,6 @@ export default function AdminDashboard() {
     setIdSaving(false);
   };
 
-  // Approve a pending account. No ID is assigned here — the School ID / Faculty ID the person
-  // entered at registration is kept as-is.
-  const approveUser = async (id: string, name: string) => {
-    try {
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/users/${id}/verify`, { method: 'PATCH' });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      toast({ title: 'Approved', description: data.message || `${name} has been approved.`, status: data.emailSent === false ? 'warning' : 'success', duration: data.emailSent === false ? 9000 : 5000 });
-      // refresh the list so the approved user disappears from the pending queue
-      fetchAllData();
-    } catch (error: any) {
-      toast({ title: 'Approval Failed', description: error.message, status: 'error' });
-    }
-  };
-
   const handleAddSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -271,7 +256,6 @@ export default function AdminDashboard() {
       nav={[
         { key: 'home', label: 'Class Schedules', active: activePage === 'home', onClick: () => setActivePage('home') },
         { key: 'appointments', label: `Appointments (${appointments.filter(a => a.status === 'PENDING').length})`, active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
-        { key: 'verification', label: 'Verification Queue', active: activePage === 'verification', onClick: () => setActivePage('verification') },
         {
           key: 'users', label: 'User Management', active: activePage === 'provision' || activePage === 'users', onClick: () => {},
           children: [
@@ -291,7 +275,6 @@ export default function AdminDashboard() {
           {activePage === 'provision' && "Provision Account"}
           {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : "Student Management")}
           {activePage === 'appointments' && "Appointment Management"}
-          {activePage === 'verification' && "Account Verification Queue"}
           {activePage === 'analytics' && "Reports & Analytics"}
           {activePage === 'records' && "Consultation Records"}
         </PageTitle>
@@ -615,39 +598,6 @@ export default function AdminDashboard() {
             </Table></ScrollTable>
           </Box>
         )}
-
-        {activePage === 'verification' && (
-        <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-          {/* <Text mb={4} color={mutedText}>
-            <em>Note:</em> This queue shows students who registered without an official School ID (e.g. recent transferees), pending manual verification.
-          </Text> */}
-          <Divider mb={4} borderColor={borderColor}/>
-          <ScrollTable><Table variant="simple" size="sm">
-            <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Email</Th><Th color={mutedText}>Program</Th><Th color={mutedText}>Registered ID</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
-            <Tbody>
-              {allUsers
-                .filter(u => 
-                  (u.role === 'STUDENT' && u.accountStatus === 'PENDING_APPROVAL') ||
-                  (u.role === 'FACULTY' && u.accountStatus === 'PENDING_APPROVAL')
-                )
-                .map(user => (
-                  <Tr key={user._id}>
-                    <Td fontWeight="bold" color={textColor}>{user.name}</Td>
-                    <Td color={textColor}>{user.email}</Td>
-                    <Td color={textColor}>{user.programPosition}</Td>
-                    <Td color={textColor}>{(user.role === 'STUDENT' ? user.schoolId : user.facultyId) || (user.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
-                    <Td><Badge colorScheme="orange">Awaiting approval</Badge></Td>
-                    <Td>
-                      <ChakraButton size="xs" colorScheme="green" onClick={() => approveUser(user._id, user.name)}>
-                        Approve
-                      </ChakraButton>
-                    </Td>
-                  </Tr>
-                ))}
-            </Tbody>
-          </Table></ScrollTable>
-        </Box>
-      )}
 
         <Modal isOpen={!!emailEdit} onClose={() => setEmailEdit(null)} isCentered>
           <ModalOverlay />
