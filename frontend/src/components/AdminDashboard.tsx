@@ -7,6 +7,7 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
+import ClassGridEditor from './ClassGridEditor';
 import ProfileGate from './ProfileGate';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
@@ -51,6 +52,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
+  const [newAccount, setNewAccount] = useState<{ id: string; role: string } | null>(null); // the account just created, so its class grid can open
 
   const [emailEdit, setEmailEdit] = useState<any | null>(null); // account being moved to a school email
   const [emailEditValue, setEmailEditValue] = useState('');
@@ -63,11 +65,6 @@ export default function AdminDashboard() {
   const [idSaving, setIdSaving] = useState(false);
 
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
-  const [subject, setSubject] = useState('');
-  const [schedRoom, setSchedRoom] = useState('');
-  const [dayOfWeek, setDayOfWeek] = useState('1'); 
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
 
   const cardBg = useColorModeValue('#ffffff', '#111d30');
   const borderColor = useColorModeValue('#dde3ec', '#1e3048');
@@ -124,6 +121,7 @@ export default function AdminDashboard() {
       if (response.ok) {
         toast({ title: data.message, status: 'success' });
         setNewFacultyName(data.facultyName);
+        setNewAccount({ id: data.userId, role: data.role });
         setName(''); setEmail(''); setProgramPosition(''); setRoom('');
         fetchAllData();
       } else { toast({ title: data.error, status: 'error' }); }
@@ -199,20 +197,6 @@ export default function AdminDashboard() {
     setIdSaving(false);
   };
 
-  const handleAddSchedule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/schedule/add`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ facultyId: selectedFacultyId, subject, room: schedRoom, dayOfWeek: Number(dayOfWeek), startTime, endTime })
-      });
-      if (response.ok) {
-        toast({ title: 'Schedule Added Successfully!', status: 'success' });
-        setSubject(''); setSchedRoom(''); setStartTime(''); setEndTime('');
-      }
-    } catch (err) { toast({ title: 'Error adding schedule', status: 'error' }); }
-  };
-
   const updateAppointmentStatus = async (targetApt: any, newStatus: string) => {
     if (newStatus === 'APPROVED') {
       const approvedThatDay = appointments.filter(a => a.status === 'APPROVED' && a.date === targetApt.date && a.facultyId?._id === targetApt.facultyId?._id);
@@ -280,33 +264,23 @@ export default function AdminDashboard() {
         </PageTitle>
 
         {activePage === 'home' && (
-          <Box maxW="760px">
-              <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-                <Heading size="sm" mb={6} textTransform="uppercase" color={mutedText}>Assign Teaching Schedule</Heading>
-                <form onSubmit={handleAddSchedule}>
-                  <VStack spacing={4}>
-                    <HStack w="100%">
-                      <FormControl isRequired><FormLabel color={textColor}>Instructor</FormLabel><Select placeholder="Choose..." value={selectedFacultyId} onChange={(e) => setSelectedFacultyId(e.target.value)} color={textColor} borderColor={borderColor}>{facultyList.map(f => <option key={f._id} value={f._id}>{f.name}</option>)}</Select></FormControl>
-                      <FormControl isRequired><FormLabel color={textColor}>Subject</FormLabel><Input value={subject} onChange={e => setSubject(e.target.value)} color={textColor} borderColor={borderColor}/></FormControl>
-                    </HStack>
-                    <HStack w="100%">
-                      <FormControl isRequired><FormLabel color={textColor}>Day</FormLabel><Select value={dayOfWeek} onChange={e => setDayOfWeek(e.target.value)} color={textColor} borderColor={borderColor}><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option></Select></FormControl>
-                      <FormControl isRequired><FormLabel color={textColor}>Room</FormLabel><Input value={schedRoom} onChange={e => setSchedRoom(e.target.value)} color={textColor} borderColor={borderColor}/></FormControl>
-                    </HStack>
-                    <HStack w="100%">
-                      <FormControl isRequired><FormLabel color={textColor}>Start</FormLabel><Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} color={textColor} borderColor={borderColor}/></FormControl>
-                      <FormControl isRequired><FormLabel color={textColor}>End</FormLabel><Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} color={textColor} borderColor={borderColor}/></FormControl>
-                    </HStack>
-                    <ChakraButton type="submit" colorScheme="gray" variant="outline" w="100%">Assign Class Block</ChakraButton>
-                  </VStack>
-                </form>
-              </Box>
+          <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+            <Heading size="sm" mb={4} textTransform="uppercase" color={mutedText}>Class schedule</Heading>
+            <FormControl maxW="360px" mb={5}>
+              <FormLabel color={textColor}>Instructor</FormLabel>
+              <Select placeholder="Choose..." value={selectedFacultyId} onChange={(e) => setSelectedFacultyId(e.target.value)} color={textColor} borderColor={borderColor}>
+                {facultyList.map(f => <option key={f._id} value={f._id}>{f.name}</option>)}
+              </Select>
+            </FormControl>
+            {selectedFacultyId
+              ? <ClassGridEditor key={selectedFacultyId} facultyId={selectedFacultyId} facultyName={facultyList.find(f => f._id === selectedFacultyId)?.name || ''} />
+              : <Text color={mutedText}>Choose an instructor to see and edit their classes.</Text>}
           </Box>
         )}
 
         {activePage === 'provision' && (
           <Box display="flex" gap={8} flexDir={{ base: 'column', xl: 'row' }}>
-            <Box flex="1">
+            <Box flex={{ base: 'none', xl: '0 0 420px' }}>
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
                 <Heading size="sm" mb={6} textTransform="uppercase" color={mutedText}>Provision Account</Heading>
                 <form onSubmit={handleAddFaculty}>
@@ -345,12 +319,20 @@ export default function AdminDashboard() {
                 </form>
               </Box>
             </Box>
-            <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1" minH="400px" display="flex" flexDir="column" alignItems="center" justifyContent="center">
+            <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1" minW={0} minH="400px" display="flex" flexDir="column" alignItems={newAccount?.role === 'FACULTY' ? 'stretch' : 'center'} justifyContent={newAccount?.role === 'FACULTY' ? 'flex-start' : 'center'}>
               {newFacultyName ? (
-                <VStack spacing={4}>
-                  <Heading size="md" color="green.500">Provisioning Complete</Heading>
-                  <Text textAlign="center" color={textColor}>Account created for <b>{newFacultyName}</b></Text>
-                </VStack>
+                newAccount?.role === 'FACULTY' && newAccount.id ? (
+                  <>
+                    <Heading size="sm" color="green.500" mb={1}>Account created for {newFacultyName}</Heading>
+                    <Text fontSize="sm" color={mutedText} mb={4}>Add their classes below (optional). You can change them later under Class Schedules.</Text>
+                    <ClassGridEditor key={newAccount.id} facultyId={newAccount.id} facultyName={newFacultyName} />
+                  </>
+                ) : (
+                  <VStack spacing={4}>
+                    <Heading size="md" color="green.500">Provisioning Complete</Heading>
+                    <Text textAlign="center" color={textColor}>Account created for <b>{newFacultyName}</b></Text>
+                  </VStack>
+                )
               ) : (
                 <Text color={mutedText} textAlign="center">Fill provisioning form to create a faculty account.</Text>
               )}

@@ -39,6 +39,7 @@ const ConsultationHours = require('../models/ConsultationHours');
 const AddedConsultationHours = require('../models/AddedConsultationHours');
 const { buildSlots, buildBusy, insideBookableHours, maxDurationAt, availableWindow, addDays, dayOfWeekOf, overlaps } = require('../utils/slots');
 const { isOverlapping } = require('../utils/timeMath');
+const { validateClassBlock } = require('../utils/classBlock');
 const { requireAuth } = require('../middleware/auth');
 
 // Generic shape check for admin-provisioned accounts (any domain, but still a single "@").
@@ -334,20 +335,75 @@ router.get('/my-schedule/:facultyId', requireAuth(ALL_ROLES), async (req, res) =
   }
 });
 
-// 4. POST ROUTE: Admin assigns a schedule to a faculty member
+// 4. Class blocks (Admin / Dean): add, move or delete a class on the 30-minute class grid.
+// Every write is checked by utils/classBlock.js (30-minute times, no overlap with another class, no clash with an
+// approved consultation). The faculty member gets one mailbox notice per change, but not while the account has
+// never been signed in to (a new account is still being set up).
+async function classBlockCheck(facultyId, raw, excludeId) {
+  const [siblings, approved] = await Promise.all([
+    Schedule.find({ facultyId, ...(excludeId ? { _id: { $ne: excludeId } } : {}) }).lean(),
+    Appointment.find({ facultyId, status: 'APPROVED', date: { $gte: manilaNow().dateStr } }).select('date time duration').lean(),
+  ]);
+  return validateClassBlock(raw, siblings, approved);
+}
+const hasSignedIn = (u) => Boolean(u && (u.googleSub || u.privacyAcceptedAt));
+const classLine = (b) => `${b.subject} in ${b.room}, ${DAY_LABELS[b.dayOfWeek]} ${fmtTime(b.startTime)} - ${fmtTime(b.endTime)}`;
+const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 router.post('/schedule/add', requireAuth(STAFF), async (req, res) => {
-  const { facultyId, subject, room, dayOfWeek, startTime, endTime } = req.body;
   try {
-    await Schedule.create({ facultyId, subject, room, dayOfWeek, startTime, endTime });
-    await notify(facultyId, {
-      type: 'SCHEDULE_ASSIGNED',
-      title: 'New class added to your schedule',
-      message: `${subject} in ${room}, ${fmtTime(startTime)} - ${fmtTime(endTime)}.`,
-      page: 'schedule',
-    });
-    res.json({ message: 'Schedule assigned successfully!' });
+    const { facultyId } = req.body;
+    if (!mongoose.isValidObjectId(facultyId)) return res.status(400).json({ error: 'Choose an instructor.' });
+    const faculty = await User.findOne({ _id: facultyId, role: 'FACULTY' }).select('googleSub privacyAcceptedAt');
+    if (!faculty) return res.status(404).json({ error: 'Faculty member not found.' });
+
+    const check = await classBlockCheck(faculty._id, req.body, null);
+    if (!check.ok) return res.status(400).json({ error: check.error });
+
+    const created = await Schedule.create({ facultyId: faculty._id, ...check.value });
+    if (hasSignedIn(faculty)) {
+      await notify(faculty._id, { type: 'SCHEDULE_ASSIGNED', title: 'New class added to your schedule', message: `${classLine(check.value)}.`, page: 'schedule' });
+    }
+    res.json({ message: 'Schedule assigned successfully!', schedule: created });
   } catch (error) {
     res.status(500).json({ error: 'Server error assigning schedule.' });
+  }
+});
+
+router.put('/schedule/:id', requireAuth(STAFF), async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Class not found.' });
+    const block = await Schedule.findById(req.params.id);
+    if (!block) return res.status(404).json({ error: 'Class not found.' });
+
+    const check = await classBlockCheck(block.facultyId, req.body, block._id);
+    if (!check.ok) return res.status(400).json({ error: check.error });
+
+    const before = classLine(block);
+    Object.assign(block, check.value); // the instructor never changes here
+    await block.save();
+    const faculty = await User.findById(block.facultyId).select('googleSub privacyAcceptedAt');
+    if (hasSignedIn(faculty)) {
+      await notify(block.facultyId, { type: 'SCHEDULE_CHANGED', title: 'A class in your schedule was changed', message: `${before} is now ${classLine(check.value)}.`, page: 'schedule' });
+    }
+    res.json({ message: 'Class updated.', schedule: block });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error updating the class.' });
+  }
+});
+
+router.delete('/schedule/:id', requireAuth(STAFF), async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Class not found.' });
+    const block = await Schedule.findByIdAndDelete(req.params.id);
+    if (!block) return res.status(404).json({ error: 'Class not found.' });
+    const faculty = await User.findById(block.facultyId).select('googleSub privacyAcceptedAt');
+    if (hasSignedIn(faculty)) {
+      await notify(block.facultyId, { type: 'SCHEDULE_CHANGED', title: 'A class was removed from your schedule', message: `${classLine(block)} was removed.`, page: 'schedule' });
+    }
+    res.json({ message: 'Class removed.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error removing the class.' });
   }
 });
 
@@ -376,7 +432,7 @@ router.post('/add', requireAuth(STAFF), async (req, res) => {
     });
 
     await newUser.save();
-    res.json({ message: 'Account provisioned successfully', facultyName: name });
+    res.json({ message: 'Account provisioned successfully', facultyName: name, userId: newUser._id, role: newUser.role });
   } catch (error) {
     res.status(500).json({ error: 'Error provisioning account' });
   }
