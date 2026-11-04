@@ -3,14 +3,16 @@ import { cohortConfig } from '../data/cohortConfig';
 import { formatDate, formatDateTime } from './dateUtils';
 import { 
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
-  useToast, Select, HStack, Flex, Divider, Table, Thead, Tbody, Tr, Th, Td, Badge, useColorMode, useColorModeValue,
+  useToast, Select, HStack, Divider, Table, Thead, Tbody, Tr, Th, Td, Badge, useColorModeValue,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
-import { useNavigate } from 'react-router-dom';
 import { authFetch } from './authFetch';
-import LogoutConfirm from './LogoutConfirm';
 import ProfileGate from './ProfileGate';
-import SidebarIdentity from './SidebarIdentity';
+import DashboardShell from './DashboardShell';
+import PageTitle from './PageTitle';
+import ScrollTable from './ScrollTable';
+import WelcomeHeader from './WelcomeHeader';
+import { PAGE_PAD } from '../utils/uiTokens';
 import { statusColor, statusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
 // import { QRCodeSVG } from 'qrcode.react';
@@ -25,11 +27,8 @@ export const formatTime = (timeStr: string) => {
 };
 
 export default function AdminDashboard() {
-  const navigate = useNavigate();
-  const [logoutOpen, setLogoutOpen] = useState(false);
   const toast = useToast();
   const userName = localStorage.getItem('userName');
-  const { colorMode, toggleColorMode } = useColorMode();
 
   const [activePage, setActivePage] = useState('home');
   const [facultyList, setFacultyList] = useState<any[]>([]);
@@ -53,7 +52,6 @@ export default function AdminDashboard() {
   // const [generatedQr, setGeneratedQr] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
 
-  const [usersMenuOpen, setUsersMenuOpen] = useState(false); // User Management dropdown
   const [emailEdit, setEmailEdit] = useState<any | null>(null); // account being moved to a school email
   const [emailEditValue, setEmailEditValue] = useState('');
   const [nameEdit, setNameEdit] = useState<any | null>(null);
@@ -70,18 +68,6 @@ export default function AdminDashboard() {
   const [dayOfWeek, setDayOfWeek] = useState('1'); 
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
-
-  // ── Custom Theme Tokens ───────────────────────────────────────────────
-  const dk = colorMode === 'dark';
-  const C = {
-    pageBg:    dk ? "#0c1421" : "#eef2f7",
-    sidebar:   dk ? "#070e1b" : "#0f2240",
-    text:      dk ? "#e8f0fe" : "#0f2240",
-    navText:   dk ? "#7a93b0" : "#8eaecb",
-    navActive: dk ? "#ffffff" : "#ffffff",
-    navBg:     dk ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.10)",
-  };
-  const btnBase: React.CSSProperties = { border: "none", cursor: "pointer", fontFamily: "inherit", letterSpacing:"0.01em" };
 
   const cardBg = useColorModeValue('#ffffff', '#111d30');
   const borderColor = useColorModeValue('#dde3ec', '#1e3048');
@@ -277,101 +263,38 @@ export default function AdminDashboard() {
   };
 
   return (
-    <Flex minH="100vh" bg={C.pageBg} fontFamily="'Segoe UI', system-ui, sans-serif" color={C.text}>
-      
-      {/* ── Custom Sidebar ── */}
-      <aside style={{ width: "196px", flexShrink: 0, background: C.sidebar, display: "flex", flexDirection: "column", padding: "22px 14px" }}>
-        <div style={{ padding: "4px 8px 28px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "0.14em", color: "#fff", textTransform: "uppercase" }}>Admin Console</span>
-          <div style={{ marginTop: "7px", width: "20px", height: "3px", background: "#2563eb", borderRadius: "2px" }} />
-        </div>
-
-        <SidebarIdentity name={userName || ''} />
-
-        <nav style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-          {[
-            { page: "home", label: "Class Schedules" },
-            { page: "appointments", label: `Appointments (${appointments.filter(a => a.status === 'PENDING').length})` },
-            { page: "verification", label: "Verification Queue" },
-            { page: "__users", label: "User Management" },
-            { page: "analytics", label: "Reports & Analytics" },
-            { page: "records", label: "Consultation Records" }
-          ].map(({ page, label }) => {
-            if (page === "__users") {
-              const parentActive = activePage === 'provision' || activePage === 'users';
-              const expanded = usersMenuOpen || parentActive;
-              const subItems = [
-                { key: 'provision', label: 'Provision Account', active: activePage === 'provision', go: () => setActivePage('provision') },
-                { key: 'faculty', label: `Faculty (${allUsers.filter(u => u.role === 'FACULTY').length || facultyList.length})`, active: activePage === 'users' && userTab === 'faculty', go: () => { setUserTab('faculty'); setActivePage('users'); } },
-                { key: 'students', label: `Students (${allUsers.filter(u => u.role === 'STUDENT').length})`, active: activePage === 'users' && userTab === 'students', go: () => { setUserTab('students'); setActivePage('users'); } },
-              ];
-              return (
-                <div key={page}>
-                  <button onClick={() => setUsersMenuOpen(!expanded)} aria-expanded={expanded} style={{
-                      ...btnBase, width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "9px 10px", borderRadius: "7px",
-                      background: parentActive ? C.navBg : "transparent", color: parentActive ? C.navActive : C.navText,
-                      fontWeight: parentActive ? 600 : 400, fontSize: "13px", textAlign: "left",
-                      borderLeft: parentActive ? "2px solid #2563eb" : "2px solid transparent", transition: "all 0.15s ease",
-                    }}>
-                    <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: parentActive ? "#60a5fa" : "transparent", border: parentActive ? "none" : "1.5px solid #3a5373", flexShrink: 0 }} />
-                    <span style={{ flex: 1 }}>{label}</span>
-                    <span style={{ fontSize: "10px", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }}>▾</span>
-                  </button>
-                  {expanded && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", margin: "3px 0 3px 14px", paddingLeft: "8px", borderLeft: `1px solid ${dk ? "#1e3048" : "rgba(255,255,255,0.12)"}` }}>
-                      {subItems.map(it => (
-                        <button key={it.key} onClick={it.go} style={{
-                            ...btnBase, padding: "7px 10px", borderRadius: "6px", textAlign: "left", fontSize: "12.5px",
-                            background: it.active ? C.navBg : "transparent", color: it.active ? C.navActive : C.navText,
-                            fontWeight: it.active ? 600 : 400, transition: "all 0.15s ease",
-                          }}>
-                          {it.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            }
-            const active = activePage === page;
-            return (
-              <button key={page} onClick={() => setActivePage(page)} style={{
-                  ...btnBase, display: "flex", alignItems: "center", gap: "10px", padding: "9px 10px", borderRadius: "7px",
-                  background: active ? C.navBg : "transparent", color: active ? C.navActive : C.navText,
-                  fontWeight: active ? 600 : 400, fontSize: "13px", textAlign: "left",
-                  borderLeft: active ? "2px solid #2563eb" : "2px solid transparent", transition: "all 0.15s ease",
-                }}>
-                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: active ? "#60a5fa" : "transparent", border: active ? "none" : "1.5px solid #3a5373", flexShrink: 0 }} />
-                {label}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div style={{ flex: 1 }} />
-        <button onClick={toggleColorMode} style={{ ...btnBase, padding: "9px 12px", borderRadius: "7px", border: `1px solid ${dk ? "#1e3048" : "rgba(255,255,255,0.12)"}`, background: "transparent", color: C.navText, fontSize: "12px", textAlign: "left", display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-          <span>{dk ? "☀" : "☾"}</span> {dk ? "Light Mode" : "Dark Mode"}
-        </button>
-        <button onClick={() => setLogoutOpen(true)} style={{ ...btnBase, padding: "9px 12px", borderRadius: "7px", background: "#dc2626", color: "#fff", fontSize: "12px", fontWeight: 600 }}>Logout</button>
-        <ProfileGate role="ADMIN" />
-        <LogoutConfirm isOpen={logoutOpen} onClose={() => setLogoutOpen(false)} onConfirm={() => { localStorage.clear(); navigate('/'); }} />
-      </aside>
-
-      {/* ── Main Content ── */}
-      <Box flex="1" p={10} overflowY="auto">
-        <Box mb={8}>
-          <Heading size="lg" color={textColor} letterSpacing="tight">
-            {activePage === 'home' && "Teaching Schedules"}
-            {activePage === 'provision' && "Provision Account"}
-            {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : "Student Management")}
-            {activePage === 'appointments' && "Appointment Management"}
-            {activePage === 'verification' && "Account Verification Queue"}
-            {activePage === 'analytics' && "Reports & Analytics"}
-            {activePage === 'records' && "Consultation Records"}
-          </Heading>
-          <Text color={mutedText} mt={1}>Welcome, {userName}</Text>
-        </Box>
-      
+    <DashboardShell
+      portalLabel="Admin Console"
+      userName={userName || ''}
+      showMailbox={false}
+      extras={<ProfileGate role="ADMIN" />}
+      nav={[
+        { key: 'home', label: 'Class Schedules', active: activePage === 'home', onClick: () => setActivePage('home') },
+        { key: 'appointments', label: `Appointments (${appointments.filter(a => a.status === 'PENDING').length})`, active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
+        { key: 'verification', label: 'Verification Queue', active: activePage === 'verification', onClick: () => setActivePage('verification') },
+        {
+          key: 'users', label: 'User Management', active: activePage === 'provision' || activePage === 'users', onClick: () => {},
+          children: [
+            { key: 'provision', label: 'Provision Account', active: activePage === 'provision', onClick: () => setActivePage('provision') },
+            { key: 'faculty', label: `Faculty (${allUsers.filter(u => u.role === 'FACULTY').length || facultyList.length})`, active: activePage === 'users' && userTab === 'faculty', onClick: () => { setUserTab('faculty'); setActivePage('users'); } },
+            { key: 'students', label: `Students (${allUsers.filter(u => u.role === 'STUDENT').length})`, active: activePage === 'users' && userTab === 'students', onClick: () => { setUserTab('students'); setActivePage('users'); } },
+          ],
+        },
+        { key: 'analytics', label: 'Reports & Analytics', active: activePage === 'analytics', onClick: () => setActivePage('analytics') },
+        { key: 'records', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
+      ]}
+    >
+      <WelcomeHeader name={userName || ''} />
+      <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
+        <PageTitle>
+          {activePage === 'home' && "Teaching Schedules"}
+          {activePage === 'provision' && "Provision Account"}
+          {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : "Student Management")}
+          {activePage === 'appointments' && "Appointment Management"}
+          {activePage === 'verification' && "Account Verification Queue"}
+          {activePage === 'analytics' && "Reports & Analytics"}
+          {activePage === 'records' && "Consultation Records"}
+        </PageTitle>
 
         {activePage === 'home' && (
           <Box maxW="760px">
@@ -463,7 +386,7 @@ export default function AdminDashboard() {
               color={textColor}
               borderColor={borderColor}
             />
-            <Table variant="simple" size="sm">
+            <ScrollTable><Table variant="simple" size="sm">
               <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
                 {facultyList
@@ -510,7 +433,7 @@ export default function AdminDashboard() {
                   ))}
                   
               </Tbody>
-            </Table>
+            </Table></ScrollTable>
           </Box>
         )}
         
@@ -554,7 +477,7 @@ export default function AdminDashboard() {
               />
             </HStack>
 
-            <Table variant="simple" size="sm">
+            <ScrollTable><Table variant="simple" size="sm">
               <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>School ID</Th><Th color={mutedText}>Program / Section</Th><Th color={mutedText}>Email</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
                 {allUsers
@@ -581,7 +504,7 @@ export default function AdminDashboard() {
                     </Tr>
                   ))}
               </Tbody>
-            </Table>
+            </Table></ScrollTable>
           </Box>
         )}
 
@@ -605,7 +528,6 @@ export default function AdminDashboard() {
           <Box id="print-area" bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <HStack justifyContent="space-between" mb={6} className="no-print">
               <Text color={mutedText} fontSize="sm">Calculated live by the database.</Text>
-              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print Report</ChakraButton>
             </HStack>
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={textColor}>Reports & Analytics</Heading>
@@ -625,14 +547,14 @@ export default function AdminDashboard() {
                 onChange={(e) => setRecordsSearch(e.target.value)}
                 maxW="320px" color={textColor} borderColor={borderColor}
               />
-              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print Report</ChakraButton>
+              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
             </HStack>
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={textColor}>Consultation Records</Heading>
               <Text fontSize="sm" color={mutedText}>Generated {formatDateTime(new Date())}</Text>
             </Box>
 
-            <Table variant="simple" size="sm">
+            <ScrollTable><Table variant="simple" size="sm">
               <Thead>
                 <Tr>
                   <Th color={mutedText}>Date Signed Off</Th>
@@ -658,13 +580,13 @@ export default function AdminDashboard() {
                   </Tr>
                 ))}
               </Tbody>
-            </Table>
+            </Table></ScrollTable>
           </Box>
         )}
 
         {activePage === 'appointments' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <Table variant="simple" size="sm">
+            <ScrollTable><Table variant="simple" size="sm">
               <Thead><Tr><Th color={mutedText}>Student</Th><Th color={mutedText}>Target Faculty</Th><Th color={mutedText}>Date/Time</Th><Th color={mutedText}>Reason</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
                 {appointments.map(apt => (
@@ -690,7 +612,7 @@ export default function AdminDashboard() {
                   </Tr>
                 ))}
               </Tbody>
-            </Table>
+            </Table></ScrollTable>
           </Box>
         )}
 
@@ -700,7 +622,7 @@ export default function AdminDashboard() {
             <em>Note:</em> This queue shows students who registered without an official School ID (e.g. recent transferees), pending manual verification.
           </Text> */}
           <Divider mb={4} borderColor={borderColor}/>
-          <Table variant="simple" size="sm">
+          <ScrollTable><Table variant="simple" size="sm">
             <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Email</Th><Th color={mutedText}>Program</Th><Th color={mutedText}>Registered ID</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
             <Tbody>
               {allUsers
@@ -723,7 +645,7 @@ export default function AdminDashboard() {
                   </Tr>
                 ))}
             </Tbody>
-          </Table>
+          </Table></ScrollTable>
         </Box>
       )}
 
@@ -782,6 +704,6 @@ export default function AdminDashboard() {
           </ModalContent>
         </Modal>
       </Box>
-    </Flex>
+    </DashboardShell>
   );
 }

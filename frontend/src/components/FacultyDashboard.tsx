@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { formatDate } from './dateUtils';
 import BroadcastBanner from './BroadcastBanner';
 import {
@@ -10,19 +9,22 @@ import {
   FormLabel, Flex, VStack, Textarea, useColorMode, useColorModeValue
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
-import LogoutConfirm from './LogoutConfirm';
 import ProfileGate from './ProfileGate';
 import { statusColor, statusLabel, hasStarted, isBeforeCutoff, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
-import NotificationBell from './NotificationBell';
+import type { RequestRow } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import CancelReasonPicker, { FACULTY_CANCEL_REASONS } from './CancelReasonPicker';
 import AppealControls from './AppealControls';
 import BulkCancelModal from './BulkCancelModal';
 import FacultyAnalytics from './FacultyAnalytics';
-import SidebarIdentity from './SidebarIdentity';
+import DashboardShell from './DashboardShell';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
+import PageTitle from './PageTitle';
+import ByWidth from './ByWidth';
+import RequestCard from './RequestCard';
+import { PAGE_PAD, CARD_PAD } from '../utils/uiTokens';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -139,10 +141,8 @@ function getEventPos(event: ScheduleEvent): { top: number; height: number } {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function FacultyDashboard() {
-  const navigate = useNavigate();
-  const [logoutOpen, setLogoutOpen] = useState(false);
   const toast = useToast();
-  const { colorMode, toggleColorMode } = useColorMode();
+  const { colorMode } = useColorMode();
   
   const userId = localStorage.getItem('userId');
   const userName = localStorage.getItem('userName');
@@ -152,7 +152,8 @@ export default function FacultyDashboard() {
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
   const { aptId, closeApt } = useDeepLink<Page>(["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [viewMode,   setViewMode]   = useState<ViewMode>("week");
+  // Phones open on one day at a time; the 6-column week grid needs a wider screen.
+  const [viewMode,   setViewMode]   = useState<ViewMode>(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "day" : "week"));
   const [focusDay,   setFocusDay]   = useState(0);       
   
   // ── Data State ───────────────────────────────────────────────────────────────
@@ -707,99 +708,75 @@ const saveConsultationHours = async () => {
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
+  // The status, notes and buttons of one request. The table (wide screens) and the cards (phones) both call these,
+  // so the two layouts always show the same thing.
+  const requestBadge = (apt: RequestRow) => <Badge colorScheme={statusColor(apt.status)}>{statusLabel(apt.status)}</Badge>;
+  const requestNotes = (apt: RequestRow) => (
+    <>
+      {['CANCELLED BY FACULTY', 'CANCELLED BY STUDENT', 'REJECTED'].includes(apt.status) && apt.cancelReason && (
+        <Text fontSize="xs" color={mutedText} mt={1}>Reason: {apt.cancelReason}</Text>
+      )}
+      <AppealControls apt={apt} role="FACULTY" onChanged={fetchData} />
+    </>
+  );
+  const hasRequestActions = (apt: RequestRow) => ['PENDING', 'APPROVED', 'MISSED (FACULTY)'].includes(apt.status);
+  const requestActions = (apt: RequestRow) => (
+    <>
+      {apt.status === 'PENDING' && (
+        !hasStarted(apt.date, apt.time) ? (
+          <HStack spacing={2} flexWrap="wrap">
+            <Select
+              size="xs" w="110px" title="Consultation length"
+              value={approveDuration[apt._id] ?? apt.duration ?? 60}
+              onChange={(e) => setApproveDuration({ ...approveDuration, [apt._id]: Number(e.target.value) })}
+            >
+              {durationOptions(apt).map(m => (
+                <option key={m} value={m}>{m % 60 === 0 ? `${m / 60} hour${m > 60 ? 's' : ''}` : `${m} min`}</option>
+              ))}
+            </Select>
+            <ChakraButton size="xs" colorScheme="green" onClick={() => updateAppointmentStatus(apt, 'APPROVED')}>Approve</ChakraButton>
+            <ChakraButton size="xs" colorScheme="red" onClick={() => { setCancelReason(''); setCancelMode('reject'); setCancelTarget(apt); }}>Reject</ChakraButton>
+          </HStack>
+        ) : (
+          <Text fontSize="xs" color={mutedText}>This request expired because the requested time has started.</Text>
+        )
+      )}
+      {apt.status === 'APPROVED' && (
+        <HStack spacing={2} flexWrap="wrap">
+          {hasStarted(apt.date, apt.time) && (
+            <ChakraButton size="xs" colorScheme="orange" variant="outline" onClick={() => markNoShow(apt)}>Student didn't show</ChakraButton>
+          )}
+          {isBeforeCutoff(apt.date, apt.time) ? (
+            <ChakraButton size="xs" colorScheme="red" variant="outline" onClick={() => { setCancelReason(''); setCancelMode('cancel'); setCancelTarget(apt); }}>Cancel</ChakraButton>
+          ) : !hasStarted(apt.date, apt.time) && (
+            <Text fontSize="xs" color={mutedText}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before).</Text>
+          )}
+        </HStack>
+      )}
+      {apt.status === 'MISSED (FACULTY)' && (
+        <Text fontSize="xs" color={mutedText}>Not signed off — open Consultation Log if it took place.</Text>
+      )}
+    </>
+  );
+
   return (
-    <div style={{
-      display:         "flex",
-      height:          "100vh",
-      backgroundColor: C.pageBg,
-      fontFamily:      "'Segoe UI', system-ui, -apple-system, sans-serif",
-      color:           C.text,
-      overflow:        "hidden",
-    }}>
-      {/* ═══════════════════════════════════════════════════════════════════
-          SIDEBAR
-      ═══════════════════════════════════════════════════════════════════ */}
-      <aside style={{
-        width:         "196px",
-        flexShrink:    0,
-        background:    C.sidebar,
-        display:       "flex",
-        flexDirection: "column",
-        padding:       "22px 14px",
-      }}>
-        <div style={{ padding: "4px 8px 28px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "0.14em", color: "#fff", textTransform: "uppercase" }}>
-            Faculty Portal
-          </span>
-          <div style={{ marginTop: "7px", width: "20px", height: "3px", background: "#2563eb", borderRadius: "2px" }} />
-        </div>
-
-        <SidebarIdentity name={userName || ''} onClick={() => setActivePage("profile")} active={activePage === "profile"} />
-        <NotificationBell navText={C.navText} navBg={C.navBg} />
-
-        <nav style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-          {(
-            [
-              { page: "status",   label: "My Status"      },
-              { page: "schedule", label: "Master Schedule" },
-              // { page: "attendance", label: "Live Attendance" }, // Merged Tab
-              { page: "requests", label: `Requests (${myAppointments.filter(a => a.status === 'PENDING').length})` },
-              { page: "log",      label: "Consultation Log" },
-              { page: "analytics", label: "My Analytics" },
-            ] as { page: Page; label: string }[]
-          ).map(({ page, label }) => {
-            const active = activePage === page;
-            return (
-              <button
-                key={page}
-                onClick={() => setActivePage(page)}
-                style={{
-                  ...btnBase,
-                  display: "flex", alignItems: "center", gap: "10px", padding: "9px 10px", borderRadius: "7px",
-                  background: active ? C.navBg : "transparent",
-                  color: active ? C.navActive : C.navText,
-                  fontWeight: active ? 600 : 400, fontSize: "13px", textAlign: "left",
-                  borderLeft: active ? "2px solid #2563eb" : "2px solid transparent",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: active ? "#60a5fa" : "transparent", border: active ? "none" : "1.5px solid #3a5373", flexShrink: 0 }} />
-                {label}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div style={{ flex: 1 }} />
-
-        <button
-          onClick={toggleColorMode} 
-          style={{
-            ...btnBase,
-            padding: "9px 12px", borderRadius: "7px",
-            border: `1px solid ${dk ? "#1e3048" : "rgba(255,255,255,0.12)"}`,
-            background: "transparent", color: C.navText, fontSize: "12px", textAlign: "left",
-            display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px",
-          }}
-        >
-          <span>{dk ? "☀" : "☾"}</span>
-          {dk ? "Light Mode" : "Dark Mode"}
-        </button>
-
-        <button 
-          onClick={() => setLogoutOpen(true)}
-          style={{ ...btnBase, padding: "9px 12px", borderRadius: "7px", background: "#dc2626", color: "#fff", fontSize: "12px", fontWeight: 600 }}
-        >
-          Logout
-        </button>
-        <ProfileGate role="FACULTY" />
-        <LogoutConfirm isOpen={logoutOpen} onClose={() => setLogoutOpen(false)} onConfirm={() => { localStorage.clear(); navigate('/'); }} />
-      </aside>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          MAIN CONTENT
-      ═══════════════════════════════════════════════════════════════════ */}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+    <>
+    <DashboardShell
+      portalLabel="Faculty Portal"
+      userName={userName || ''}
+      extras={<ProfileGate role="FACULTY" />}
+      onOpenProfile={() => setActivePage("profile")}
+      profileActive={activePage === "profile"}
+      nav={([
+        { page: "status",    label: "My Status" },
+        { page: "schedule",  label: "Master Schedule" },
+        { page: "requests",  label: `Requests (${myAppointments.filter(a => a.status === 'PENDING').length})` },
+        { page: "log",       label: "Consultation Log" },
+        { page: "analytics", label: "My Analytics" },
+      ] as { page: Page; label: string }[]).map(({ page, label }) => ({
+        key: page, label, active: activePage === page, onClick: () => setActivePage(page),
+      }))}
+    >
         <WelcomeHeader name={userName || ''} />
         <BroadcastBanner userRole="FACULTY" />
 
@@ -809,11 +786,11 @@ const saveConsultationHours = async () => {
         {activePage === "schedule" && (
           <Box display="flex" flexDirection="column" h="100%" overflowY="auto">
             {/* Toolbar */}
-            <div style={{ padding: "14px 24px", borderBottom: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, flexWrap: "wrap", gap: "12px" }}>
+            <div style={{ padding: "12px clamp(12px, 3vw, 24px)", borderBottom: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, flexWrap: "wrap", gap: "12px" }}>
               <div>
                 {viewMode === "day" ? (
                   <>
-                    <button onClick={() => setViewMode("week")} style={{ ...btnBase, background: "transparent", color: "#2563eb", fontSize: "11px", padding: 0, marginBottom: "2px", display: "flex", alignItems: "center", gap: "4px" }}>‹ Back to Week</button>
+                    <button className="touch-target" onClick={() => setViewMode("week")} style={{ ...btnBase, background: "transparent", color: "#2563eb", fontSize: "11px", padding: 0, marginBottom: "2px", display: "flex", alignItems: "center", gap: "4px" }}>‹ Back to Week</button>
                     <h1 style={{ fontSize: "16px", fontWeight: 700, margin: 0, letterSpacing: "-0.015em" }}>
                       {weekDates[focusDay].toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
                     </h1>
@@ -826,23 +803,23 @@ const saveConsultationHours = async () => {
                 )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                <div style={{ width: "1px", height: "24px", background: C.border }} />
-                <button onClick={() => setWeekOffset(0)} style={{ ...btnBase, padding: "6px 12px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "12px" }}>Today</button>
+                <div className="toolbar-divider" style={{ width: "1px", height: "24px", background: C.border }} />
+                <button className="touch-target" onClick={() => setWeekOffset(0)} style={{ ...btnBase, padding: "6px 12px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "12px" }}>Today</button>
                 <div style={{ display: "flex" }}>
                   {(["‹", "›"] as const).map((arrow, i) => (
-                    <button key={arrow} onClick={() => setWeekOffset(w => w + (i === 0 ? -1 : 1))} style={{ ...btnBase, width: "30px", height: "30px", border: `1px solid ${C.border}`, borderRadius: i === 0 ? "6px 0 0 6px" : "0 6px 6px 0", borderRight: i === 0 ? "none" : `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "17px", lineHeight: "1", display: "flex", alignItems: "center", justifyContent: "center" }}>{arrow}</button>
+                    <button key={arrow} className="touch-target" aria-label={i === 0 ? "Previous week" : "Next week"} onClick={() => setWeekOffset(w => w + (i === 0 ? -1 : 1))} style={{ cursor: "pointer", fontFamily: "inherit", width: "30px", height: "30px", borderStyle: "solid", borderColor: C.border, borderWidth: i === 0 ? "1px 0 1px 1px" : "1px", borderRadius: i === 0 ? "6px 0 0 6px" : "0 6px 6px 0", background: C.surface, color: C.textMid, fontSize: "17px", lineHeight: "1", display: "flex", alignItems: "center", justifyContent: "center" }}>{arrow}</button>
                   ))}
                 </div>
                 <div style={{ display: "flex", border: `1px solid ${C.border}`, borderRadius: "6px", overflow: "hidden" }}>
                   {(["week", "day"] as ViewMode[]).map(v => (
-                    <button key={v} onClick={() => setViewMode(v)} style={{ ...btnBase, padding: "6px 14px", background: viewMode === v ? "#2563eb" : C.surface, color: viewMode === v ? "#fff" : C.textMid, fontSize: "12px", fontWeight: viewMode === v ? 600 : 400, textTransform: "capitalize" }}>{v}</button>
+                    <button key={v} className="touch-target" onClick={() => setViewMode(v)} style={{ ...btnBase, padding: "6px 14px", background: viewMode === v ? "#2563eb" : C.surface, color: viewMode === v ? "#fff" : C.textMid, fontSize: "12px", fontWeight: viewMode === v ? 600 : 400, textTransform: "capitalize" }}>{v}</button>
                   ))}
                 </div>
               </div>
             </div>
 
             {/* Schedule Grid */}
-            <div style={{ padding: "20px", display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ padding: "clamp(12px, 3vw, 20px)", display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ overflowX: "auto", width: "100%" }}>
               <div style={{ background: C.surface, borderRadius: "10px", border: `1px solid ${C.border}`, overflow: "hidden", minWidth: viewMode === "day" ? "340px" : "520px", maxWidth: viewMode === "day" ? "480px" : "none", margin: viewMode === "day" ? "0 auto" : "0" }}>
                 <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, background: C.surfaceAlt }}>
@@ -1067,8 +1044,8 @@ const saveConsultationHours = async () => {
             PAGE: MY STATUS (Chakra UI Form)
         ─────────────────────────────────────────────────────────────── */}
         {activePage === "status" && (
-          <div style={{ padding: "32px", overflowY: "auto" }}>
-            <h1 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "20px", color: textColor }}>My Status & Notices</h1>
+          <div style={{ padding: "clamp(16px, 4vw, 32px)", overflowY: "auto" }}>
+            <PageTitle>My Status & Notices</PageTitle>
             <Box display="flex" gap={6} flexDirection={{ base: 'column', md: 'row' }}>
               
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
@@ -1153,71 +1130,56 @@ const saveConsultationHours = async () => {
             PAGE: REQUESTS (Chakra UI Table)
         ─────────────────────────────────────────────────────────────── */}
         {activePage === "requests" && (
-          <div style={{ padding: "32px", overflowY: "auto" }}>
-            <Flex justify="space-between" align="center" mb={5} gap={3} wrap="wrap">
-              <h1 style={{ fontSize: "18px", fontWeight: 700, color: textColor }}>Pending Appointment Requests</h1>
-              <ChakraButton size="sm" colorScheme="red" variant="outline" onClick={() => setBulkOpen(true)}>Cancel several…</ChakraButton>
-            </Flex>
+          <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
+            {/* This page lists every request, not only the pending ones (the menu badge counts the pending ones). */}
+            <PageTitle>Appointment Requests</PageTitle>
             <BulkCancelModal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} role="FACULTY" appointments={myAppointments} onDone={fetchData} />
-            <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-               <Table variant="simple" size="sm">
-                <Thead><Tr><Th color={mutedText}>Student</Th><Th color={mutedText}>Date/Time</Th><Th color={mutedText}>Reason</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
-                <Tbody>
-                  {myAppointments.map(apt => (
-                    <Tr key={apt._id}>
-                      <Td fontWeight="bold" color={textColor}>{apt.studentName} ({apt.studentSection})</Td>
-                      <Td color={textColor}>{formatDate(apt.date)} at {formatTime(apt.time)}</Td>
-                      <Td maxW="200px" isTruncated color={textColor}>{apt.reason}</Td>
-                      <Td>
-                        <Badge colorScheme={statusColor(apt.status)}>{statusLabel(apt.status)}</Badge>
-                        <AppealControls apt={apt} role="FACULTY" onChanged={fetchData} />
-                      </Td>
-                      <Td>
-                        {apt.status === 'PENDING' && (
-                          !hasStarted(apt.date, apt.time) ? (
-                            <HStack spacing={2}>
-                              <Select
-                                size="xs" w="110px" title="Consultation length"
-                                value={approveDuration[apt._id] ?? apt.duration ?? 60}
-                                onChange={(e) => setApproveDuration({ ...approveDuration, [apt._id]: Number(e.target.value) })}
-                              >
-                                {durationOptions(apt).map(m => (
-                                  <option key={m} value={m}>{m % 60 === 0 ? `${m / 60} hour${m > 60 ? 's' : ''}` : `${m} min`}</option>
-                                ))}
-                              </Select>
-                              <ChakraButton size="xs" colorScheme="green" onClick={() => updateAppointmentStatus(apt, 'APPROVED')}>Approve</ChakraButton>
-                              <ChakraButton size="xs" colorScheme="red" onClick={() => { setCancelReason(''); setCancelMode('reject'); setCancelTarget(apt); }}>Reject</ChakraButton>
-                            </HStack>
-                          ) : (
-                            <Text fontSize="xs" color={mutedText}>This request expired because the requested time has started.</Text>
-                          )
-                        )}
-                        {apt.status === 'APPROVED' && (
-                          <HStack spacing={2}>
-                            {hasStarted(apt.date, apt.time) && (
-                              <ChakraButton size="xs" colorScheme="orange" variant="outline" onClick={() => markNoShow(apt)}>Student didn't show</ChakraButton>
-                            )}
-                            {isBeforeCutoff(apt.date, apt.time) ? (
-                              <ChakraButton size="xs" colorScheme="red" variant="outline" onClick={() => { setCancelReason(''); setCancelMode('cancel'); setCancelTarget(apt); }}>Cancel</ChakraButton>
-                            ) : !hasStarted(apt.date, apt.time) && (
-                              <Text fontSize="xs" color={mutedText}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before).</Text>
-                            )}
-                          </HStack>
-                        )}
-                        {apt.status === 'MISSED (FACULTY)' && (
-                          <Text fontSize="xs" color={mutedText}>Not signed off — open Consultation Log if it took place.</Text>
-                        )}
-                        {['CANCELLED BY FACULTY', 'CANCELLED BY STUDENT', 'REJECTED'].includes(apt.status) && apt.cancelReason && (
-                          <Text fontSize="xs" color={mutedText}>Reason: {apt.cancelReason}</Text>
-                        )}
-                      </Td>
-                    </Tr>
-                  ))}
-                  {myAppointments.length === 0 && <Tr><Td colSpan={5} textAlign="center" py={10} color={mutedText}>No appointments requested.</Td></Tr>}
-                </Tbody>
-              </Table>
+            <Box bg={cardBg} p={CARD_PAD} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+              <Flex justify="flex-end" mb={3}>
+                <ChakraButton size="sm" colorScheme="red" variant="outline" onClick={() => setBulkOpen(true)}>Cancel several…</ChakraButton>
+              </Flex>
+              {/* A table when this box is wide enough for five columns, one card per request when it is not
+                  (on a phone the Approve and Reject buttons used to sit off-screen). */}
+              <ByWidth
+                min={860}
+                wide={(
+                  <Box overflowX="auto">
+                    <Table variant="simple" size="sm">
+                      <Thead><Tr><Th color={mutedText}>Student</Th><Th color={mutedText}>Date/Time</Th><Th color={mutedText}>Reason</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+                      <Tbody>
+                        {myAppointments.map(apt => (
+                          <Tr key={apt._id}>
+                            <Td fontWeight="bold" color={textColor}>{apt.studentName} ({apt.studentSection})</Td>
+                            <Td color={textColor}>{formatDate(apt.date)} at {formatTime(apt.time)}</Td>
+                            <Td maxW="200px" isTruncated color={textColor}>{apt.reason}</Td>
+                            <Td>{requestBadge(apt)}{requestNotes(apt)}</Td>
+                            <Td>{requestActions(apt)}</Td>
+                          </Tr>
+                        ))}
+                        {myAppointments.length === 0 && <Tr><Td colSpan={5} textAlign="center" py={10} color={mutedText}>No appointments requested.</Td></Tr>}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                )}
+                narrow={(
+                  <VStack align="stretch" spacing={3}>
+                    {myAppointments.map(apt => (
+                      <RequestCard
+                        key={apt._id}
+                        title={`${apt.studentName} (${apt.studentSection})`}
+                        when={`${formatDate(apt.date)} at ${formatTime(apt.time)}`}
+                        reason={apt.reason}
+                        status={requestBadge(apt)}
+                        extra={requestNotes(apt)}
+                        actions={hasRequestActions(apt) ? requestActions(apt) : undefined}
+                      />
+                    ))}
+                    {myAppointments.length === 0 && <Text textAlign="center" py={8} color={mutedText}>No appointments requested.</Text>}
+                  </VStack>
+                )}
+              />
             </Box>
-          </div>
+          </Box>
         )}
 
         {/* ───────────────────────────────────────────────────────────────
@@ -1225,20 +1187,21 @@ const saveConsultationHours = async () => {
         ─────────────────────────────────────────────────────────────── */}
 
         {activePage === "profile" && (
-          <Box h="100%" overflowY="auto" p={6}>
-            <Heading size="md" color={textColor} mb={4}>My Profile</Heading>
+          <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
+            <PageTitle>My Profile</PageTitle>
             <ProfilePage />
           </Box>
         )}
 
         {activePage === "analytics" && (
-          <Box h="100%" overflowY="auto" p={6}>
+          <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
             <FacultyAnalytics />
           </Box>
         )}
 
         {activePage === "log" && (
-          <Box h="100%" overflowY="auto" p={6}>
+          <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
+            <PageTitle>Consultation Log</PageTitle>
             {/* Approved consultations awaiting sign-off */}
             <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" mb={6} className="no-print">
               <Heading size="md" color={textColor} mb={4}>Log consultation details</Heading>
@@ -1364,8 +1327,8 @@ const saveConsultationHours = async () => {
             </Box>
           </Box>
         )}
-      </main>
-      <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
-    </div>
+    </DashboardShell>
+    <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
+    </>
   );
 }

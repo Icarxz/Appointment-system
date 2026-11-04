@@ -62,6 +62,10 @@
   body.printing-report #printable-report * { visibility: visible; }
   body.printing-report #printable-report { position: absolute; left: 0; top: 0; width: 100%; }
   .print-only { display: block !important; }
+
+  /* The dashboards are exactly one screen tall on screen; on paper they must grow with their content. */
+  #dashboard-shell { display: block !important; height: auto !important; overflow: visible !important; }
+  #dashboard-shell main { overflow: visible !important; }
 }
 
 /* A line that exists only on paper (title and date of a printed report) */
@@ -72,7 +76,6 @@
   max-width: 100%;
   margin: 0 auto;
   text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -126,3 +129,14 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Portals read left to right. (#root's centred text is only meant for the landing page.) */
+#dashboard-shell { text-align: left; }
+
+@media (max-width: 767px) { .toolbar-divider { display: none; } }
+
+/* Plain <button>s (not Chakra ones, which the theme already enlarges) get a finger-sized target on touch screens. */
+@media (pointer: coarse) { .touch-target { min-height: 40px; min-width: 40px; } }
+
+/* The calendar library's own toolbar buttons are plain <button>s (not Chakra), so they get the same finger-sized target. */
+@media (pointer: coarse) { .rbc-toolbar button { min-height: 40px; min-width: 40px; } }

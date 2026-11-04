@@ -1,0 +1,149 @@
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  Drawer, DrawerContent, DrawerOverlay, DrawerCloseButton, IconButton, useBreakpointValue, useColorMode, useDisclosure,
+} from '@chakra-ui/react';
+import { HamburgerIcon } from '@chakra-ui/icons';
+import SidebarIdentity from './SidebarIdentity';
+import NotificationBell from './NotificationBell';
+import LogoutConfirm from './LogoutConfirm';
+import { SIDEBAR_WIDTH, useNavPalette } from '../utils/uiTokens';
+
+export interface NavItem {
+  key: string;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  /** A collapsible group (Admin's "User Management"). The group opens by itself when a child is active. */
+  children?: NavItem[];
+}
+
+interface Props {
+  /** "Student Portal", "Faculty Portal", ... */
+  portalLabel: string;
+  userName: string;
+  nav: NavItem[];
+  /** Students and faculty open My Profile from their name; Admin and Dean show it as plain text. */
+  onOpenProfile?: () => void;
+  profileActive?: boolean;
+  /** Admin has no mailbox. */
+  showMailbox?: boolean;
+  /** Anything that must exist once per page (for example the first-login ProfileGate). */
+  extras?: ReactNode;
+  children: ReactNode;
+}
+
+const btnBase: React.CSSProperties = { border: 'none', cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.01em' };
+
+// The one sidebar every portal shares. From 768px up it is a fixed column; below that it turns into a
+// top bar with a menu button that opens the same content in a drawer, so phones get the full screen width.
+export default function DashboardShell({ portalLabel, userName, nav, onOpenProfile, profileActive, showMailbox = true, extras, children }: Props) {
+  const C = useNavPalette();
+  const { toggleColorMode } = useColorMode();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false }) ?? false;
+  const menu = useDisclosure();
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  // Moving to another page (including through a mailbox link) closes the mobile menu.
+  useEffect(() => { menu.onClose(); }, [location.pathname, location.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Growing the window to desktop width must not leave a drawer open.
+  useEffect(() => { if (!isMobile) menu.onClose(); }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const itemStyle = (active: boolean, sub = false): React.CSSProperties => ({
+    ...btnBase, width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+    padding: sub ? '8px 10px' : '10px 10px', minHeight: isMobile ? '44px' : undefined, borderRadius: '7px',
+    background: active ? C.navBg : 'transparent', color: active ? C.navActive : C.navText,
+    fontWeight: active ? 600 : 400, fontSize: sub ? '12.5px' : '13px', textAlign: 'left',
+    borderLeft: sub ? 'none' : (active ? '2px solid #2563eb' : '2px solid transparent'), transition: 'all 0.15s ease',
+  });
+  const dot = (active: boolean) => (
+    <span aria-hidden style={{ width: '5px', height: '5px', borderRadius: '50%', background: active ? '#60a5fa' : 'transparent', border: active ? 'none' : '1.5px solid #3a5373', flexShrink: 0 }} />
+  );
+
+  // The portals switch pages with state, not the URL, so the "close on navigation" effect above never fires for them.
+  // Choosing a page must close the phone menu itself, or the drawer keeps covering the page that was just opened.
+  const choose = (action: () => void) => { action(); menu.onClose(); };
+
+  const renderItem = (item: NavItem) => {
+    if (item.children?.length) {
+      const childActive = item.children.some(c => c.active);
+      const expanded = openGroups[item.key] || childActive;
+      return (
+        <div key={item.key}>
+          <button onClick={() => setOpenGroups(g => ({ ...g, [item.key]: !expanded }))} aria-expanded={expanded} style={itemStyle(childActive)}>
+            {dot(childActive)}
+            <span style={{ flex: 1 }}>{item.label}</span>
+            <span aria-hidden style={{ fontSize: '10px', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>▾</span>
+          </button>
+          {expanded && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '3px 0 3px 14px', paddingLeft: '8px', borderLeft: `1px solid ${C.navLine}` }}>
+              {item.children.map(c => (
+                <button key={c.key} onClick={() => choose(c.onClick)} aria-current={c.active ? 'page' : undefined} style={itemStyle(c.active, true)}>{c.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    return (
+      <button key={item.key} onClick={() => choose(item.onClick)} aria-current={item.active ? 'page' : undefined} style={itemStyle(item.active)}>
+        {dot(item.active)}
+        {item.label}
+      </button>
+    );
+  };
+
+  const sidebarBody = (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '22px 14px', overflowY: 'auto' }}>
+      <div style={{ padding: '4px 8px 24px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.14em', color: '#fff', textTransform: 'uppercase' }}>{portalLabel}</span>
+        <div style={{ marginTop: '7px', width: '20px', height: '3px', background: '#2563eb', borderRadius: '2px' }} />
+      </div>
+      <SidebarIdentity name={userName} onClick={onOpenProfile ? () => choose(onOpenProfile) : undefined} active={profileActive} />
+      {/* On phones the bell lives in the top bar instead, so it keeps polling while the menu is closed. */}
+      {showMailbox && !isMobile && <NotificationBell navText={C.navText} navBg={C.navBg} />}
+      <nav aria-label={`${portalLabel} menu`} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        {nav.map(renderItem)}
+      </nav>
+      <div style={{ flex: 1, minHeight: '16px' }} />
+      <button onClick={toggleColorMode} style={{ ...btnBase, padding: '10px 12px', minHeight: isMobile ? '44px' : undefined, borderRadius: '7px', border: `1px solid ${C.navLine}`, background: 'transparent', color: C.navText, fontSize: '12px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <span aria-hidden>{C.dk ? '☀' : '☾'}</span> {C.dk ? 'Light Mode' : 'Dark Mode'}
+      </button>
+      <button onClick={() => setLogoutOpen(true)} style={{ ...btnBase, padding: '10px 12px', minHeight: isMobile ? '44px' : undefined, borderRadius: '7px', background: '#dc2626', color: '#fff', fontSize: '12px', fontWeight: 600 }}>Logout</button>
+    </div>
+  );
+
+  return (
+    <div id="dashboard-shell" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', background: C.pageBg, fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: C.text, overflow: 'hidden' }}>
+      {isMobile ? (
+        <>
+          <header className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', background: C.sidebar, flexShrink: 0 }}>
+            <IconButton aria-label="Open menu" icon={<HamburgerIcon boxSize={5} />} onClick={menu.onOpen} variant="ghost" color="#fff" _hover={{ bg: 'whiteAlpha.200' }} _active={{ bg: 'whiteAlpha.300' }} />
+            <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.14em', color: '#fff', textTransform: 'uppercase', flex: 1, minWidth: 0 }}>{portalLabel}</span>
+            {showMailbox && <NotificationBell compact navText="#fff" navBg="rgba(255,255,255,0.12)" />}
+          </header>
+          <Drawer isOpen={menu.isOpen} placement="left" onClose={menu.onClose}>
+            <DrawerOverlay />
+            <DrawerContent bg={C.sidebar} maxW="min(300px, 86vw)">
+              <DrawerCloseButton color="#fff" />
+              {sidebarBody}
+            </DrawerContent>
+          </Drawer>
+        </>
+      ) : (
+        <aside className="no-print" style={{ width: SIDEBAR_WIDTH, flexShrink: 0, background: C.sidebar }}>{sidebarBody}</aside>
+      )}
+
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
+        {children}
+      </main>
+
+      {extras}
+      <LogoutConfirm isOpen={logoutOpen} onClose={() => setLogoutOpen(false)} onConfirm={() => { localStorage.clear(); navigate('/'); }} />
+    </div>
+  );
+}
