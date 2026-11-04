@@ -23,6 +23,7 @@ import ProfilePage from './ProfilePage';
 import PageTitle from './PageTitle';
 import RequestList from './RequestList';
 import { PAGE_PAD } from '../utils/uiTokens';
+import ExportBar from './ExportBar';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -767,7 +768,7 @@ const saveConsultationHours = async () => {
         key: page, label, active: activePage === page, onClick: () => setActivePage(page),
       }))}
     >
-        <WelcomeHeader name={userName || ''} />
+        <WelcomeHeader name={userName || ''} actions={activePage === 'analytics' ? <ExportBar solid csvPath="/api/analytics/me.csv" fileBase="my-analytics" /> : undefined} />
         <BroadcastBanner userRole="FACULTY" />
 
         {/* ───────────────────────────────────────────────────────────────

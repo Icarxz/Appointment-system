@@ -28,22 +28,28 @@ export function ChartCard({ title, hint, children }: { title: string; hint?: str
 }
 
 // Big-number tile. With onClick it becomes a button (used to open the "who" side panel).
-export function KpiTile({ label, value, sub, accent = '#2563eb', onClick, hint }: {
-  label: string; value: string | number; sub?: string; accent?: string; onClick?: () => void; hint?: string;
+export function KpiTile({ label, value, sub, accent = '#2563eb', onClick, hint, icon, dense }: {
+  label: string; value: string | number; sub?: string; accent?: string; onClick?: () => void; hint?: string; icon?: ReactNode; dense?: boolean;
 }) {
   const t = useTheme();
   const body = (
     <Box
-      bg={t.surface} p={4} borderRadius="lg" borderWidth="1px" borderColor={t.border} borderTopWidth="3px" borderTopColor={accent}
+      bg={t.surface} p={dense ? 3 : 4} borderRadius="lg" borderWidth="1px" borderColor={t.border} borderTopWidth="3px" borderTopColor={accent}
       textAlign="left" h="100%"
       {...(onClick ? {
         as: 'button', cursor: 'pointer', onClick, w: '100%',
         _hover: { shadow: 'md', borderColor: accent }, _focusVisible: { outline: '2px solid', outlineColor: accent },
       } : {})}
     >
-      <Text fontSize="xs" color={t.muted} fontWeight="600">{label}{onClick ? ' ›' : ''}</Text>
-      <Text fontSize="3xl" fontWeight="800" color={t.text} lineHeight="1.1">{value}</Text>
-      {sub && <Text fontSize="11px" color={t.muted} mt={1} whiteSpace="pre-line" minH="2.8em" lineHeight="1.4">{sub}</Text>}
+      {/* dense: label on the left and the number on the same line, so six tiles fit in a column on a laptop screen */}
+      <Flex align={dense ? 'center' : 'stretch'} justify="space-between" gap={2} direction={dense ? 'row' : 'column'}>
+        <Flex align="center" gap={2} color={t.muted} minH={dense ? undefined : '28px'} minW={0}>
+          {icon && <Box color={accent} display="flex" fontSize="md">{icon}</Box>}
+          <Text fontSize={dense ? '13px' : icon ? 'sm' : 'xs'} fontWeight="600" whiteSpace={dense ? { base: 'normal', xl: 'nowrap' } : undefined} noOfLines={dense ? undefined : 1}>{label}{onClick ? ' ›' : ''}</Text>
+        </Flex>
+        <Text flexShrink={0} fontSize={dense ? 'xl' : '3xl'} fontWeight="800" color={t.text} lineHeight="1.1">{value}</Text>
+      </Flex>
+      {sub && <Text fontSize="11px" color={t.muted} mt={1} whiteSpace="pre-line" lineHeight="1.4" minH={dense ? undefined : '2.8em'}>{sub}</Text>}
     </Box>
   );
   return hint ? <Tooltip label={hint} hasArrow openDelay={300}>{body}</Tooltip> : body;
