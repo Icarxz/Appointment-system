@@ -7,6 +7,7 @@ const AppointmentSchema = new mongoose.Schema({
   facultyId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   date: { type: String, required: true },
   time: { type: String, required: true },
+  requestedTime: { type: String },             // set only when the faculty member approved a different start than the student asked for
   duration: { type: Number, default: 60 },     // consultation length in minutes
   reason: { type: String, required: true },
   status: { type: String, default: 'PENDING' }, // PENDING, APPROVED, REJECTED, COMPLETED, CANCELLED BY STUDENT / BY FACULTY, MISSED (STUDENT) / (FACULTY)

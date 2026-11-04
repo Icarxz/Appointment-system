@@ -37,8 +37,9 @@ const StatusHistory = require('../models/StatusHistory');
 const crypto = require('crypto'); // Built-in Node.js module for secure hashes
 const ConsultationHours = require('../models/ConsultationHours');
 const AddedConsultationHours = require('../models/AddedConsultationHours');
-const { buildSlots, buildBusy, insideBookableHours, maxDurationAt, availableWindow, addDays, dayOfWeekOf, overlaps } = require('../utils/slots');
+const { buildSlots, buildBusy, openWindow, addDays, dayOfWeekOf, overlaps } = require('../utils/slots');
 const { isOverlapping } = require('../utils/timeMath');
+const { planApproval } = require('../utils/approvalTime');
 const { requireAuth } = require('../middleware/auth');
 
 // Generic shape check for admin-provisioned accounts (any domain, but still a single "@").
@@ -217,54 +218,31 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
     }
 
     // THE INTERCEPTOR: Only run overlap logic if they are trying to APPROVE
+    // Several students may ask for the same hour. The faculty member gives each one a start time and a length inside the
+    // free time that is left (consultation hours + vacant hours, up to the next class or approved appointment): the first
+    // approval may take 8:00-8:30, the next can then be given 8:30 onward. Nothing is declined automatically.
+    let movedFrom = null; // the start the student asked for, when the approval gave a different one
     if (status === 'APPROVED') {
       const facultyId = targetApt.facultyId;
-      const aptDate = new Date(targetApt.date);
-      
-      // Get day of week (0 = Sunday, 1 = Monday) to check against recurring classes
-      const dayOfWeek = aptDate.getDay(); 
+      const dayOfWeek = dayOfWeekOf(targetApt.date); // from the date text itself, not the server's timezone
 
-      // Must still fall inside the consultation hours (official or added) or the vacant window (Mon-Fri, 8 AM-5 PM)
-      const [official, added] = await Promise.all([
+      const [official, added, dayClasses, approvedAppointments] = await Promise.all([
         ConsultationHours.find({ facultyId }).lean(),
         AddedConsultationHours.find({ facultyId, dayOfWeek: { $gte: 1 } }).lean(),
+        Schedule.find({ facultyId, dayOfWeek }),
+        Appointment.find({ facultyId, date: targetApt.date, status: 'APPROVED', _id: { $ne: targetApt._id } }),
       ]);
 
-      // Faculty may shorten the consultation, or extend it across back-to-back consultation hours that
-      // day (up to 2 hours in total). The length can never run past the end of that continuous run.
-      if (req.body.duration !== undefined) {
-        const newDuration = Number(req.body.duration);
-        const maxAllowed = maxDurationAt({ date: targetApt.date, time: targetApt.time, official, added });
-        if (!Number.isInteger(newDuration) || newDuration < 15 || newDuration > Math.max(maxAllowed, targetApt.duration)) {
-          return res.status(400).json({ error: `Duration must be between 15 minutes and ${Math.max(maxAllowed, targetApt.duration)} minutes.` });
-        }
-        targetApt.duration = newDuration;
+      const window = openWindow({ date: targetApt.date, time: targetApt.time, official, added, classes: dayClasses, appointments: approvedAppointments, excludeId: targetApt._id });
+      const plan = planApproval({ window, apt: { time: targetApt.time, duration: targetApt.duration }, body: req.body });
+      if (!plan.ok) return res.status(plan.status).json({ error: plan.error });
+
+      // Safety net: the plan already keeps clear of classes and approved appointments; check again before writing.
+      if (isOverlapping(plan.time, [...dayClasses, ...approvedAppointments], plan.duration)) {
+        return res.status(409).json({ error: 'Double-Booking Prevented: This time block conflicts with an existing class or approved appointment.' });
       }
-
-      if (!insideBookableHours({ date: targetApt.date, time: targetApt.time, duration: targetApt.duration, official, added })) {
-        return res.status(400).json({ error: 'This time is outside the faculty member\'s consultation hours and the Monday to Friday, 8 AM to 5 PM booking window.' });
-      }
-
-      // 1b. Fetch faculty's immovable teaching schedule for this day
-      const dayClasses = await Schedule.find({ facultyId, dayOfWeek });
-
-      // 2. Fetch faculty's ALREADY APPROVED appointments for this exact date
-      const approvedAppointments = await Appointment.find({
-        facultyId: facultyId,
-        date: targetApt.date,
-        status: 'APPROVED',
-        _id: { $ne: targetApt._id }
-      });
-
-      // Pool all physical commitments together
-      const allExistingEvents = [...dayClasses, ...approvedAppointments];
-
-      // 3. RUN THE HEURISTIC
-      if (isOverlapping(targetApt.time, allExistingEvents, targetApt.duration)) {
-        return res.status(409).json({ 
-          error: 'Double-Booking Prevented: This time block conflicts with an existing class or approved appointment.' 
-        });
-      }
+      if (plan.moved) { movedFrom = targetApt.time; targetApt.requestedTime = targetApt.time; targetApt.time = plan.time; }
+      targetApt.duration = plan.duration;
     }
 
     // If math clears (or if they are just rejecting/canceling), execute the database write
@@ -272,25 +250,6 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
     targetApt.status = status;
     if (status === 'CANCELLED BY STUDENT' || status === 'REJECTED') targetApt.cancelReason = reason;
     await targetApt.save();
-
-    // Approving one request for a slot declines the other pending requests that overlap it.
-    if (status === 'APPROVED' && previousStatus !== 'APPROVED') {
-      const s0 = timeToMinutes(targetApt.time), e0 = s0 + (Number(targetApt.duration) || 60);
-      const rivals = await Appointment.find({ facultyId: targetApt.facultyId, date: targetApt.date, status: 'PENDING', _id: { $ne: targetApt._id } });
-      for (const r of rivals) {
-        const rs = timeToMinutes(r.time);
-        if (!overlaps(s0, e0, rs, rs + (Number(r.duration) || 60))) continue;
-        r.status = 'REJECTED';
-        r.cancelReason = 'Another student\'s request for this time was accepted.';
-        await r.save();
-        await notify(await resolveStudentId(r), {
-          type: 'APPOINTMENT_UPDATE',
-          title: 'Consultation request declined',
-          message: `Your request on ${fmtDate(r.date)} at ${fmtTime(r.time)} was declined because the slot went to another student. Please choose another slot.`,
-          appointmentId: r._id,
-        });
-      }
-    }
 
     if (status !== previousStatus) {
       const when = `${fmtDate(targetApt.date)} at ${fmtTime(targetApt.time)}`;
@@ -306,8 +265,10 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
         const verb = status === 'APPROVED' ? 'approved' : status === 'REJECTED' ? 'declined' : `updated to ${status}`;
         await notify(await resolveStudentId(targetApt), {
           type: 'APPOINTMENT_UPDATE',
-          title: `Consultation ${verb}`,
-          message: `Your request with ${faculty ? faculty.name : 'your instructor'} on ${when} was ${verb}.${status === 'REJECTED' && reason ? ` Reason: ${reason}` : ''}`,
+          title: movedFrom ? 'Consultation approved at a different time' : `Consultation ${verb}`,
+          message: movedFrom
+            ? `Your request with ${faculty ? faculty.name : 'your instructor'} for ${fmtDate(targetApt.date)} at ${fmtTime(movedFrom)} was approved at a different time: ${fmtTime(targetApt.time)} (${targetApt.duration} minutes). If that time does not work for you, you can cancel up to ${CANCEL_CUTOFF_HOURS} hour before.`
+            : `Your request with ${faculty ? faculty.name : 'your instructor'} on ${when} was ${verb}.${status === 'REJECTED' && reason ? ` Reason: ${reason}` : ''}`,
           appointmentId: targetApt._id,
         });
       }
@@ -709,7 +670,7 @@ router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']
     ]);
     const approved = appointments.filter(a => a.status === 'APPROVED');
     res.json(appointments.map(a => isOpen(a)
-      ? { ...a.toObject(), availableWindow: availableWindow({ date: a.date, time: a.time, official, added, classes, appointments: approved, excludeId: a._id }) }
+      ? { ...a.toObject(), availableWindow: openWindow({ date: a.date, time: a.time, official, added, classes, appointments: approved, excludeId: a._id }) }
       : a));
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching my appointments' });
