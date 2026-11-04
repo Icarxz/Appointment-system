@@ -69,7 +69,7 @@ export default function StudentRequestList({ requests, onViewDetails, onCancel, 
     return (
       <Grid
         key={apt._id} bg={C.surface} borderWidth="1px" borderColor={C.border} borderRadius="lg" px={4} py={3} gap={3} alignItems="center"
-        templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: '84px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(150px, 1.3fr) auto' }}
+        templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: '84px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(150px, 1.3fr) max-content' }}
       >
         {field('Time', <Text fontSize="sm" color={C.text}>{formatTime(apt.time)}</Text>)}
         {field('Professor Name', <Text fontSize="sm" color={C.text} overflowWrap="anywhere">{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Text>)}
@@ -83,13 +83,16 @@ export default function StudentRequestList({ requests, onViewDetails, onCancel, 
         ), true)}
         <HStack spacing={2} justify={{ base: 'flex-start', md: 'flex-end' }} gridColumn={{ base: '1 / -1', md: 'auto' }}>
           <Button size="sm" variant="outline" onClick={() => onViewDetails(apt._id)}>View Details</Button>
-          {menuItems.length > 0 && (
+          {menuItems.length > 0 ? (
             <Menu placement="bottom-end">
               <MenuButton as={IconButton} size="sm" variant="outline" aria-label="More actions" icon={<span aria-hidden>⋯</span>} />
               <MenuList>
                 {menuItems.map(m => <MenuItem key={m.key} color={m.danger ? 'red.500' : undefined} onClick={m.run}>{m.label}</MenuItem>)}
               </MenuList>
             </Menu>
+          ) : (
+            // Same size as the menu button but invisible, so every row has the same width and the columns line up.
+            <IconButton size="sm" variant="outline" aria-hidden tabIndex={-1} visibility="hidden" aria-label="No more actions" icon={<span aria-hidden>⋯</span>} />
           )}
         </HStack>
       </Grid>
