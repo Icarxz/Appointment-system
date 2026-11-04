@@ -1,5 +1,9 @@
 // Pure generator for CHECKING-ONLY demo data (see scripts/demoData.js). No database access here.
 // Deterministic: the same seed gives the same data, so test runs are repeatable.
+// Faculty come from utils/demoSchedules.js (real class loads and consultation hours), so demo appointments never
+// land on a class and the calendar shows the same hours a real student would see.
+
+const { DEMO_FACULTY_SCHEDULES } = require('./demoSchedules');
 
 const PROGRAMS = { 'BS INFO': { 1: 'ABCDE', 2: 'ABCD', 3: 'ABCD', 4: 'ABCD' }, 'BS COMSCI': { 1: 'AB', 2: 'AB', 3: 'AB', 4: 'AB' }, BLIS: { 1: 'AB', 2: 'AB', 3: 'AB', 4: 'AB' } };
 const PURPOSES = ['Academic advising', 'Grade inquiry', 'Capstone / thesis consultation', 'Project guidance', 'Enrollment concerns', 'Personal concern'];
@@ -17,12 +21,29 @@ const addDays = (iso, n) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDa
 const dowOf = (iso) => new Date(`${iso}T00:00:00Z`).getUTCDay();
 
 // today: "YYYY-MM-DD" (Manila). Returns plain objects; the script assigns real ids when inserting.
-function buildDemoData({ today, seed = 2026, facultyCount = 3, weeks = 8 }) {
+function buildDemoData({ today, seed = 2026, weeks = 8 }) {
   const rng = rngFrom(seed);
-  const faculty = Array.from({ length: facultyCount }, (_, i) => ({
-    key: `F${i + 1}`, name: `Demo Faculty ${i + 1}`, email: `demo.faculty${i + 1}@demo.invalid`, facultyId: `2025S-9${pad(i + 1, 4)}`,
+  const faculty = DEMO_FACULTY_SCHEDULES.map((f, i) => ({
+    key: f.key, name: `Demo ${f.label}`, email: `demo.${f.key}@demo.invalid`, facultyId: `2025S-9${pad(i + 1, 4)}`,
   }));
-  const hours = faculty.flatMap((f, i) => [1, 3, 5].map((d, j) => ({ facultyKey: f.key, dayOfWeek: d, startTime: j % 2 ? '13:00' : '09:00', endTime: j % 2 ? '15:00' : '11:00' })));
+  const hours = DEMO_FACULTY_SCHEDULES.flatMap(f => f.hours.map(h => ({ facultyKey: f.key, ...h })));
+  const classes = DEMO_FACULTY_SCHEDULES.flatMap(f => f.classes.map(c => ({ facultyKey: f.key, ...c })));
+
+  // Whole hours (8 AM to 4 PM starts) on a weekday where the faculty has no class, consultation hours first.
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const freeHours = (key, dow) => {
+    const sched = DEMO_FACULTY_SCHEDULES.find(f => f.key === key);
+    const busy = sched.classes.filter(c => c.dayOfWeek === dow);
+    const consult = sched.hours.filter(h => h.dayOfWeek === dow);
+    const free = [];
+    for (let h = 8; h <= 16; h++) {
+      if (busy.some(c => toMin(c.startTime) < (h + 1) * 60 && h * 60 < toMin(c.endTime))) continue;
+      const inConsult = consult.some(c => toMin(c.startTime) <= h * 60 && (h + 1) * 60 <= toMin(c.endTime));
+      free.push({ hour: h, inConsult });
+    }
+    const preferred = free.filter(x => x.inConsult);
+    return (preferred.length ? preferred : free).map(x => x.hour);
+  };
 
   const students = [];
   let n = 0;
@@ -42,11 +63,13 @@ function buildDemoData({ today, seed = 2026, facultyCount = 3, weeks = 8 }) {
   const start = addDays(today, -weeks * 7);
   for (let day = start; day < today; day = addDays(day, 1)) {
     const dow = dowOf(day);
-    if (dow === 0) continue;
+    if (dow === 0 || dow === 6) continue; // demo appointments are Monday to Friday only
     const count = 1 + Math.floor(rng() * 4); // 1..4 per day
     for (let k = 0; k < count; k++) {
       const f = pick(rng, faculty), s = pick(rng, students);
-      const hour = pick(rng, [9, 10, 13, 14]);
+      const open = freeHours(f.key, dow);
+      if (!open.length) continue;
+      const hour = pick(rng, open);
       const roll = rng();
       const status = roll < 0.55 ? 'COMPLETED' : roll < 0.72 ? 'MISSED (STUDENT)' : roll < 0.78 ? 'MISSED (FACULTY)' : roll < 0.86 ? 'CANCELLED BY STUDENT' : roll < 0.92 ? 'CANCELLED BY FACULTY' : 'REJECTED';
       const apt = { facultyKey: f.key, studentKey: s.key, date: day, time: `${pad(hour, 2)}:00`, duration: 60, reason: pick(rng, PURPOSES), status };
@@ -56,7 +79,7 @@ function buildDemoData({ today, seed = 2026, facultyCount = 3, weeks = 8 }) {
       appointments.push(apt);
     }
   }
-  return { faculty, hours, students, appointments };
+  return { faculty, hours, classes, students, appointments };
 }
 
 module.exports = { buildDemoData, PROGRAMS };
