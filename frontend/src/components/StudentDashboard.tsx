@@ -127,7 +127,6 @@ export default function StudentDashboard() {
   const [busy, setBusy] = useState<any[]>([]);           // class and already-booked times (no names), for the calendar
   const [leadHours, setLeadHours] = useState(BOOKING_LEAD_HOURS);
   const [confirmOpen, setConfirmOpen] = useState(false); // the "Request this consultation" panel
-  const [maxPending, setMaxPending] = useState(3);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(''); // "YYYY-MM-DD|HH:MM"
   const [weekOffset, setWeekOffset] = useState(0); // 0 = the current week; the booking window is 4 weeks ahead
@@ -195,11 +194,11 @@ export default function StudentDashboard() {
         .then(data => {
           if (alive && Array.isArray(data.slots)) {
             setSlots(data.slots); setBusy(Array.isArray(data.busy) ? data.busy : []);
-            setMaxPending(data.maxPending || 3); setLeadHours(data.leadHours || BOOKING_LEAD_HOURS);
+            setLeadHours(data.leadHours || BOOKING_LEAD_HOURS);
             // First load only (never on the 15-second refresh, so the student is not moved while looking):
             // if this week has nothing left to request, open the first week that does.
             if (first) {
-              const firstOpen = data.slots.find((sl: any) => !sl.full); // the server sorts slots by date and time
+              const firstOpen = data.slots[0]; // the server sorts slots by date and time
               const jump = firstOpen ? weeksBetween(mondayOf(manilaToday()), mondayOf(firstOpen.date)) : 0;
               if (jump > 0) { setWeekOffset(jump); setMovedNote(true); }
             }
@@ -583,7 +582,7 @@ export default function StudentDashboard() {
                       <Text fontSize="xs" color={mutedText} textAlign="center">Nothing is left to request in the current week, so the calendar moved to the first week with open hours.</Text>
                     )}
                     <WeeklyBookingCalendar
-                      slots={slots} busy={busy} weekStart={weekStart} leadHours={leadHours} maxPending={maxPending}
+                      slots={slots} busy={busy} weekStart={weekStart} leadHours={leadHours}
                       selectedKey={selectedSlot} onPick={pickSlot}
                     />
                   </VStack>
@@ -693,7 +692,6 @@ export default function StudentDashboard() {
         facultyName={selectedFacultyObj ? selectedFacultyObj.name : ''}
         slot={chosenSlot}
         whenLabel={chosenSlot ? slotLabel(chosenSlot) : ''}
-        maxPending={maxPending}
         purposeOptions={PURPOSE_OPTIONS}
         purpose={aptPurpose}
         // For every purpose except "Others" the dropdown choice IS the reason sent to the server; "Others" clears it so one must be typed.

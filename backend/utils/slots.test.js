@@ -24,7 +24,7 @@ const base = {
 test('official weekly hours become hourly slots on the next matching date', () => {
   const s = buildSlots(base);
   assert.deepStrictEqual(s.map(x => `${x.date} ${x.start}`), ['2026-10-27 09:00', '2026-10-27 10:00']);
-  assert.ok(s.every(x => x.kind === 'OFFICIAL' && !x.full));
+  assert.ok(s.every(x => x.kind === 'OFFICIAL'));
 });
 test('added hours recur every week on their weekday', () => {
   const s = buildSlots({ ...base, weeks: 2, added: [{ dayOfWeek: 4, startTime: '13:00', endTime: '14:00' }] });
@@ -41,11 +41,14 @@ test('an approved appointment removes the slot', () => {
   const s = buildSlots({ ...base, appointments: [{ date: '2026-10-27', time: '09:00', duration: 60, status: 'APPROVED' }] });
   assert.deepStrictEqual(s.map(x => x.start), ['10:00']);
 });
-test('three pending requests mark the slot full; two do not', () => {
+test('there is no request limit: any number of pending requests leaves the slot open and is counted', () => {
   const pend = (n) => Array.from({ length: n }, () => ({ date: '2026-10-27', time: '09:00', duration: 60, status: 'PENDING' }));
-  assert.strictEqual(buildSlots({ ...base, appointments: pend(2) })[0].full, false);
-  assert.strictEqual(buildSlots({ ...base, appointments: pend(3) })[0].full, true);
-  assert.strictEqual(buildSlots({ ...base, appointments: pend(3) })[0].pending, 3);
+  for (const n of [2, 3, 10]) {
+    const slot = buildSlots({ ...base, appointments: pend(n) })[0];
+    assert.strictEqual(slot.start, '09:00');
+    assert.strictEqual(slot.pending, n);
+    assert.strictEqual('full' in slot, false);
+  }
 });
 test('a class overlapping the slot hides it', () => {
   const s = buildSlots({ ...base, classes: [{ dayOfWeek: 2, startTime: '09:30', endTime: '10:30' }] });
@@ -82,7 +85,7 @@ const ALL_DAY = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', 
 test('vacant: a free weekday offers nine 1-hour slots from 8 AM to 5 PM', () => {
   const s = buildSlots({ ...vac, official: [] });
   assert.deepStrictEqual(vacantOn(s, '2026-10-27'), ALL_DAY);
-  assert.ok(s.filter(x => x.kind === 'VACANT').every(x => x.duration === 60 && x.pending === 0 && !x.full));
+  assert.ok(s.filter(x => x.kind === 'VACANT').every(x => x.duration === 60 && x.pending === 0));
   assert.strictEqual(s.find(x => x.start === '16:00').end, '17:00');
 });
 
@@ -105,16 +108,16 @@ test('vacant: classes are excluded, and a class that only touches an hour edge i
   assert.ok(!vacantOn(half, '2026-10-27').includes('09:00') && !vacantOn(half, '2026-10-27').includes('10:00'));
 });
 
-test('vacant: an approved appointment removes the hour; pending ones count toward the 3-request limit', () => {
+test('vacant: an approved appointment removes the hour; pending ones are counted but never close the hour', () => {
   const apt = (status, time = '14:00') => ({ date: '2026-10-27', time, duration: 60, status });
   const s1 = buildSlots({ ...vac, official: [], appointments: [apt('APPROVED')] });
   assert.ok(!vacantOn(s1, '2026-10-27').includes('14:00'));
   const s2 = buildSlots({ ...vac, official: [], appointments: [apt('PENDING'), apt('PENDING'), apt('PENDING')] });
   const slot = s2.find(x => x.date === '2026-10-27' && x.start === '14:00');
   assert.strictEqual(slot.pending, 3);
-  assert.strictEqual(slot.full, true);
-  const s3 = buildSlots({ ...vac, official: [], appointments: [apt('PENDING')] });
-  assert.strictEqual(s3.find(x => x.date === '2026-10-27' && x.start === '14:00').full, false);
+  assert.ok(slot, 'still open with 3 pending');
+  const s3 = buildSlots({ ...vac, official: [], appointments: Array.from({ length: 6 }, () => apt('PENDING')) });
+  assert.strictEqual(s3.find(x => x.date === '2026-10-27' && x.start === '14:00').pending, 6);
 });
 
 test('vacant: a longer approved appointment covers every hour it overlaps', () => {

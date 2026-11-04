@@ -4,7 +4,6 @@
 
 const { timeToMinutes } = require('./timeMath');
 
-const MAX_PENDING_PER_SLOT = 3;
 const OPERATING_START = 450; // 7:30 AM: same limits the booking form always had
 const OPERATING_LAST_START = 960; // 4:00 PM
 
@@ -91,7 +90,7 @@ function buildSlots({ official, added, classes, appointments, today, nowMs, week
         if (slots.some(x => x.date === date && x.start === piece.start)) continue;
         slots.push({
           date, start: piece.start, end: piece.end, duration: piece.duration,
-          kind: block.kind, pending: open.pending, full: open.pending >= MAX_PENDING_PER_SLOT,
+          kind: block.kind, pending: open.pending,
         });
       }
     }
@@ -106,7 +105,7 @@ function buildSlots({ official, added, classes, appointments, today, nowMs, week
         if (!open) continue;
         slots.push({
           date, start, end: toHHMM(e), duration: 60,
-          kind: 'VACANT', pending: open.pending, full: open.pending >= MAX_PENDING_PER_SLOT,
+          kind: 'VACANT', pending: open.pending,
         });
       }
     }
@@ -179,5 +178,5 @@ function maxDurationAt({ date, time, official, added }) {
 }
 
 module.exports = {
-  MAX_PENDING_PER_SLOT, MAX_CONSULT_MINUTES, VACANT_START, VACANT_END, splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, consultRuns, dayOfWeekOf, addDays, overlaps,
+  MAX_CONSULT_MINUTES, VACANT_START, VACANT_END, splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, consultRuns, dayOfWeekOf, addDays, overlaps,
 };

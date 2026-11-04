@@ -13,7 +13,6 @@ interface Props {
   facultyName: string;
   slot: Slot | undefined;
   whenLabel: string;          // e.g. "Tue, Nov 3 · 9:00 AM – 10:00 AM"
-  maxPending: number;
   purposeOptions: string[];
   purpose: string;
   onPurposeChange: (value: string) => void;
@@ -24,7 +23,7 @@ interface Props {
 }
 
 export default function BookingConfirmModal({
-  isOpen, onClose, facultyName, slot, whenLabel, maxPending, purposeOptions, purpose, onPurposeChange, reason, onReasonChange, isSubmitting, onSubmit,
+  isOpen, onClose, facultyName, slot, whenLabel, purposeOptions, purpose, onPurposeChange, reason, onReasonChange, isSubmitting, onSubmit,
 }: Props) {
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const label = (t: string) => <Text fontSize="xs" fontWeight="700" color={muted} textTransform="uppercase" mb="2px">{t}</Text>;
@@ -46,7 +45,7 @@ export default function BookingConfirmModal({
                 <Text fontSize="xs" color={muted}>Your professor can shorten it when accepting.</Text>
               </Box>
               {slot && slot.pending > 0 && (
-                <Text fontSize="xs" color={muted}>{slot.pending} of {maxPending} request spots for this hour are already taken. The professor accepts one.</Text>
+                <Text fontSize="xs" color={muted}>{slot.pending} other {slot.pending === 1 ? 'student has' : 'students have'} already requested this hour. The professor accepts one.</Text>
               )}
               <FormControl isRequired>
                 <FormLabel>Purpose of Meeting</FormLabel>
