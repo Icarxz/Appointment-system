@@ -40,7 +40,7 @@ interface ReportData {
 }
 
 const pctText = (n: number | null) => (n === null ? '—' : `${n}%`);
-const trend = (w: Window) => `last 4 weeks: ${w.last4} (before that: ${w.prev4})`;
+const trend = (w: Window) => `Last 4 weeks: ${w.last4}\nBefore that: ${w.prev4}`; // two short lines, so every tile has the same height
 const ROLE_NAMES: Record<string, string> = { STUDENT: 'Students', FACULTY: 'Faculty', DEAN: 'Deans', ADMIN: 'Admins' };
 const OUTCOME_COLORS = { completed: '#16a34a', upcoming: '#2563eb', declined: '#dc2626', expired: '#ca8a04', missedStudent: '#f08a3c', missedFaculty: '#e11d48', cancelledStudent: '#94a3b8', cancelledFaculty: '#64748b' };
 
@@ -96,12 +96,12 @@ export default function AnalyticsReport() {
         <KpiTile label="Requests" value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="All requests that were reviewed or happened. Requests still waiting for an answer are not counted."
           onClick={() => open('Requests', data.drilldown.requests)} />
         <KpiTile label="Completed" value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
-        <KpiTile label="Missed" value={k.missed.total} sub={`${k.missed.student} by students · ${k.missed.faculty} by faculty · ${pctText(k.missedRate)} of finished`} accent="#f08a3c"
-          hint="Missed rate = missed ÷ (completed + missed). Appeals do not reduce this number."
+        <KpiTile label="Missed" value={k.missed.total} sub={`${k.missed.student} by students\n${k.missed.faculty} by faculty`} accent="#f08a3c"
+          hint={`Missed rate: ${pctText(k.missedRate)} = missed ÷ (completed + missed). Appeals do not reduce this number.`}
           onClick={() => open('Missed consultations', data.drilldown.missed, 'Missed by students', 'Missed by faculty')} />
-        <KpiTile label="Cancelled" value={o.cancelledStudent + o.cancelledFaculty} sub={`${o.cancelledStudent} by students · ${o.cancelledFaculty} by faculty`} accent="#64748b"
+        <KpiTile label="Cancelled" value={o.cancelledStudent + o.cancelledFaculty} sub={`${o.cancelledStudent} by students\n${o.cancelledFaculty} by faculty`} accent="#64748b"
           onClick={() => open('Cancelled consultations', data.drilldown.cancelled, 'Cancelled by students', 'Cancelled by faculty')} />
-        <KpiTile label="Completion rate" value={pctText(k.completionRate)} sub="completed ÷ (completed + missed)" accent="#8b5cf6" hint="Of the consultations that were supposed to happen, how many were completed." />
+        <KpiTile label="Completion rate" value={pctText(k.completionRate)} sub={'completed ÷\n(completed + missed)'} accent="#8b5cf6" hint="Of the consultations that were supposed to happen, how many were completed." />
       </SimpleGrid>
 
       <ChartCard title="Requests per week" hint="Last 8 weeks, weeks start on Monday.">

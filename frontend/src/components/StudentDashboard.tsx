@@ -20,7 +20,7 @@ import WeeklyCalendar from './WeeklyCalendar';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
 import { PAGE_PAD, CARD_PAD } from '../utils/uiTokens';
-import StudentRequestList from './StudentRequestList';
+import RequestList from './RequestList';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
 import { manilaToday, addDaysIso, mondayOf, weeksBetween, weekLabel } from '../utils/weekUtils';
@@ -559,7 +559,8 @@ export default function StudentDashboard() {
                 <ChakraButton size="sm" colorScheme="red" variant="outline" onClick={() => setBulkOpen(true)}>Cancel several…</ChakraButton>
               </Flex>
               <BulkCancelModal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} role="STUDENT" appointments={myRequests} onDone={fetchData} />
-              <StudentRequestList
+              <RequestList
+                role="STUDENT"
                 requests={myRequests}
                 onViewDetails={setDetailsId}
                 onCancel={(apt) => { setCancelReason(''); setCancelTarget(apt); }}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   Badge, Box, Button, Flex, Grid, Heading, HStack, IconButton, Menu, MenuButton, MenuItem, MenuList, Select, Text,
 } from '@chakra-ui/react';
@@ -8,52 +9,70 @@ import AppealControls from './AppealControls';
 import { statusColor, statusLabel, isBeforeCutoff, hasStarted, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
 import { useNavPalette } from '../utils/uiTokens';
 import {
-  NEXT_ACTION_LABELS, NO_FILTERS, applyFilters, distinct, groupByDate, nextActions, paginate, professorKey, sortNewestFirst,
+  NEXT_ACTION_LABELS, NO_FILTERS, applyFilters, distinct, facultyNextActions, groupByDate, nextActions, paginate,
+  professorKey, sortNewestFirst, studentKey,
 } from '../utils/requestList';
 import type { Filters, ListItem, NextAction } from '../utils/requestList';
 
-// The student's "My Requests": filters (professor, reason, status, what I can do next), requests grouped under their
-// date, 10 per page. Each row shows the time, professor, purpose and status, a View Details button (the reason a
-// request was declined is there) and a "..." menu with the actions that are open right now.
+// The request list of the student ("My Requests") and of the faculty member ("Appointment Requests"): filters (person,
+// reason, status, what I can do next), newest first, grouped under the date, 10 per page. Every row has the same
+// columns: Time, person, Reason, Status, then View Details and a "..." menu (an invisible placeholder when the menu is
+// empty, so the columns of all rows line up). A faculty member's pending request also gets an answer bar under the row
+// (start, length, Approve, Reject), which the dashboard supplies.
 
 const PAGE_SIZE = 10;
 const dayHeading = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const canCancelNow = (a: ListItem) => isBeforeCutoff(a.date, a.time);
 
+const ACTION_OPTIONS: Record<'STUDENT' | 'FACULTY', NextAction[]> = {
+  STUDENT: ['CAN_CANCEL', 'CAN_APPEAL', 'HAS_ACCOMPLISHMENT'],
+  FACULTY: ['NEEDS_ANSWER', 'CAN_CANCEL', 'CAN_MARK_NO_SHOW', 'CAN_APPEAL'],
+};
+
 interface Props {
+  role: 'STUDENT' | 'FACULTY';
   requests: any[];
   onViewDetails: (id: string) => void;
   onCancel: (apt: any) => void;
-  onViewAccomplishment: (apt: any) => void;
+  /** Student only. */
+  onViewAccomplishment?: (apt: any) => void;
+  /** Faculty only: the student did not turn up. */
+  onNoShow?: (apt: any) => void;
+  /** Faculty only: the Approve / Reject bar shown under a request that waits for an answer (null for other rows). */
+  answerBar?: (apt: any) => ReactNode;
   /** Called after something changed on the server (an appeal) so the list reloads. */
   onChanged: () => void;
 }
 
-export default function StudentRequestList({ requests, onViewDetails, onCancel, onViewAccomplishment, onChanged }: Props) {
+export default function RequestList({ role, requests, onViewDetails, onCancel, onViewAccomplishment, onNoShow, answerBar, onChanged }: Props) {
   const C = useNavPalette();
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
   useEffect(() => { setPage(1); }, [filters]);
 
-  const professors = new Map<string, string>();
-  requests.forEach(a => professors.set(professorKey(a), a.facultyId ? a.facultyId.name : 'Unknown'));
+  const isStudent = role === 'STUDENT';
+  const personKey = isStudent ? professorKey : studentKey;
+  const actionsOf = (a: ListItem): NextAction[] => (isStudent ? nextActions(a, canCancelNow) : facultyNextActions(a, { canCancel: canCancelNow(a), started: hasStarted(a.date, a.time) }));
+
+  const people = new Map<string, string>();
+  requests.forEach(a => people.set(personKey(a), isStudent ? (a.facultyId ? a.facultyId.name : 'Unknown') : `${a.studentName || 'Unknown'} (${a.studentSection || ''})`));
   const reasons = distinct(requests.map(a => a.reason));
   const statuses = distinct(requests.map(a => a.status));
 
-  const shown = sortNewestFirst(applyFilters(requests as ListItem[], filters, canCancelNow)) as any[];
+  const shown = sortNewestFirst(applyFilters(requests as ListItem[], filters, actionsOf, personKey)) as any[];
   const paged = paginate(shown, page, PAGE_SIZE);
   const groups = groupByDate(paged.rows as ListItem[]) as { date: string; items: any[] }[];
   const filtering = JSON.stringify(filters) !== JSON.stringify(NO_FILTERS);
   const set = (patch: Partial<Filters>) => setFilters(f => ({ ...f, ...patch }));
 
-  const filterBox = (label: string, control: React.ReactNode) => (
+  const filterBox = (label: string, control: ReactNode) => (
     <Box minW={0}>
       <Text fontSize="sm" fontWeight="700" color={C.text} mb={1}>{label}</Text>
       {control}
     </Box>
   );
 
-  const field = (label: string, value: React.ReactNode, span = false) => (
+  const field = (label: string, value: ReactNode, span = false) => (
     <Box minW={0} gridColumn={span ? { base: '1 / -1', md: 'auto' } : undefined}>
       <Text fontSize="sm" fontWeight="700" color={C.text}>{label}</Text>
       {value}
@@ -61,41 +80,54 @@ export default function StudentRequestList({ requests, onViewDetails, onCancel, 
   );
 
   const row = (apt: any) => {
-    const actions = nextActions(apt, canCancelNow);
-    const cancelClosed = (apt.status === 'PENDING' || apt.status === 'APPROVED') && !actions.includes('CAN_CANCEL') && !hasStarted(apt.date, apt.time);
+    const actions = actionsOf(apt);
+    const cancelClosed = (apt.status === 'PENDING' || apt.status === 'APPROVED') && !actions.includes('CAN_CANCEL') && !hasStarted(apt.date, apt.time) && !(apt.status === 'PENDING' && !isStudent);
     const menuItems: { key: string; label: string; danger?: boolean; run: () => void }[] = [];
     if (actions.includes('CAN_CANCEL')) menuItems.push({ key: 'cancel', label: apt.status === 'PENDING' ? 'Cancel Request' : 'Cancel Appointment', danger: true, run: () => onCancel(apt) });
-    if (actions.includes('HAS_ACCOMPLISHMENT')) menuItems.push({ key: 'acc', label: 'View Accomplishment', run: () => onViewAccomplishment(apt) });
+    if (actions.includes('HAS_ACCOMPLISHMENT') && onViewAccomplishment) menuItems.push({ key: 'acc', label: 'View Accomplishment', run: () => onViewAccomplishment(apt) });
+    if (actions.includes('CAN_MARK_NO_SHOW') && onNoShow) menuItems.push({ key: 'noshow', label: "Student didn't show", run: () => onNoShow(apt) });
+    const bar = answerBar ? answerBar(apt) : null;
     return (
-      <Grid
-        key={apt._id} bg={C.surface} borderWidth="1px" borderColor={C.border} borderRadius="lg" px={4} py={3} gap={3} alignItems="center"
-        templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: '84px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(150px, 1.3fr) max-content' }}
-      >
-        {field('Time', <Text fontSize="sm" color={C.text}>{formatTime(apt.time)}</Text>)}
-        {field('Professor Name', <Text fontSize="sm" color={C.text} overflowWrap="anywhere">{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Text>)}
-        {field('Reason', <Text fontSize="sm" color={C.text} noOfLines={2} title={apt.reason}>{apt.reason}</Text>, true)}
-        {field('Status', (
-          <Box>
-            <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
-            {cancelClosed && <Text fontSize="xs" color={C.textMid} mt={1}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before).</Text>}
-            <AppealControls apt={apt} role="STUDENT" onChanged={onChanged} />
-          </Box>
-        ), true)}
-        <HStack spacing={2} justify={{ base: 'flex-start', md: 'flex-end' }} gridColumn={{ base: '1 / -1', md: 'auto' }}>
-          <Button size="sm" variant="outline" onClick={() => onViewDetails(apt._id)}>View Details</Button>
-          {menuItems.length > 0 ? (
-            <Menu placement="bottom-end">
-              <MenuButton as={IconButton} size="sm" variant="outline" aria-label="More actions" icon={<span aria-hidden>⋯</span>} />
-              <MenuList>
-                {menuItems.map(m => <MenuItem key={m.key} color={m.danger ? 'red.500' : undefined} onClick={m.run}>{m.label}</MenuItem>)}
-              </MenuList>
-            </Menu>
-          ) : (
-            // Same size as the menu button but invisible, so every row has the same width and the columns line up.
-            <IconButton size="sm" variant="outline" aria-hidden tabIndex={-1} visibility="hidden" aria-label="No more actions" icon={<span aria-hidden>⋯</span>} />
-          )}
-        </HStack>
-      </Grid>
+      <Box key={apt._id} bg={C.surface} borderWidth="1px" borderColor={C.border} borderRadius="lg" px={4} py={3}>
+        <Grid
+          gap={3} alignItems="center"
+          templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: '84px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(150px, 1.3fr) max-content' }}
+        >
+          {field('Time', <Text fontSize="sm" color={C.text}>{formatTime(apt.time)}</Text>)}
+          {isStudent
+            ? field('Professor Name', <Text fontSize="sm" color={C.text} overflowWrap="anywhere">{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Text>)
+            : field('Student', (
+              <>
+                <Text fontSize="sm" color={C.text} overflowWrap="anywhere">{apt.studentName}</Text>
+                {apt.studentSection && <Text fontSize="xs" color={C.textMid}>{apt.studentSection}</Text>}
+              </>
+            ))}
+          {field('Reason', <Text fontSize="sm" color={C.text} noOfLines={2} title={apt.reason}>{apt.reason}</Text>, true)}
+          {field('Status', (
+            <Box>
+              <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
+              {cancelClosed && <Text fontSize="xs" color={C.textMid} mt={1}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before).</Text>}
+              {!isStudent && apt.status === 'MISSED (FACULTY)' && <Text fontSize="xs" color={C.textMid} mt={1}>Not signed off. Open Consultation Log if it took place.</Text>}
+              <AppealControls apt={apt} role={role} onChanged={onChanged} />
+            </Box>
+          ), true)}
+          <HStack spacing={2} justify={{ base: 'flex-start', md: 'flex-end' }} gridColumn={{ base: '1 / -1', md: 'auto' }}>
+            <Button size="sm" variant="outline" onClick={() => onViewDetails(apt._id)}>View Details</Button>
+            {menuItems.length > 0 ? (
+              <Menu placement="bottom-end">
+                <MenuButton as={IconButton} size="sm" variant="outline" aria-label="More actions" icon={<span aria-hidden>⋯</span>} />
+                <MenuList>
+                  {menuItems.map(m => <MenuItem key={m.key} color={m.danger ? 'red.500' : undefined} onClick={m.run}>{m.label}</MenuItem>)}
+                </MenuList>
+              </Menu>
+            ) : (
+              // Same size as the menu button but invisible, so every row has the same width and the columns line up.
+              <IconButton size="sm" variant="outline" aria-hidden tabIndex={-1} visibility="hidden" aria-label="No more actions" icon={<span aria-hidden>⋯</span>} />
+            )}
+          </HStack>
+        </Grid>
+        {bar && <Box mt={3} pt={3} borderTopWidth="1px" borderColor={C.border}>{bar}</Box>}
+      </Box>
     );
   };
 
@@ -103,10 +135,10 @@ export default function StudentRequestList({ requests, onViewDetails, onCancel, 
     <Box>
       <Flex gap={3} wrap="wrap" align="flex-end" mb={5}>
         <Grid flex="1" minW="240px" gap={3} templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }}>
-          {filterBox('Professor', (
+          {filterBox(isStudent ? 'Professor' : 'Student', (
             <Select value={filters.professor} onChange={e => set({ professor: e.target.value })} bg={C.surface} borderColor={C.border} color={C.text}>
-              <option value="">All Professors</option>
-              {Array.from(professors.entries()).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+              <option value="">{isStudent ? 'All Professors' : 'All Students'}</option>
+              {Array.from(people.entries()).sort((a, b) => a[1].localeCompare(b[1])).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
             </Select>
           ))}
           {filterBox('Reason', (
@@ -124,7 +156,7 @@ export default function StudentRequestList({ requests, onViewDetails, onCancel, 
           {filterBox('Action', (
             <Select value={filters.action} onChange={e => set({ action: e.target.value as Filters['action'] })} bg={C.surface} borderColor={C.border} color={C.text}>
               <option value="">All Actions</option>
-              {(Object.keys(NEXT_ACTION_LABELS) as NextAction[]).map(k => <option key={k} value={k}>{NEXT_ACTION_LABELS[k]}</option>)}
+              {ACTION_OPTIONS[role].map(k => <option key={k} value={k}>{NEXT_ACTION_LABELS[k]}</option>)}
             </Select>
           ))}
         </Grid>
@@ -132,7 +164,7 @@ export default function StudentRequestList({ requests, onViewDetails, onCancel, 
           isDisabled={!filtering} onClick={() => setFilters(NO_FILTERS)} />
       </Flex>
 
-      {requests.length === 0 && <Text textAlign="center" py={10} color={C.textMid}>You have no appointment requests.</Text>}
+      {requests.length === 0 && <Text textAlign="center" py={10} color={C.textMid}>{isStudent ? 'You have no appointment requests.' : 'No appointments requested.'}</Text>}
       {requests.length > 0 && shown.length === 0 && (
         <Text textAlign="center" py={10} color={C.textMid}>No requests match these filters.</Text>
       )}

@@ -10,21 +10,19 @@ import {
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ProfileGate from './ProfileGate';
-import { statusColor, statusLabel, hasStarted, isBeforeCutoff, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
+import { hasStarted } from './appointmentStatus';
 import type { AvailableWindow, RequestRow } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import CancelReasonPicker, { FACULTY_CANCEL_REASONS } from './CancelReasonPicker';
-import AppealControls from './AppealControls';
 import BulkCancelModal from './BulkCancelModal';
 import FacultyAnalytics from './FacultyAnalytics';
 import DashboardShell from './DashboardShell';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
 import PageTitle from './PageTitle';
-import ByWidth from './ByWidth';
-import RequestCard from './RequestCard';
-import { PAGE_PAD, CARD_PAD } from '../utils/uiTokens';
+import RequestList from './RequestList';
+import { PAGE_PAD } from '../utils/uiTokens';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -166,6 +164,7 @@ export default function FacultyDashboard() {
   const hasSyncedRef = useRef(false);
   const [notice, setNotice] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [detailsId, setDetailsId] = useState<string | null>(null); // the request whose View Details panel is open
   // Faculty's own private calendar notes — date-specific (not recurring), e.g. { _id, date: 'YYYY-MM-DD', startTime, endTime, text }
   const [personalEvents, setPersonalEvents] = useState<any[]>([]);
   const [noteModal, setNoteModal] = useState<{ date: string; startTime: string; endTime: string; text: string; editingId: string | null } | null>(null);
@@ -719,66 +718,36 @@ const saveConsultationHours = async () => {
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
-  // The status, notes and buttons of one request. The table (wide screens) and the cards (phones) both call these,
-  // so the two layouts always show the same thing.
-  const requestBadge = (apt: RequestRow) => <Badge colorScheme={statusColor(apt.status)}>{statusLabel(apt.status)}</Badge>;
-  const requestNotes = (apt: RequestRow) => (
-    <>
-      {['CANCELLED BY FACULTY', 'CANCELLED BY STUDENT', 'REJECTED'].includes(apt.status) && apt.cancelReason && (
-        <Text fontSize="xs" color={mutedText} mt={1}>Reason: {apt.cancelReason}</Text>
-      )}
-      <AppealControls apt={apt} role="FACULTY" onChanged={fetchData} />
-    </>
-  );
-  const hasRequestActions = (apt: RequestRow) => ['PENDING', 'APPROVED', 'MISSED (FACULTY)'].includes(apt.status);
-  const requestActions = (apt: RequestRow) => (
-    <>
-      {apt.status === 'PENDING' && (
-        !hasStarted(apt.date, apt.time) ? (
-          <VStack align="stretch" spacing={1}>
-            {apt.availableWindow && (
-              apt.availableWindow.minutes > 0
-                ? <Text fontSize="xs" color={mutedText}>Available window: {apt.availableWindow.label}</Text>
-                : <Badge colorScheme="orange" alignSelf="flex-start">No time left</Badge>
-            )}
-            <HStack spacing={2} flexWrap="wrap">
-              {apt.availableWindow && apt.availableWindow.minutes > 0 && (
-                <>
-                  <Select size="xs" w="110px" title="Start time" aria-label="Start time" value={startChoice(apt)}
-                    onChange={(e) => setApproveStart({ ...approveStart, [apt._id]: e.target.value })}>
-                    {startOptions(apt.availableWindow).map(t => <option key={t} value={t}>{formatTime(t)}</option>)}
-                  </Select>
-                  <Select size="xs" w="110px" title="Consultation length" aria-label="Consultation length" value={lengthChoice(apt)}
-                    onChange={(e) => setApproveDuration({ ...approveDuration, [apt._id]: Number(e.target.value) })}>
-                    {lengthOptions(apt).map(m => <option key={m} value={m}>{lengthText(m)}</option>)}
-                  </Select>
-                  <ChakraButton size="xs" colorScheme="green" onClick={() => updateAppointmentStatus(apt, 'APPROVED')}>Approve</ChakraButton>
-                </>
-              )}
-              <ChakraButton size="xs" colorScheme="red" onClick={() => { setCancelReason(''); setCancelMode('reject'); setCancelTarget(apt); }}>Reject</ChakraButton>
-            </HStack>
-          </VStack>
-        ) : (
-          <Text fontSize="xs" color={mutedText}>This request expired because the requested time has started.</Text>
-        )
-      )}
-      {apt.status === 'APPROVED' && (
+  // The Approve / Reject bar the request list shows under a request that is waiting for an answer: the free time left,
+  // a start and a length to choose from, then Approve or Reject. Other rows get no bar.
+  const answerBar = (apt: RequestRow) => {
+    if (apt.status !== 'PENDING') return null;
+    if (hasStarted(apt.date, apt.time)) return <Text fontSize="xs" color={mutedText}>This request expired because the requested time has started.</Text>;
+    const w = apt.availableWindow;
+    return (
+      <HStack spacing={3} flexWrap="wrap">
+        {w && (w.minutes > 0
+          ? <Text fontSize="xs" color={mutedText}>Available window: {w.label}</Text>
+          : <Badge colorScheme="orange">No time left</Badge>)}
         <HStack spacing={2} flexWrap="wrap">
-          {hasStarted(apt.date, apt.time) && (
-            <ChakraButton size="xs" colorScheme="orange" variant="outline" onClick={() => markNoShow(apt)}>Student didn't show</ChakraButton>
+          {w && w.minutes > 0 && (
+            <>
+              <Select size="xs" w="110px" title="Start time" aria-label="Start time" value={startChoice(apt)}
+                onChange={(e) => setApproveStart({ ...approveStart, [apt._id]: e.target.value })}>
+                {startOptions(w).map(t => <option key={t} value={t}>{formatTime(t)}</option>)}
+              </Select>
+              <Select size="xs" w="110px" title="Consultation length" aria-label="Consultation length" value={lengthChoice(apt)}
+                onChange={(e) => setApproveDuration({ ...approveDuration, [apt._id]: Number(e.target.value) })}>
+                {lengthOptions(apt).map(m => <option key={m} value={m}>{lengthText(m)}</option>)}
+              </Select>
+              <ChakraButton size="xs" colorScheme="green" onClick={() => updateAppointmentStatus(apt, 'APPROVED')}>Approve</ChakraButton>
+            </>
           )}
-          {isBeforeCutoff(apt.date, apt.time) ? (
-            <ChakraButton size="xs" colorScheme="red" variant="outline" onClick={() => { setCancelReason(''); setCancelMode('cancel'); setCancelTarget(apt); }}>Cancel</ChakraButton>
-          ) : !hasStarted(apt.date, apt.time) && (
-            <Text fontSize="xs" color={mutedText}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before).</Text>
-          )}
+          <ChakraButton size="xs" colorScheme="red" onClick={() => { setCancelReason(''); setCancelMode('reject'); setCancelTarget(apt); }}>Reject</ChakraButton>
         </HStack>
-      )}
-      {apt.status === 'MISSED (FACULTY)' && (
-        <Text fontSize="xs" color={mutedText}>Not signed off — open Consultation Log if it took place.</Text>
-      )}
-    </>
-  );
+      </HStack>
+    );
+  };
 
   return (
     <>
@@ -1155,51 +1124,18 @@ const saveConsultationHours = async () => {
             {/* This page lists every request, not only the pending ones (the menu badge counts the pending ones). */}
             <PageTitle>Appointment Requests</PageTitle>
             <BulkCancelModal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} role="FACULTY" appointments={myAppointments} onDone={fetchData} />
-            <Box bg={cardBg} p={CARD_PAD} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-              <Flex justify="flex-end" mb={3}>
-                <ChakraButton size="sm" colorScheme="red" variant="outline" onClick={() => setBulkOpen(true)}>Cancel several…</ChakraButton>
-              </Flex>
-              {/* A table when this box is wide enough for five columns, one card per request when it is not
-                  (on a phone the Approve and Reject buttons used to sit off-screen). */}
-              <ByWidth
-                min={860}
-                wide={(
-                  <Box overflowX="auto">
-                    <Table variant="simple" size="sm">
-                      <Thead><Tr><Th color={mutedText}>Student</Th><Th color={mutedText}>Date/Time</Th><Th color={mutedText}>Reason</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
-                      <Tbody>
-                        {myAppointments.map(apt => (
-                          <Tr key={apt._id}>
-                            <Td fontWeight="bold" color={textColor}>{apt.studentName} ({apt.studentSection})</Td>
-                            <Td color={textColor}>{formatDate(apt.date)} at {formatTime(apt.time)}</Td>
-                            <Td maxW="200px" isTruncated color={textColor}>{apt.reason}</Td>
-                            <Td>{requestBadge(apt)}{requestNotes(apt)}</Td>
-                            <Td>{requestActions(apt)}</Td>
-                          </Tr>
-                        ))}
-                        {myAppointments.length === 0 && <Tr><Td colSpan={5} textAlign="center" py={10} color={mutedText}>No appointments requested.</Td></Tr>}
-                      </Tbody>
-                    </Table>
-                  </Box>
-                )}
-                narrow={(
-                  <VStack align="stretch" spacing={3}>
-                    {myAppointments.map(apt => (
-                      <RequestCard
-                        key={apt._id}
-                        title={`${apt.studentName} (${apt.studentSection})`}
-                        when={`${formatDate(apt.date)} at ${formatTime(apt.time)}`}
-                        reason={apt.reason}
-                        status={requestBadge(apt)}
-                        extra={requestNotes(apt)}
-                        actions={hasRequestActions(apt) ? requestActions(apt) : undefined}
-                      />
-                    ))}
-                    {myAppointments.length === 0 && <Text textAlign="center" py={8} color={mutedText}>No appointments requested.</Text>}
-                  </VStack>
-                )}
-              />
-            </Box>
+            <Flex justify="flex-end" mb={3}>
+              <ChakraButton size="sm" colorScheme="red" variant="outline" onClick={() => setBulkOpen(true)}>Cancel several…</ChakraButton>
+            </Flex>
+            <RequestList
+              role="FACULTY"
+              requests={myAppointments}
+              onViewDetails={setDetailsId}
+              onCancel={(apt) => { setCancelReason(''); setCancelMode('cancel'); setCancelTarget(apt); }}
+              onNoShow={markNoShow}
+              answerBar={answerBar}
+              onChanged={fetchData}
+            />
           </Box>
         )}
 
@@ -1349,7 +1285,7 @@ const saveConsultationHours = async () => {
           </Box>
         )}
     </DashboardShell>
-    <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
+    <AppointmentDetailsDrawer aptId={detailsId ?? aptId} onClose={() => { setDetailsId(null); closeApt(); }} />
     </>
   );
 }

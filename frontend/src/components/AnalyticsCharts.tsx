@@ -43,7 +43,7 @@ export function KpiTile({ label, value, sub, accent = '#2563eb', onClick, hint }
     >
       <Text fontSize="xs" color={t.muted} fontWeight="600">{label}{onClick ? ' ›' : ''}</Text>
       <Text fontSize="3xl" fontWeight="800" color={t.text} lineHeight="1.1">{value}</Text>
-      {sub && <Text fontSize="11px" color={t.muted} mt={1}>{sub}</Text>}
+      {sub && <Text fontSize="11px" color={t.muted} mt={1} whiteSpace="pre-line" minH="2.8em" lineHeight="1.4">{sub}</Text>}
     </Box>
   );
   return hint ? <Tooltip label={hint} hasArrow openDelay={300}>{body}</Tooltip> : body;

@@ -25,7 +25,7 @@ interface Data {
   students: { uniqueStudents: number; cohorts: CohortRow[]; purposes: { total: number; items: { label: string; count: number; percent: number }[] } };
 }
 
-const trend = (w: Window) => `last 4 weeks: ${w.last4} (before that: ${w.prev4})`;
+const trend = (w: Window) => `Last 4 weeks: ${w.last4}\nBefore that: ${w.prev4}`; // two short lines, so every tile has the same height
 const pctText = (n: number | null) => (n === null ? '—' : `${n}%`);
 
 // A faculty member's own analytics. The server only ever returns the logged-in faculty's data.
@@ -60,12 +60,12 @@ export default function FacultyAnalytics() {
         <KpiTile label="Requests" value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="Requests you reviewed or that happened. Requests still waiting for your answer are not counted."
           onClick={() => open('Requests', data.drilldown.requests)} />
         <KpiTile label="Completed" value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
-        <KpiTile label="Missed" value={k.missed.total} sub={`${k.missed.student} by students · ${k.missed.faculty} by faculty · ${pctText(k.missedRate)} of finished`} accent="#f08a3c"
-          hint="Missed rate = missed ÷ (completed + missed). Appeals do not reduce this number." onClick={() => open('Missed consultations', data.drilldown.missed, ['Missed by students', 'Missed by me'])} />
-        <KpiTile label="Cancelled" value={k.cancelled.student + k.cancelled.faculty} sub={`${k.cancelled.student} by students · ${k.cancelled.faculty} by faculty`} accent="#64748b"
+        <KpiTile label="Missed" value={k.missed.total} sub={`${k.missed.student} by students\n${k.missed.faculty} by faculty`} accent="#f08a3c"
+          hint={`Missed rate: ${pctText(k.missedRate)} = missed ÷ (completed + missed). Appeals do not reduce this number.`} onClick={() => open('Missed consultations', data.drilldown.missed, ['Missed by students', 'Missed by me'])} />
+        <KpiTile label="Cancelled" value={k.cancelled.student + k.cancelled.faculty} sub={`${k.cancelled.student} by students\n${k.cancelled.faculty} by faculty`} accent="#64748b"
           onClick={() => open('Cancelled consultations', data.drilldown.cancelled, ['Cancelled by students', 'Cancelled by me'])} />
-        <KpiTile label="Completion rate" value={pctText(k.completionRate)} sub="completed ÷ (completed + missed)" accent="#8b5cf6" hint="Of the consultations that were supposed to happen, how many were completed." />
-        <KpiTile label="Approved" value={k.approved.total} sub={`${trend(k.approved)} · ${o.declined} declined · ${o.expired} expired`} accent="#0891b2" hint="Requests you approved. Approval rate = approved ÷ (approved + declined). Requests that expired unanswered are shown separately and do not lower it."
+        <KpiTile label="Completion rate" value={pctText(k.completionRate)} sub={'completed ÷\n(completed + missed)'} accent="#8b5cf6" hint="Of the consultations that were supposed to happen, how many were completed." />
+        <KpiTile label="Approved" value={k.approved.total} sub={trend(k.approved)} accent="#0891b2" hint={`Requests you approved (${o.declined} declined, ${o.expired} expired). Approval rate = approved ÷ (approved + declined). Requests that expired unanswered are shown separately and do not lower it.`}
           onClick={() => open('Approved requests', data.drilldown.approved)} />
       </SimpleGrid>
 
