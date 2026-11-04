@@ -37,7 +37,7 @@ const StatusHistory = require('../models/StatusHistory');
 const crypto = require('crypto'); // Built-in Node.js module for secure hashes
 const ConsultationHours = require('../models/ConsultationHours');
 const AddedConsultationHours = require('../models/AddedConsultationHours');
-const { buildSlots, buildBusy, insideBookableHours, maxDurationAt, addDays, dayOfWeekOf, overlaps } = require('../utils/slots');
+const { buildSlots, buildBusy, insideBookableHours, maxDurationAt, availableWindow, addDays, dayOfWeekOf, overlaps } = require('../utils/slots');
 const { isOverlapping } = require('../utils/timeMath');
 const { requireAuth } = require('../middleware/auth');
 
@@ -693,8 +693,24 @@ router.patch('/users/:id/name', requireAuth(['ADMIN']), async (req, res) => {
 // 12. GET ROUTE: Fetch appointments for one specific faculty member
 router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']), ownerOrStaff(r => r.params.facultyId), async (req, res) => {
   try {
-    const appointments = await Appointment.find({ facultyId: req.params.facultyId }).sort({ createdAt: -1 });
-    res.json(appointments);
+    const { facultyId } = req.params;
+    const appointments = await Appointment.find({ facultyId }).sort({ createdAt: -1 });
+
+    // Each request still waiting for an answer also carries `availableWindow`: how much uninterrupted bookable time
+    // (consultation + vacant hours) there is from its start, up to the next class or approved appointment.
+    // Nothing else in the response changes.
+    const today = manilaNow().dateStr;
+    const isOpen = (a) => a.status === 'PENDING' && a.date >= today;
+    if (!appointments.some(isOpen)) return res.json(appointments);
+    const [official, added, classes] = await Promise.all([
+      ConsultationHours.find({ facultyId }).lean(),
+      AddedConsultationHours.find({ facultyId, dayOfWeek: { $gte: 1 } }).lean(),
+      Schedule.find({ facultyId }).lean(),
+    ]);
+    const approved = appointments.filter(a => a.status === 'APPROVED');
+    res.json(appointments.map(a => isOpen(a)
+      ? { ...a.toObject(), availableWindow: availableWindow({ date: a.date, time: a.time, official, added, classes, appointments: approved, excludeId: a._id }) }
+      : a));
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching my appointments' });
   }

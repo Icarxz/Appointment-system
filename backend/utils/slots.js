@@ -177,6 +177,56 @@ function maxDurationAt({ date, time, official, added }) {
   return run ? Math.min(run[1] - s, MAX_CONSULT_MINUTES) : 0;
 }
 
+const fmt12 = (mins) => {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return `${((h + 11) % 12) + 1}:${pad(m)} ${h >= 12 ? 'PM' : 'AM'}`;
+};
+const fmtLength = (mins) => {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return [h ? `${h} hr${h > 1 ? 's' : ''}` : '', m ? `${m} mins` : ''].filter(Boolean).join(' ') || '0 mins';
+};
+
+// How much uninterrupted bookable time is there from a requested start time?
+// Bookable time = the consultation hours (official + added) joined with the vacant window (Mon-Fri 8 AM-5 PM). The
+// window runs from `time` until the first thing that blocks it: the end of the bookable time, a class, or an APPROVED
+// appointment. Other PENDING requests never block it (they are only asked for, not given), and `excludeId` leaves
+// the request being looked at out of the approved list.
+//   returns { start, end, minutes, maxMinutes, label }   minutes is 0 when `time` itself is not available.
+// maxMinutes is minutes capped at MAX_CONSULT_MINUTES, the longest one consultation may be.
+function availableWindow({ date, time, official = [], added = [], classes = [], appointments = [], excludeId = null }) {
+  const dow = dayOfWeekOf(date);
+  const s = timeToMinutes(time);
+  const none = { start: toHHMM(s), end: toHHMM(s), minutes: 0, maxMinutes: 0, label: 'No time available' };
+
+  const spans = consultRuns({ date, official, added }).map(r => [...r]);
+  if (dow >= 1 && dow <= 5) spans.push([VACANT_START, VACANT_END]);
+  spans.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const [a, b] of spans) {
+    const last = merged[merged.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else merged.push([a, b]);
+  }
+  const span = merged.find(([a, b]) => s >= a && s < b);
+  if (!span) return none;
+
+  const blockers = [
+    ...classes.filter(c => c.dayOfWeek === dow).map(c => [timeToMinutes(c.startTime), timeToMinutes(c.endTime)]),
+    ...appointments
+      .filter(a => a.date === date && a.status === 'APPROVED' && String(a._id) !== String(excludeId))
+      .map(a => { const as = timeToMinutes(a.time); return [as, as + (Number(a.duration) || 60)]; }),
+  ];
+  if (blockers.some(([bs, be]) => s >= bs && s < be)) return none; // the start itself is already taken
+
+  let end = span[1];
+  for (const [bs] of blockers) if (bs > s && bs < end) end = bs;
+  const minutes = end - s;
+  return {
+    start: toHHMM(s), end: toHHMM(end), minutes, maxMinutes: Math.min(minutes, MAX_CONSULT_MINUTES),
+    label: `${fmt12(s)} - ${fmt12(end)} (${fmtLength(minutes)} total)`,
+  };
+}
+
 module.exports = {
-  MAX_CONSULT_MINUTES, VACANT_START, VACANT_END, splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, consultRuns, dayOfWeekOf, addDays, overlaps,
+  MAX_CONSULT_MINUTES, VACANT_START, VACANT_END, splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, availableWindow, consultRuns, dayOfWeekOf, addDays, overlaps,
 };
