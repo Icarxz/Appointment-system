@@ -37,7 +37,7 @@ const StatusHistory = require('../models/StatusHistory');
 const crypto = require('crypto'); // Built-in Node.js module for secure hashes
 const ConsultationHours = require('../models/ConsultationHours');
 const AddedConsultationHours = require('../models/AddedConsultationHours');
-const { buildSlots, buildBusy, insideBookableHours, maxDurationAt, addDays, dayOfWeekOf, overlaps, MAX_PENDING_PER_SLOT } = require('../utils/slots');
+const { buildSlots, buildBusy, insideBookableHours, maxDurationAt, addDays, dayOfWeekOf, overlaps } = require('../utils/slots');
 const { isOverlapping } = require('../utils/timeMath');
 const { requireAuth } = require('../middleware/auth');
 
@@ -417,7 +417,7 @@ router.get('/slots/:facultyId', requireAuth(ALL_ROLES), async (req, res) => {
     const faculty = await User.findOne({ _id: req.params.facultyId, role: 'FACULTY' }).select('flaggedDate');
     if (!faculty) return res.status(404).json({ error: 'Faculty member not found.' });
     const { slots, busy } = await loadSlots(faculty._id, faculty.flaggedDate);
-    res.json({ maxPending: MAX_PENDING_PER_SLOT, leadHours: BOOKING_LEAD_HOURS, slots, busy });
+    res.json({ leadHours: BOOKING_LEAD_HOURS, slots, busy });
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching consultation slots.' });
   }
@@ -510,23 +510,12 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
     if (!slot) {
       return res.status(400).json({ error: 'That time slot is not available. Please choose one from the faculty\'s consultation hours.' });
     }
-    if (slot.full) {
-      return res.status(400).json({ error: `This slot already has ${MAX_PENDING_PER_SLOT} pending requests. Please choose another slot.` });
-    }
     const duration = slot.duration;
 
-    // 4. Anti-Spam Protocol
-    const existingPending = await Appointment.findOne({
-      facultyId, date, time, studentName, status: 'PENDING'
-    });
-    
-    if (existingPending) {
-      return res.status(400).json({ 
-        error: `Anti-Spam: You already have a pending request submitted for this exact time.` 
-      });
-    }
+    // No request limit and no anti-spam check (project decision, Nov 4): any number of students may request an hour;
+    // the professor accepts one.
 
-    // 5. Save the pending request
+    // Save the pending request
     const newAppointment = await Appointment.create({
       facultyId,
       studentId,

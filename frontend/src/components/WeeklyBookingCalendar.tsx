@@ -4,7 +4,7 @@ import { buildWeekGrid, cellKey } from '../utils/weekGrid';
 import type { Busy, Slot } from '../utils/weekGrid';
 
 // The student's weekly booking calendar: Monday to Friday x hour. Click a green or dashed cell to request that
-// hour (the parent opens a confirm panel). Class, booked, full and past hours are shown but cannot be clicked.
+// hour (the parent opens a confirm panel). Class, booked and past hours are shown but cannot be clicked.
 // Not the read-only master schedule (WeeklyCalendar.tsx); this one is for booking.
 
 const hourLabel = (h: number) => `${((h + 11) % 12) + 1} ${h >= 12 ? 'PM' : 'AM'}`;
@@ -25,12 +25,11 @@ interface Props {
   busy: Busy[];
   weekStart: string;     // the Monday of the week shown
   leadHours: number;     // requests close this long before the start
-  maxPending: number;    // requests allowed per slot
   selectedKey: string;   // "YYYY-MM-DD|HH:MM" of the chosen slot, or ''
   onPick: (slot: Slot) => void;
 }
 
-export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHours, maxPending, selectedKey, onPick }: Props) {
+export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHours, selectedKey, onPick }: Props) {
   const text = useColorModeValue('#0f2240', '#e8f0fe');
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const consultBg = useColorModeValue('#dcfce7', '#14532d');
@@ -70,7 +69,7 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
         <HStack spacing={1}>{swatch(consultBg, consultBorder)}<Text>Consultation hours</Text></HStack>
         <HStack spacing={1}>{swatch(vacantBg, vacantBorder, true)}<Text>Vacant hour</Text></HStack>
         <HStack spacing={1}>{swatch(classBg, classBg)}<Text>Class</Text></HStack>
-        <HStack spacing={1}>{swatch(redBg, redBorder)}<Text>Booked or full</Text></HStack>
+        <HStack spacing={1}>{swatch(redBg, redBorder)}<Text>Booked</Text></HStack>
         <HStack spacing={1}>{swatch(faintBg, lineColor)}<Text>Not available</Text></HStack>
       </HStack>
 
@@ -99,7 +98,7 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
                       if (slot && (part.state === 'CONSULT' || part.state === 'VACANT')) {
                         const consult = part.state === 'CONSULT';
                         const selected = `${slot.date}|${slot.start}` === selectedKey;
-                        const spots = `${slot.pending} of ${maxPending} request spots taken`;
+                        const spots = `${slot.pending} ${slot.pending === 1 ? 'request' : 'requests'} so far`;
                         return (
                           <Button
                             key={slot.start}
@@ -117,19 +116,8 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
                             aria-pressed={selected}
                           >
                             <span>{range(slot.start, slot.end)}</span>
-                            {slot.pending > 0 && <Text as="span" fontSize="10px" fontWeight="500" color={muted}>{slot.pending}/{maxPending}{compact ? '' : ' requested'}</Text>}
+                            {slot.pending > 0 && <Text as="span" fontSize="10px" fontWeight="500" color={muted}>{slot.pending}{compact ? '' : ' requested'}</Text>}
                           </Button>
-                        );
-                      }
-                      if (slot && part.state === 'FULL') {
-                        return (
-                          <Box key={slot.start} minH="44px" px={compact ? '2px' : 1} py={1} borderRadius="md" bg={redBg} borderWidth="1px" borderColor={redBorder}
-                            display="flex" flexDirection="column" alignItems="center" justifyContent="center" textAlign="center" fontSize="11px" color={text}
-                            title={`${clockAmPm(slot.start)} to ${clockAmPm(slot.end)}. Full: ${maxPending} pending requests.`}
-                            aria-label={`${dayLong(slot.date)}, ${clockAmPm(slot.start)} to ${clockAmPm(slot.end)}, full`}>
-                            <span>{range(slot.start, slot.end)}</span>
-                            <Text as="span" fontSize="10px" fontWeight="700">Full</Text>
-                          </Box>
                         );
                       }
                       if (part.state === 'CLASS') {
@@ -148,7 +136,7 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
           ))}
         </Grid>
       </Box>
-      <Text fontSize="xs" color={muted} mt={3}>Up to {maxPending} students can request the same hour; the professor accepts one. Requests close {leadHours} hour before the start time.</Text>
+      <Text fontSize="xs" color={muted} mt={3}>Several students can request the same hour; the professor accepts one. Requests close {leadHours} hour before the start time.</Text>
     </Box>
   );
 }

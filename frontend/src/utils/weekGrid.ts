@@ -4,16 +4,15 @@
 // One cell is one clock hour of one day. What a cell shows:
 //   CONSULT  green      a bookable consultation hour (official or added)
 //   VACANT   dashed     a bookable free hour (no label, by design)
-//   FULL     red        bookable hour that already has the maximum pending requests
 //   CLASS    grey       the professor teaches (not clickable)
 //   BOOKED   red        already approved for someone else (not clickable)
 //   PAST     faint grey the hour has already started
 //   SOON     faint grey inside the lead time (requests close 1 hour before the start)
 //   NONE     faint grey nothing to book (leave day, or outside the 4-week window)
 
-export interface Slot { date: string; start: string; end: string; duration: number; kind: 'OFFICIAL' | 'ADDED' | 'VACANT'; pending: number; full: boolean }
+export interface Slot { date: string; start: string; end: string; duration: number; kind: 'OFFICIAL' | 'ADDED' | 'VACANT'; pending: number }
 export interface Busy { date: string; start: string; end: string; type: 'CLASS' | 'BOOKED' }
-export type PartState = 'CONSULT' | 'VACANT' | 'FULL' | 'CLASS' | 'BOOKED' | 'PAST' | 'SOON' | 'NONE';
+export type PartState = 'CONSULT' | 'VACANT' | 'CLASS' | 'BOOKED' | 'PAST' | 'SOON' | 'NONE';
 export interface Part { state: PartState; slot?: Slot }
 export interface Cell { date: string; hour: number; parts: Part[] }
 export interface WeekGrid { dates: string[]; hours: number[]; cells: Record<string, Cell> }
@@ -58,7 +57,7 @@ export function buildWeekGrid({ slots, busy, weekStart, nowMs, leadHours }: {
         .sort((a, b) => a.start.localeCompare(b.start));
       let parts: Part[];
       if (here.length) {
-        parts = here.map(slot => ({ state: slot.full ? 'FULL' : slot.kind === 'VACANT' ? 'VACANT' : 'CONSULT', slot }));
+        parts = here.map(slot => ({ state: slot.kind === 'VACANT' ? 'VACANT' : 'CONSULT', slot }));
       } else {
         const hit = busy.filter(b => b.date === date && toMin(b.start) < (hour + 1) * 60 && hour * 60 < toMin(b.end));
         const startMs = new Date(`${date}T${String(hour).padStart(2, '0')}:00:00+08:00`).getTime();
