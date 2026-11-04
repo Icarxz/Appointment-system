@@ -12,6 +12,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Appointment = require('../models/Appointment');
 const ConsultationHours = require('../models/ConsultationHours');
+const Schedule = require('../models/Schedule');
 const { buildDemoData } = require('../utils/demoData');
 const { manilaNow } = require('../utils/manilaTime');
 
@@ -31,8 +32,8 @@ async function main() {
   console.log(`Connected to database "${mongoose.connection.name}".`);
 
   if (mode === 'remove') {
-    const [a, h, u] = [await Appointment.deleteMany({ isDemo: true }), await ConsultationHours.deleteMany({ isDemo: true }), await User.deleteMany({ isDemo: true })];
-    console.log(`Removed ${a.deletedCount} appointments, ${h.deletedCount} consultation-hour rows, ${u.deletedCount} users (demo only).`);
+    const [a, h, c, u] = [await Appointment.deleteMany({ isDemo: true }), await ConsultationHours.deleteMany({ isDemo: true }), await Schedule.deleteMany({ isDemo: true }), await User.deleteMany({ isDemo: true })];
+    console.log(`Removed ${a.deletedCount} appointments, ${h.deletedCount} consultation-hour rows, ${c.deletedCount} class rows, ${u.deletedCount} users (demo only).`);
     return;
   }
 
@@ -46,12 +47,13 @@ async function main() {
   const sDoc = Object.fromEntries(data.students.map((s, i) => [s.key, studentDocs[i]]));
 
   await ConsultationHours.insertMany(data.hours.map(h => ({ isDemo: true, facultyId: fId[h.facultyKey], dayOfWeek: h.dayOfWeek, startTime: h.startTime, endTime: h.endTime })));
+  await Schedule.insertMany(data.classes.map(c => ({ isDemo: true, facultyId: fId[c.facultyKey], subject: c.subject, room: c.room, dayOfWeek: c.dayOfWeek, startTime: c.startTime, endTime: c.endTime })));
   await Appointment.insertMany(data.appointments.map(a => ({
     isDemo: true, studentId: sDoc[a.studentKey]._id, studentName: sDoc[a.studentKey].name, studentSection: sDoc[a.studentKey].programPosition,
     facultyId: fId[a.facultyKey], date: a.date, time: a.time, duration: a.duration, reason: a.reason, status: a.status,
     ...(a.appeal ? { appeal: { ...a.appeal, submittedAt: new Date() } } : {}),
   })));
-  console.log(`Added ${facultyDocs.length} faculty, ${studentDocs.length} students, ${data.appointments.length} appointments (all flagged isDemo).`);
+  console.log(`Added ${facultyDocs.length} faculty, ${studentDocs.length} students, ${data.hours.length} consultation-hour rows, ${data.classes.length} class rows, ${data.appointments.length} appointments (all flagged isDemo).`);
 }
 
 main().catch(e => { console.error('Stopped:', e.message); process.exitCode = 1; }).finally(() => mongoose.disconnect());
