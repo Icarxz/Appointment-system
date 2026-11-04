@@ -137,3 +137,6 @@ code {
 
 /* Plain <button>s (not Chakra ones, which the theme already enlarges) get a finger-sized target on touch screens. */
 @media (pointer: coarse) { .touch-target { min-height: 40px; min-width: 40px; } }
+
+/* The calendar library's own toolbar buttons are plain <button>s (not Chakra), so they get the same finger-sized target. */
+@media (pointer: coarse) { .rbc-toolbar button { min-height: 40px; min-width: 40px; } }

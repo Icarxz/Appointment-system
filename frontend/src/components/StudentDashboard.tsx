@@ -503,7 +503,7 @@ export default function StudentDashboard() {
           )}
 
           {activePage === 'appointments' && (
-            <Grid templateColumns={{ base: 'minmax(0, 1fr)', xl: '340px minmax(0, 1fr)' }} gap={6} alignItems="start">
+            <Grid templateColumns={{ base: 'minmax(0, 1fr)', xl: '300px minmax(0, 1fr)' }} gap={6} alignItems="start">
               <Box bg={cardBg} p={CARD_PAD} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
                 {!profileComplete && (
                   <Box mb={4} p={4} borderRadius="md" bg="orange.50" borderWidth="1px" borderColor="orange.300" color="orange.900">

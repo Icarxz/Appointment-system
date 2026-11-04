@@ -77,8 +77,8 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
       {/* Safety net only: below 560px the compact layout fits all five days, and above it the columns have room. */}
       <Box overflowX="auto" pb={1}>
         <Grid
-          templateColumns={compact ? `30px repeat(${grid.dates.length}, minmax(0, 1fr))` : `52px repeat(${grid.dates.length}, minmax(88px, 1fr))`}
-          gap={compact ? '3px' : '4px'} minW={compact ? undefined : '520px'}>
+          templateColumns={compact ? `30px repeat(${grid.dates.length}, minmax(0, 1fr))` : `52px repeat(${grid.dates.length}, minmax(80px, 1fr))`}
+          gap={compact ? '3px' : '4px'} minW={compact ? undefined : "480px"}>
           <Box />
           {grid.dates.map(d => (
             <Box key={d} textAlign="center" pb={1}>
