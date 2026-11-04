@@ -11,7 +11,7 @@ import {
 import { authFetch } from './authFetch';
 import ProfileGate from './ProfileGate';
 import { statusColor, statusLabel, hasStarted, isBeforeCutoff, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
-import type { RequestRow } from './appointmentStatus';
+import type { AvailableWindow, RequestRow } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import CancelReasonPicker, { FACULTY_CANCEL_REASONS } from './CancelReasonPicker';
@@ -537,42 +537,53 @@ const saveConsultationHours = async () => {
     }
   };
 
-  // Chosen length per pending request when approving (defaults to the requested/slot length).
-  // Lengths the faculty can approve: shorter than the slot, or longer when the following consultation
-  // hours that day run back-to-back (official + added), up to 2 hours in total.
-  const durationOptions = (apt: any): number[] => {
-    const start = timeToMin(apt.time);
-    const dow = new Date(`${apt.date}T00:00:00Z`).getUTCDay();
-    const spans = [...consultBlocks, ...addedHours]
-      .filter((b: any) => Number(b.dayOfWeek) === dow && b.startTime && b.endTime)
-      .map((b: any) => [timeToMin(b.startTime), timeToMin(b.endTime)] as [number, number])
-      .sort((a, b) => a[0] - b[0]);
-    const runs: [number, number][] = [];
-    for (const [s, e] of spans) {
-      const last = runs[runs.length - 1];
-      if (last && s <= last[1]) last[1] = Math.max(last[1], e); else runs.push([s, e]);
-    }
-    const run = runs.find(([s, e]) => start >= s && start < e);
-    const base = apt.duration || 60;
-    const max = Math.max(base, run ? Math.min(run[1] - start, 120) : base);
-    const out: number[] = [];
-    for (let m = 15; m <= max; m += 15) out.push(m);
-    if (!out.includes(base)) out.push(base);
-    return out.sort((a, b) => a - b);
-  };
+  // Approving a pending request: the professor picks a start and a length inside the free time the server worked out
+  // (consultation + vacant hours, up to the next class or approved appointment). Several students may have asked for
+  // the same hour; approving one never declines the others.
   const [approveDuration, setApproveDuration] = useState<Record<string, number>>({});
+  const [approveStart, setApproveStart] = useState<Record<string, string>>({});
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const hhmm = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+  const startChoice = (apt: RequestRow): string => approveStart[apt._id] ?? apt.availableWindow?.start ?? apt.time;
+  const startOptions = (w: AvailableWindow): string[] => {
+    const out: string[] = [];
+    for (let m = timeToMin(w.start); m < timeToMin(w.end); m += 15) out.push(hhmm(m));
+    return out;
+  };
+  const lengthRoom = (apt: RequestRow): number => {
+    const w = apt.availableWindow;
+    return w ? Math.min(120, timeToMin(w.end) - timeToMin(startChoice(apt))) : (apt.duration || 60);
+  };
+  const lengthChoice = (apt: RequestRow): number => {
+    const room = lengthRoom(apt);
+    const wanted = approveDuration[apt._id] ?? apt.duration ?? 60;
+    return Math.max(15, Math.min(wanted, Math.floor(room / 15) * 15));
+  };
+  const lengthOptions = (apt: RequestRow): number[] => {
+    const out: number[] = [];
+    for (let m = 15; m <= lengthRoom(apt); m += 15) out.push(m);
+    return out;
+  };
+  const lengthText = (m: number) => (m % 60 === 0 ? `${m / 60} hour${m > 60 ? 's' : ''}` : m > 60 ? `${Math.floor(m / 60)} hr ${m % 60} min` : `${m} min`);
 
-  const updateAppointmentStatus = async (targetApt: any, newStatus: string) => {
+  const updateAppointmentStatus = async (targetApt: RequestRow, newStatus: string) => {
     try {
-      const duration = newStatus === 'APPROVED' ? approveDuration[targetApt._id] : undefined;
+      const body: { status: string; time?: string; duration?: number } = { status: newStatus };
+      let chosenTime = targetApt.time;
+      if (newStatus === 'APPROVED' && targetApt.availableWindow) {
+        chosenTime = startChoice(targetApt);
+        const length = lengthChoice(targetApt);
+        if (chosenTime !== targetApt.time) body.time = chosenTime;
+        if (length !== targetApt.duration) body.duration = length;
+      }
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${targetApt._id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(duration && duration !== targetApt.duration ? { status: newStatus, duration } : { status: newStatus })
+        body: JSON.stringify(body)
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to process appointment.');
 
-      toast({ title: `Appointment ${newStatus}`, status: 'success' });
+      toast({ title: newStatus === 'APPROVED' && chosenTime !== targetApt.time ? `Approved for ${formatTime(chosenTime)}` : `Appointment ${newStatus}`, status: 'success' });
       fetchData(); 
     } catch (error: any) {
       toast({
@@ -724,19 +735,29 @@ const saveConsultationHours = async () => {
     <>
       {apt.status === 'PENDING' && (
         !hasStarted(apt.date, apt.time) ? (
-          <HStack spacing={2} flexWrap="wrap">
-            <Select
-              size="xs" w="110px" title="Consultation length"
-              value={approveDuration[apt._id] ?? apt.duration ?? 60}
-              onChange={(e) => setApproveDuration({ ...approveDuration, [apt._id]: Number(e.target.value) })}
-            >
-              {durationOptions(apt).map(m => (
-                <option key={m} value={m}>{m % 60 === 0 ? `${m / 60} hour${m > 60 ? 's' : ''}` : `${m} min`}</option>
-              ))}
-            </Select>
-            <ChakraButton size="xs" colorScheme="green" onClick={() => updateAppointmentStatus(apt, 'APPROVED')}>Approve</ChakraButton>
-            <ChakraButton size="xs" colorScheme="red" onClick={() => { setCancelReason(''); setCancelMode('reject'); setCancelTarget(apt); }}>Reject</ChakraButton>
-          </HStack>
+          <VStack align="stretch" spacing={1}>
+            {apt.availableWindow && (
+              apt.availableWindow.minutes > 0
+                ? <Text fontSize="xs" color={mutedText}>Available window: {apt.availableWindow.label}</Text>
+                : <Badge colorScheme="orange" alignSelf="flex-start">No time left</Badge>
+            )}
+            <HStack spacing={2} flexWrap="wrap">
+              {apt.availableWindow && apt.availableWindow.minutes > 0 && (
+                <>
+                  <Select size="xs" w="110px" title="Start time" aria-label="Start time" value={startChoice(apt)}
+                    onChange={(e) => setApproveStart({ ...approveStart, [apt._id]: e.target.value })}>
+                    {startOptions(apt.availableWindow).map(t => <option key={t} value={t}>{formatTime(t)}</option>)}
+                  </Select>
+                  <Select size="xs" w="110px" title="Consultation length" aria-label="Consultation length" value={lengthChoice(apt)}
+                    onChange={(e) => setApproveDuration({ ...approveDuration, [apt._id]: Number(e.target.value) })}>
+                    {lengthOptions(apt).map(m => <option key={m} value={m}>{lengthText(m)}</option>)}
+                  </Select>
+                  <ChakraButton size="xs" colorScheme="green" onClick={() => updateAppointmentStatus(apt, 'APPROVED')}>Approve</ChakraButton>
+                </>
+              )}
+              <ChakraButton size="xs" colorScheme="red" onClick={() => { setCancelReason(''); setCancelMode('reject'); setCancelTarget(apt); }}>Reject</ChakraButton>
+            </HStack>
+          </VStack>
         ) : (
           <Text fontSize="xs" color={mutedText}>This request expired because the requested time has started.</Text>
         )

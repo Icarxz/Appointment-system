@@ -38,6 +38,9 @@ export const hasStarted = (date: string, time: string): boolean =>
   Date.now() >= new Date(`${date}T${time}:00+08:00`).getTime();
 
 /** The fields the request lists (table rows and phone cards) read from an appointment. The API sends more. */
+/** The free time still left for a pending request (the server sends it with the faculty request list). */
+export interface AvailableWindow { start: string; end: string; minutes: number; maxMinutes: number; label: string }
+
 export interface RequestRow {
   _id: string;
   status: string;
@@ -46,6 +49,10 @@ export interface RequestRow {
   duration?: number;
   reason: string;
   cancelReason?: string;
+  /** Only on a pending request that has not started yet. */
+  availableWindow?: AvailableWindow;
+  /** Set when the professor approved a different start than the student asked for. */
+  requestedTime?: string;
   studentName?: string;
   studentSection?: string;
   /** The student view gets the professor as an object; older records may have none. */

@@ -227,6 +227,23 @@ function availableWindow({ date, time, official = [], added = [], classes = [], 
   };
 }
 
+// The free time a PENDING request can still be given. Like availableWindow, but when the requested start is already
+// covered by APPROVED appointments (another student got 8:00-8:30), the window starts where they end (8:30), so a second
+// student asking for 8:00 can be given 8:30 onward. Classes never move the start; a class at the start means no time.
+//   returns { start, end, minutes, maxMinutes, label }   minutes is 0 when nothing is left.
+function openWindow(args) {
+  const { date, time, appointments = [], excludeId = null } = args;
+  const taken = appointments
+    .filter(a => a.date === date && a.status === 'APPROVED' && String(a._id) !== String(excludeId))
+    .map(a => { const as = timeToMinutes(a.time); return [as, as + (Number(a.duration) || 60)]; });
+  let s = timeToMinutes(time);
+  for (let moved = true; moved;) {
+    moved = false;
+    for (const [bs, be] of taken) if (s >= bs && s < be) { s = be; moved = true; }
+  }
+  return availableWindow({ ...args, time: toHHMM(s) });
+}
+
 module.exports = {
-  MAX_CONSULT_MINUTES, VACANT_START, VACANT_END, splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, availableWindow, consultRuns, dayOfWeekOf, addDays, overlaps,
+  MAX_CONSULT_MINUTES, VACANT_START, VACANT_END, splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, availableWindow, openWindow, consultRuns, dayOfWeekOf, addDays, overlaps,
 };
