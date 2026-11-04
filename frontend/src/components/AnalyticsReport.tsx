@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Accordion, AccordionButton, AccordionItem, AccordionPanel, Box, Button, Flex, HStack, Select, SimpleGrid, Spinner, Tab, TabList,
+  Accordion, AccordionButton, AccordionItem, AccordionPanel, Box, Button, Flex, Grid, HStack, Select, SimpleGrid, Spinner, Tab, TabList,
   TabPanel, TabPanels, Table, Tabs, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useDisclosure,
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
-import ExportBar from './ExportBar';
+import { CheckCircleIcon, CloseIcon, TimeIcon, WarningIcon } from '@chakra-ui/icons';
 import SimpleBarChart from './SimpleBarChart';
 import { ChartCard, HBarChart, Heatmap, KpiTile, LineChart, StackedBar } from './AnalyticsCharts';
 import type { HeatmapData, LV } from './AnalyticsCharts';
@@ -39,8 +39,10 @@ interface ReportData {
   };
 }
 
+// Wide screens: the KPI tiles are a column on the left and the charts fill the rest (same as the faculty analytics).
+const TILE_COLUMNS = '230px minmax(0, 1fr)';
 const pctText = (n: number | null) => (n === null ? '—' : `${n}%`);
-const trend = (w: Window) => `Last 4 weeks: ${w.last4}\nBefore that: ${w.prev4}`; // two short lines, so every tile has the same height
+const trend = (w: Window) => `${w.last4} in last 4 wks · ${w.prev4} before`; // same wording as the faculty analytics
 const ROLE_NAMES: Record<string, string> = { STUDENT: 'Students', FACULTY: 'Faculty', DEAN: 'Deans', ADMIN: 'Admins' };
 const OUTCOME_COLORS = { completed: '#16a34a', upcoming: '#2563eb', declined: '#dc2626', expired: '#ca8a04', missedStudent: '#f08a3c', missedFaculty: '#e11d48', cancelledStudent: '#94a3b8', cancelledFaculty: '#64748b' };
 
@@ -91,24 +93,25 @@ export default function AnalyticsReport() {
   const tableBox = { maxH: '340px', overflowY: 'auto' as const, borderWidth: '1px', borderColor: border, borderRadius: 'md' };
 
   const overview = (
-    <VStack align="stretch" spacing={6}>
-      <SimpleGrid columns={{ base: 2, md: 3, lg: 5 }} spacing={4}>
-        <KpiTile label="Requests" value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="All requests that were reviewed or happened. Requests still waiting for an answer are not counted."
+    <Grid templateColumns={{ base: '1fr', xl: TILE_COLUMNS }} gap={4} alignItems="start">
+      <SimpleGrid columns={{ base: 2, md: 3, xl: 1 }} spacing={3}>
+        <KpiTile dense label="Requests" icon={<CheckCircleIcon />} value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="All requests that were reviewed or happened. Requests still waiting for an answer are not counted."
           onClick={() => open('Requests', data.drilldown.requests)} />
-        <KpiTile label="Completed" value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
-        <KpiTile label="Missed" value={k.missed.total} sub={`${k.missed.student} by students\n${k.missed.faculty} by faculty`} accent="#f08a3c"
+        <KpiTile dense label="Completed" icon={<CheckCircleIcon />} value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
+        <KpiTile dense label="Missed" icon={<WarningIcon />} value={k.missed.total} sub={`${k.missed.student} students · ${k.missed.faculty} faculty · ${pctText(k.missedRate)} missed rate`} accent="#f08a3c"
           hint={`Missed rate: ${pctText(k.missedRate)} = missed ÷ (completed + missed). Appeals do not reduce this number.`}
           onClick={() => open('Missed consultations', data.drilldown.missed, 'Missed by students', 'Missed by faculty')} />
-        <KpiTile label="Cancelled" value={o.cancelledStudent + o.cancelledFaculty} sub={`${o.cancelledStudent} by students\n${o.cancelledFaculty} by faculty`} accent="#64748b"
+        <KpiTile dense label="Cancelled" icon={<CloseIcon boxSize={3} />} value={o.cancelledStudent + o.cancelledFaculty} sub={`${o.cancelledStudent} students · ${o.cancelledFaculty} faculty`} accent="#64748b"
           onClick={() => open('Cancelled consultations', data.drilldown.cancelled, 'Cancelled by students', 'Cancelled by faculty')} />
-        <KpiTile label="Completion rate" value={pctText(k.completionRate)} sub={'completed ÷\n(completed + missed)'} accent="#8b5cf6" hint="Of the consultations that were supposed to happen, how many were completed." />
+        <KpiTile dense label="Completion rate" icon={<TimeIcon />} value={pctText(k.completionRate)} sub="completed ÷ finished" accent="#8b5cf6" hint="Of the consultations that were supposed to happen, how many were completed." />
       </SimpleGrid>
 
+      <VStack align="stretch" spacing={4} minW={0}>
       <ChartCard title="Requests per week" hint="Last 8 weeks, weeks start on Monday.">
         <LineChart data={data.weekly} color="#2563eb" />
       </ChartCard>
 
-      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
+      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
         <ChartCard title="What happened to requests" hint="Share of each outcome.">
           <StackedBar segments={[
             { label: 'Completed', value: o.completed, color: OUTCOME_COLORS.completed },
@@ -125,7 +128,8 @@ export default function AnalyticsReport() {
           <HBarChart color="#2563eb" items={data.facultyLoad.slice(0, 8).map(f => ({ label: f.name, value: f.requests, note: `(${f.completed})` }))} emptyText="No faculty requests yet." />
         </ChartCard>
       </SimpleGrid>
-    </VStack>
+      </VStack>
+    </Grid>
   );
 
   const facultyTable = data.facultyOutcomes.length === 0 ? <Text fontSize="sm" color={muted}>No faculty accounts yet.</Text> : (
@@ -172,14 +176,15 @@ export default function AnalyticsReport() {
 
   const a = data.appeals.summary;
   const outcomes = (
-    <VStack align="stretch" spacing={6}>
-      <SimpleGrid columns={{ base: 2, md: 3, lg: 5 }} spacing={4}>
-        <KpiTile label="Appeal rate" value={pctText(a.appealRate)} sub="missed consultations that got an appeal" accent="#f08a3c" hint="Appeals on 'Missed (student)' ÷ all 'Missed (student)'." />
-        <KpiTile label="Student appeals" value={a.total} sub="reasons given for a missed or cancelled consultation" accent="#16a34a" />
-        <KpiTile label="Faculty appeals" value={a.faculty.made} sub="reasons faculty gave to the Dean" accent="#8b5cf6" />
-        <KpiTile label="Missed by students" value={k.missed.student} sub="appeals never reduce this" accent="#64748b" />
+    <Grid templateColumns={{ base: '1fr', xl: TILE_COLUMNS }} gap={4} alignItems="start">
+      <SimpleGrid columns={{ base: 2, md: 3, xl: 1 }} spacing={3}>
+        <KpiTile dense label="Appeal rate" value={pctText(a.appealRate)} sub="missed consultations that got an appeal" accent="#f08a3c" hint="Appeals on 'Missed (student)' ÷ all 'Missed (student)'." />
+        <KpiTile dense label="Student appeals" value={a.total} sub="reasons given for a missed or cancelled consultation" accent="#16a34a" />
+        <KpiTile dense label="Faculty appeals" value={a.faculty.made} sub="reasons faculty gave to the Dean" accent="#8b5cf6" />
+        <KpiTile dense label="Missed by students" value={k.missed.student} sub="appeals never reduce this" accent="#64748b" />
       </SimpleGrid>
 
+      <VStack align="stretch" spacing={6} minW={0}>
       <ChartCard title="Missed consultations per week" hint="Last 8 weeks.">
         <LineChart data={data.weeklyMissed} color="#f08a3c" />
       </ChartCard>
@@ -197,7 +202,8 @@ export default function AnalyticsReport() {
         </HStack>
         {outcomeView === 'faculty' ? facultyTable : studentTable}
       </ChartCard>
-    </VStack>
+      </VStack>
+    </Grid>
   );
 
   const demand = (
@@ -258,11 +264,9 @@ export default function AnalyticsReport() {
     <VStack align="stretch" spacing={4} id="printable-report">
       <Text className="print-only" fontWeight="700" fontSize="lg" color="black">CCIS Sync: Reports &amp; Analytics (generated {new Date(data.generatedAt).toLocaleString()})</Text>
       <HStack justify="space-between" className="no-print" flexWrap="wrap">
-        <Text fontSize="xs" color={muted}>Updated {new Date(data.generatedAt).toLocaleTimeString()}</Text>
-        <HStack spacing={2}>
-          <ExportBar csvPath="/api/analytics/report.csv" fileBase="ccis-sync-report" />
-          <Button size="xs" variant="outline" onClick={load} isLoading={loading}>Refresh</Button>
-        </HStack>
+        <Text fontSize="xs" color={muted}>Calculated live by the database · updated {new Date(data.generatedAt).toLocaleTimeString()}</Text>
+        {/* Download CSV and Print / Save as PDF are in the Welcome bar, like on the faculty analytics. */}
+        <Button size="xs" variant="outline" onClick={load} isLoading={loading}>Refresh</Button>
       </HStack>
       {/* Printing shows every tab's content one after another, without the tab buttons. */}
       <Tabs variant="soft-rounded" size="sm" colorScheme="blue"

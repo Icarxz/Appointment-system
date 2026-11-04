@@ -15,6 +15,7 @@ import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
 import ScrollTable from './ScrollTable';
 import WelcomeHeader from './WelcomeHeader';
+import ExportBar from './ExportBar';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 
 const PAGE_TITLES = {
@@ -115,9 +116,9 @@ export default function DeanDashboard() {
         { key: 'broadcast', label: 'Executive Broadcast', active: activePage === 'broadcast', onClick: () => setActivePage('broadcast') },
       ]}
     >
-      <WelcomeHeader name={userName || ''} />
+      <WelcomeHeader name={userName || ''} actions={activePage === 'reports' ? <ExportBar solid csvPath="/api/analytics/report.csv" fileBase="ccis-sync-report" /> : undefined} />
       <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
-        <PageTitle>{PAGE_TITLES[activePage]}</PageTitle>
+        {activePage !== 'reports' && <PageTitle>{PAGE_TITLES[activePage]}</PageTitle>}
 
         {(activePage === 'reports' || activePage === 'records') && (
           // See AdminDashboard.tsx for the same pattern, explained: hides
@@ -133,10 +134,7 @@ export default function DeanDashboard() {
         )}
 
         {activePage === 'reports' && (
-          <Box id="print-area" bg={C.surface} p={6} borderRadius="lg" borderWidth="1px" borderColor={C.border} shadow="sm">
-            <HStack justifyContent="space-between" spacing={0} gap={3} flexWrap="wrap" mb={6} className="no-print">
-              <Text color={C.textMid} fontSize="sm">Calculated live by the database.</Text>
-            </HStack>
+          <Box id="print-area">
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={C.text}>Reports & Analytics</Heading>
               <Text fontSize="sm" color={C.textMid}>Generated {formatDateTime(new Date())}</Text>
