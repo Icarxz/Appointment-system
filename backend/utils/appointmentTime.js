@@ -19,4 +19,17 @@ const inReminderWindow = (apt, nowMs = Date.now(), minutes = REMINDER_MINUTES) =
 // Cancelling (student or faculty) is allowed until CANCEL_CUTOFF_HOURS before the start.
 const canCancel = (apt, nowMs = Date.now()) => minutesUntil(apt.date, apt.time, nowMs) >= CANCEL_CUTOFF_HOURS * 60;
 
-module.exports = { BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS, REMINDER_MINUTES, startMoment, minutesUntil, isPendingExpired, inReminderWindow, canCancel };
+// Why an unanswered request is rejected when its start time arrives. If another student's APPROVED consultation covers
+// any part of the requested time, say so; otherwise it simply was not answered. (The text is shown to the student in
+// View Details; frontend/src/components/appointmentStatus.ts keeps a copy of the first one.)
+const EXPIRY_REASON_TAKEN = 'Another student\'s request for this time was accepted.';
+const EXPIRY_REASON_NO_RESPONSE = 'No response from the faculty member before the requested time.';
+// approvedSameDay: the faculty member's APPROVED appointments on the request's date [{ time, duration }].
+function expiryReason(apt, approvedSameDay = []) {
+  const toMin = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); };
+  const s = toMin(apt.time), e = s + (Number(apt.duration) || 60);
+  const taken = approvedSameDay.some(a => { const as = toMin(a.time); return s < as + (Number(a.duration) || 60) && as < e; });
+  return taken ? EXPIRY_REASON_TAKEN : EXPIRY_REASON_NO_RESPONSE;
+}
+
+module.exports = { EXPIRY_REASON_TAKEN, EXPIRY_REASON_NO_RESPONSE, expiryReason, BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS, REMINDER_MINUTES, startMoment, minutesUntil, isPendingExpired, inReminderWindow, canCancel };

@@ -58,3 +58,6 @@ export interface RequestRow {
   /** The student view gets the professor as an object; older records may have none. */
   facultyId?: { name: string } | null;
 }
+
+/** Reason the system gives when an unanswered request's hour went to another student (copy of backend/utils/appointmentTime.js). */
+export const REASON_TIME_TAKEN = "Another student's request for this time was accepted.";

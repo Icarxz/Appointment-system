@@ -38,3 +38,11 @@ export const formatDateTime = (val: string | Date | null | undefined): string =>
     hour12:  true,
   });
 };
+
+/** "13:20" -> "1:20 PM" */
+export const formatTime = (timeStr: string | null | undefined): string => {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':').map(Number);
+  if (Number.isNaN(h)) return timeStr;
+  return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+};

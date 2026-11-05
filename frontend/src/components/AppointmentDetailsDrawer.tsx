@@ -6,7 +6,7 @@ import {
 import type { ReactNode } from 'react';
 import { authFetch } from './authFetch';
 import { formatDate, formatDateTime } from './dateUtils';
-import { statusColor, statusLabel } from './appointmentStatus';
+import { statusColor, statusLabel, REASON_TIME_TAKEN } from './appointmentStatus';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -59,7 +59,8 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
   // Only trust a result that belongs to the appointment currently asked for
   const loaded = result && result.id === aptId ? result : null;
   const apt = loaded?.apt;
-  const expired = !!apt && apt.status === 'REJECTED' && apt.autoRejected;
+  const taken = !!apt && apt.cancelReason === REASON_TIME_TAKEN;
+  const expired = !!apt && apt.status === 'REJECTED' && apt.autoRejected && !taken;
 
   return (
     <Drawer isOpen={!!aptId} placement="right" size="md" onClose={onClose}>
@@ -74,7 +75,7 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
             <VStack align="stretch" spacing={4}>
               <Field label="Status">
                 <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">
-                  {expired ? 'Expired (not answered in time)' : statusLabel(apt.status)}
+                  {expired ? 'Expired (not answered in time)' : taken ? 'Declined (time went to another student)' : statusLabel(apt.status)}
                 </Badge>
                 {apt.cancelReason && <Text fontSize="xs" color={muted} mt={1}>Reason: {apt.cancelReason}</Text>}
               </Field>
@@ -82,6 +83,7 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
               <Field label="Student"><Text>{apt.studentName}{apt.studentSection ? ` (${apt.studentSection})` : ''}</Text></Field>
               <Field label="When">
                 <Text>{formatDate(apt.date)} at {fmtTime(apt.time)}</Text>
+                {apt.requestedTime && apt.requestedTime !== apt.time && <Text fontSize="xs" color={muted}>Requested for {fmtTime(apt.requestedTime)}; the professor approved this time instead.</Text>}
                 <Text fontSize="xs" color={muted}>{apt.duration || 60} minutes (Philippine time)</Text>
               </Field>
               <Field label="Purpose"><Text whiteSpace="pre-wrap">{apt.reason}</Text></Field>

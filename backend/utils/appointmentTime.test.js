@@ -30,3 +30,21 @@ test('reminder window is the last 30 minutes before the start', () => {
   assert.strictEqual(t.inReminderWindow(apt, at('09:59')), true);
   assert.strictEqual(t.inReminderWindow(apt, at('10:00')), false);
 });
+
+// ---- why an unanswered request was rejected ----
+const { expiryReason, EXPIRY_REASON_TAKEN, EXPIRY_REASON_NO_RESPONSE } = require('./appointmentTime');
+test('expiryReason: another student\'s approved time over the request gives the "accepted" text', () => {
+  const apt = { time: '08:00', duration: 60 };
+  assert.strictEqual(expiryReason(apt, [{ time: '08:00', duration: 30 }]), EXPIRY_REASON_TAKEN);
+  assert.strictEqual(expiryReason(apt, [{ time: '08:45', duration: 60 }]), EXPIRY_REASON_TAKEN);
+  assert.strictEqual(expiryReason(apt, [{ time: '07:30', duration: 45 }]), EXPIRY_REASON_TAKEN);
+  assert.strictEqual(EXPIRY_REASON_TAKEN, "Another student's request for this time was accepted.");
+});
+test('expiryReason: nothing overlapping (or only touching) means it simply was not answered', () => {
+  const apt = { time: '08:00', duration: 60 };
+  assert.strictEqual(expiryReason(apt, []), EXPIRY_REASON_NO_RESPONSE);
+  assert.strictEqual(expiryReason(apt), EXPIRY_REASON_NO_RESPONSE);
+  assert.strictEqual(expiryReason(apt, [{ time: '09:00', duration: 60 }]), EXPIRY_REASON_NO_RESPONSE);
+  assert.strictEqual(expiryReason(apt, [{ time: '07:00', duration: 60 }]), EXPIRY_REASON_NO_RESPONSE);
+  assert.strictEqual(expiryReason({ time: '08:00' }, [{ time: '08:50', duration: 30 }]), EXPIRY_REASON_TAKEN); // default length 60
+});
