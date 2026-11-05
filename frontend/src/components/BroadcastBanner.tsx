@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Flex, Text, Badge } from '@chakra-ui/react';
+import { Box, Flex, Text, Badge, useColorMode } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 
 interface ActiveBroadcast {
@@ -18,6 +18,8 @@ interface ActiveBroadcast {
 // `userRole` is passed by the Student/Faculty dashboards; the server already
 // filters by the logged-in role, so it is accepted but not needed here.
 export default function BroadcastBanner(_props: { userRole?: string }) {
+  const { colorMode } = useColorMode();
+  const dark = colorMode === 'dark';
   const [items, setItems] = useState<ActiveBroadcast[]>([]);
 
   useEffect(() => {
@@ -43,15 +45,32 @@ export default function BroadcastBanner(_props: { userRole?: string }) {
           <Box
             key={b._id}
             role="alert"
-            bg={urgent ? '#b91c1c' : '#1d4ed8'}
-            color="#fff"
+            bg={urgent
+              ? (dark ? '#321D29' : '#FEF2F2')
+              : (dark ? '#172B4D' : '#EFF6FF')}
+            color={urgent
+              ? (dark ? '#FECdd3' : '#991B1B')
+              : (dark ? '#BFDBFE' : '#1E40AF')}
             px={5}
             py={3}
-            borderBottom="1px solid rgba(255,255,255,0.25)"
+            borderBottomWidth="1px"
+            borderBottomColor={urgent
+              ? (dark ? '#633247' : '#FECACA')
+              : (dark ? '#29466F' : '#BFDBFE')}
           >
             <Flex align="center" gap={3} wrap="wrap">
-              <Badge bg="#fff" color={urgent ? '#b91c1c' : '#1d4ed8'} fontSize="10px" px={2} borderRadius="4px">
-                {urgent ? 'URGENT · DEAN' : 'NOTICE · DEAN'}
+              <Badge
+                bg={urgent
+                  ? (dark ? '#5B2D42' : '#FECACA')
+                  : (dark ? '#25436E' : '#DBEAFE')}
+                color={urgent
+                  ? (dark ? '#FFE4EC' : '#991B1B')
+                  : (dark ? '#DBEAFE' : '#1E40AF')}
+                fontSize="10px"
+                px={2.5}
+                borderRadius="full"
+              >
+                {urgent ? 'Urgent · Dean' : 'Notice · Dean'}
               </Badge>
               <Text fontWeight="700" fontSize="sm">{b.title}</Text>
             </Flex>
