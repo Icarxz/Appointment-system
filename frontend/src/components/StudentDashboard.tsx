@@ -398,6 +398,9 @@ export default function StudentDashboard() {
                   <option value="OTHER">Other (Available, Meeting, Break, Out of Office...)</option>
                 </Select>
               </Flex>
+              <Text fontSize="xs" color={mutedText} mb={2}>
+                Not Published means the faculty member has not yet shared their current availability.
+              </Text>
               <TableContainer>
                 <Table variant="simple" size="md">
                   <Thead><Tr><Th color={mutedText}>Faculty Name</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Announcements / Notices</Th></Tr></Thead>
