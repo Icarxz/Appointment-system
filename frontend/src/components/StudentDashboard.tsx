@@ -11,7 +11,7 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
-import { BOOKING_LEAD_HOURS } from './appointmentStatus';
+import { BOOKING_LEAD_HOURS, facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import CancelReasonPicker, { STUDENT_CANCEL_REASONS } from './CancelReasonPicker';
@@ -19,7 +19,7 @@ import BulkCancelModal from './BulkCancelModal';
 import WeeklyCalendar from './WeeklyCalendar';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
-import { PAGE_PAD, CARD_PAD } from '../utils/uiTokens';
+import { PAGE_PAD, CARD_PAD, useNavPalette } from '../utils/uiTokens';
 import RequestList from './RequestList';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
@@ -44,35 +44,6 @@ const formatDatePreview = (val: string) => {
   const d = new Date(`${val}T00:00:00`);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-};
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'AVAILABLE':       return 'green';
-    case 'IN_CLASS':        return 'blue';
-    case 'IN_CONSULTATION': return 'teal';
-    case 'IN_MEETING':      return 'yellow';
-    case 'ON_BREAK':        return 'orange';
-    case 'OUT_OF_OFFICE':   return 'gray';
-    case 'ON_LEAVE':        return 'purple';
-    case 'ABSENT':          return 'red';
-    default:                return 'gray';
-  }
-};
-
-const getStatusLabel = (status: string) => {
-  const labels: Record<string, string> = {
-    AVAILABLE:       'Available',
-    IN_CLASS:        'In Class',
-    IN_CONSULTATION: 'Consultation Hours',
-    IN_MEETING:      'In a Meeting',
-    ON_BREAK:        'On Break',
-    OUT_OF_OFFICE:   'Out of Office',
-    ON_LEAVE:        'On Leave',
-    ABSENT:          'Absent',
-    NOT_UPDATED:     'No Update',
-  };
-  return labels[status] ?? status;
 };
 
 // Matches the dayOfWeek convention used on the faculty side (1 = Mon ... 6 = Sat)
@@ -139,10 +110,11 @@ export default function StudentDashboard() {
   const [summaryApt, setSummaryApt] = useState<any>(null);
   const viewAccomplishment = (apt: any) => { setSummaryApt(apt); onSummaryOpen(); };
 
-  const cardBg = useColorModeValue('#ffffff', '#111d30');
-  const borderColor = useColorModeValue('#dde3ec', '#1e3048');
-  const textColor = useColorModeValue('#0f2240', '#e8f0fe');
-  const mutedText = useColorModeValue('#6b7fa0', '#7a93b0');
+  const palette = useNavPalette();
+  const cardBg = palette.surface;
+  const borderColor = palette.border;
+  const textColor = palette.text;
+  const mutedText = palette.textMid;
   const facultyRowHoverBg = useColorModeValue('gray.50', 'whiteAlpha.100');
   const readOnlyFieldBg = useColorModeValue('gray.50', 'whiteAlpha.100'); // hooks must run on every render, never inside conditional JSX
 
@@ -442,8 +414,8 @@ export default function StudentDashboard() {
                           </Td>
                           <Td>
                             <HStack>
-                              <Badge colorScheme={getStatusColor(prof.currentStatus)} px={3} py={1} borderRadius="full">
-                                {getStatusLabel(prof.currentStatus)}
+                              <Badge colorScheme={facultyStatusColor(prof.currentStatus)} px={3} py={1} borderRadius="full">
+                                {facultyStatusLabel(prof.currentStatus)}
                               </Badge>
                             </HStack>
                           </Td>
