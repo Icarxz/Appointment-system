@@ -1,5 +1,8 @@
 // One place for how appointment statuses are named and coloured on every dashboard.
 const LABELS: Record<string, string> = {
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  COMPLETED: 'Completed',
   PENDING: 'Waiting for Faculty Approval',
   'CANCELLED BY STUDENT': 'Cancelled by Student',
   'CANCELLED BY FACULTY': 'Cancelled by Faculty',
