@@ -31,7 +31,7 @@ const FACULTY_STATUS_LABELS: Record<string, string> = {
   OUT_OF_OFFICE: 'Out of Office',
   ON_LEAVE: 'On Leave',
   ABSENT: 'Absent',
-  NOT_UPDATED: 'No Update',
+  NOT_UPDATED: 'Not Published',
 };
 
 // Shared by Admin, Dean and Student views so live-status wording and colors never drift.
