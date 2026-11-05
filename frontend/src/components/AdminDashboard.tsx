@@ -11,6 +11,7 @@ import ClassGridEditor from './ClassGridEditor';
 import ProfileGate from './ProfileGate';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
+import ExportBar from './ExportBar';
 import ScrollTable from './ScrollTable';
 import WelcomeHeader from './WelcomeHeader';
 import { PAGE_PAD } from '../utils/uiTokens';
@@ -252,16 +253,16 @@ export default function AdminDashboard() {
         { key: 'records', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
       ]}
     >
-      <WelcomeHeader name={userName || ''} />
+      <WelcomeHeader name={userName || ''} actions={activePage === 'analytics' ? <ExportBar solid csvPath="/api/analytics/report.csv" fileBase="ccis-sync-report" /> : undefined} />
       <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
-        <PageTitle>
+        {/* The analytics page has no title (the menu already says where you are), like the faculty analytics. */}
+        {activePage !== 'analytics' && <PageTitle>
           {activePage === 'home' && "Teaching Schedules"}
           {activePage === 'provision' && "Provision Account"}
           {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : "Student Management")}
           {activePage === 'appointments' && "Appointment Management"}
-          {activePage === 'analytics' && "Reports & Analytics"}
           {activePage === 'records' && "Consultation Records"}
-        </PageTitle>
+        </PageTitle>}
 
         {activePage === 'home' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
@@ -490,10 +491,7 @@ export default function AdminDashboard() {
         )}
 
         {activePage === 'analytics' && (
-          <Box id="print-area" bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <HStack justifyContent="space-between" mb={6} className="no-print">
-              <Text color={mutedText} fontSize="sm">Calculated live by the database.</Text>
-            </HStack>
+          <Box id="print-area">
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={textColor}>Reports & Analytics</Heading>
               <Text fontSize="sm" color={mutedText}>Generated {formatDateTime(new Date())}</Text>

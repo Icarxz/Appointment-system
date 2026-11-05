@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Box, HStack, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react';
+import { Grid, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
-import ExportBar from './ExportBar';
-import PageTitle from './PageTitle';
+import { CheckCircleIcon, CheckIcon, CloseIcon, TimeIcon, WarningIcon } from '@chakra-ui/icons';
 import { ChartCard, HBarChart, KpiTile, PieChart } from './AnalyticsCharts';
 import type { HeatmapData, LV } from './AnalyticsCharts';
 import { AppealsByReason, CohortTable, DrilldownDrawer } from './AnalyticsTables';
@@ -25,7 +24,7 @@ interface Data {
   students: { uniqueStudents: number; cohorts: CohortRow[]; purposes: { total: number; items: { label: string; count: number; percent: number }[] } };
 }
 
-const trend = (w: Window) => `last 4 weeks: ${w.last4} (before that: ${w.prev4})`;
+const trend = (w: Window) => `${w.last4} in last 4 wks · ${w.prev4} before`;
 const pctText = (n: number | null) => (n === null ? '—' : `${n}%`);
 
 // A faculty member's own analytics. The server only ever returns the logged-in faculty's data.
@@ -50,26 +49,27 @@ export default function FacultyAnalytics() {
 
   return (
     <VStack align="stretch" spacing={6} id="printable-report">
-      <HStack justify="space-between" flexWrap="wrap">
-        <PageTitle>My Analytics</PageTitle>
-        <ExportBar csvPath="/api/analytics/me.csv" fileBase="my-analytics" />
-      </HStack>
+      {/* No page title and no export buttons here: the buttons live in the Welcome bar (FacultyDashboard). */}
       <Text className="print-only" fontSize="sm" color="black">Generated {new Date(data.generatedAt).toLocaleString()}</Text>
 
-      <SimpleGrid columns={{ base: 2, md: 3 }} spacing={4}>
-        <KpiTile label="Requests" value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="Requests you reviewed or that happened. Requests still waiting for your answer are not counted."
+      {/* Wide screens: the tiles are a column on the left and the charts fill the rest, so tiles and charts share one
+          screen. Narrower: the tiles are a grid above the charts. Completion rate is always the last tile. */}
+      <Grid templateColumns={{ base: '1fr', xl: '230px minmax(0, 1fr)' }} gap={4} alignItems="start">
+      <SimpleGrid columns={{ base: 2, md: 3, xl: 1 }} spacing={3}>
+        <KpiTile dense label="Requests" icon={<CheckCircleIcon />} value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="Requests you reviewed or that happened. Requests still waiting for your answer are not counted."
           onClick={() => open('Requests', data.drilldown.requests)} />
-        <KpiTile label="Completed" value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
-        <KpiTile label="Missed" value={k.missed.total} sub={`${k.missed.student} by students · ${k.missed.faculty} by faculty · ${pctText(k.missedRate)} of finished`} accent="#f08a3c"
+        <KpiTile dense label="Completed" icon={<CheckCircleIcon />} value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
+        <KpiTile dense label="Missed" icon={<WarningIcon />} value={k.missed.total} sub={`${k.missed.student} students · ${k.missed.faculty} faculty · ${pctText(k.missedRate)} missed rate`} accent="#f08a3c"
           hint="Missed rate = missed ÷ (completed + missed). Appeals do not reduce this number." onClick={() => open('Missed consultations', data.drilldown.missed, ['Missed by students', 'Missed by me'])} />
-        <KpiTile label="Cancelled" value={k.cancelled.student + k.cancelled.faculty} sub={`${k.cancelled.student} by students · ${k.cancelled.faculty} by faculty`} accent="#64748b"
+        <KpiTile dense label="Cancelled" icon={<CloseIcon boxSize={3} />} value={k.cancelled.student + k.cancelled.faculty} sub={`${k.cancelled.student} students · ${k.cancelled.faculty} faculty`} accent="#64748b"
           onClick={() => open('Cancelled consultations', data.drilldown.cancelled, ['Cancelled by students', 'Cancelled by me'])} />
-        <KpiTile label="Completion rate" value={pctText(k.completionRate)} sub="completed ÷ (completed + missed)" accent="#8b5cf6" hint="Of the consultations that were supposed to happen, how many were completed." />
-        <KpiTile label="Approved" value={k.approved.total} sub={`${trend(k.approved)} · ${o.declined} declined · ${o.expired} expired`} accent="#0891b2" hint="Requests you approved. Approval rate = approved ÷ (approved + declined). Requests that expired unanswered are shown separately and do not lower it."
+        <KpiTile dense label="Approved" icon={<CheckIcon />} value={k.approved.total} sub={`${k.approved.last4} in last 4 wks · ${o.declined} declined`} accent="#0891b2" hint="Requests you approved. Approval rate = approved ÷ (approved + declined). Requests that expired unanswered are shown separately and do not lower it."
           onClick={() => open('Approved requests', data.drilldown.approved)} />
+        <KpiTile dense label="Completion rate" icon={<TimeIcon />} value={pctText(k.completionRate)} sub="completed ÷ finished" accent="#8b5cf6" hint="Of the consultations that were supposed to happen, how many were completed." />
       </SimpleGrid>
 
-      <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={4}>
+      <VStack align="stretch" spacing={4} minW={0}>
+      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
         <ChartCard title="What happened to requests" hint="Finished and cancelled requests.">
           <PieChart segments={[
             { label: 'Completed', value: o.completed, color: '#16a34a' },
@@ -80,12 +80,14 @@ export default function FacultyAnalytics() {
             { label: 'Expired (no response)', value: o.expired, color: '#ca8a04' },
           ]} />
         </ChartCard>
-        <Box gridColumn={{ lg: 'span 2' }}>
-          <ChartCard title="Why students come" hint={`${s.purposes.total} requests, top reasons.`}>
-            <HBarChart color="#0891b2" items={s.purposes.items.map(p => ({ label: p.label, value: p.count, note: `${p.percent}%` }))} emptyText="No requests yet." />
-          </ChartCard>
-        </Box>
+        <ChartCard title="Students by year level and program" hint="Different students who asked you for a consultation.">
+          <CohortTable rows={s.cohorts} emptyText="No students yet." note="Counts each student once, even if they requested several times. Pending requests are not counted." />
+        </ChartCard>
       </SimpleGrid>
+
+      <ChartCard title="Why students come" hint={`${s.purposes.total} requests, top reasons.`}>
+        <HBarChart color="#0891b2" items={s.purposes.items.map(p => ({ label: p.label, value: p.count, note: `${p.percent}%` }))} emptyText="No requests yet." />
+      </ChartCard>
 
       <ChartCard title="Appeals from my students, by reason" hint="Reasons your students gave. Appeals do not remove a no-show from your totals.">
         <AppealsByReason rows={appeals.rows} reasons={appeals.reasons} />
@@ -94,9 +96,8 @@ export default function FacultyAnalytics() {
         </Text>
       </ChartCard>
 
-      <ChartCard title="Students by year level and program" hint="Different students who asked you for a consultation.">
-        <CohortTable rows={s.cohorts} emptyText="No students yet." note="Counts each student once, even if they requested several times. Pending requests are not counted." />
-      </ChartCard>
+      </VStack>
+      </Grid>
       <DrilldownDrawer isOpen={drawer.isOpen} onClose={drawer.onClose} title={panel?.title || ''} data={panel?.data || null} studentLabel={panel?.split?.[0] || "Students"} facultyLabel={panel?.split?.[1]} studentsOnly={!panel?.split} />
     </VStack>
   );
