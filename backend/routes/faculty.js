@@ -719,7 +719,7 @@ router.patch('/users/:id/name', requireAuth(['ADMIN']), async (req, res) => {
 router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']), ownerOrStaff(r => r.params.facultyId), async (req, res) => {
   try {
     const { facultyId } = req.params;
-    const appointments = await Appointment.find({ facultyId }).sort({ createdAt: -1 });
+    const appointments = await Appointment.find({ facultyId }).populate('studentId', 'gender').sort({ createdAt: -1 });
 
     // Each request still waiting for an answer also carries `availableWindow`: how much uninterrupted bookable time
     // (consultation + vacant hours) there is from its start, up to the next class or approved appointment.
@@ -1173,7 +1173,7 @@ router.get('/consultation-log/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN'
     const log = await Appointment.find({ 
       facultyId: req.params.facultyId, 
       status: 'COMPLETED' 
-    }).sort({ completedAt: 1 });
+    }).populate('studentId', 'gender').sort({ completedAt: 1 });
     res.json(log);
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching consultation log.' });
