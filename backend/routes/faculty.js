@@ -1044,6 +1044,32 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, 
   }
 });
 
+// Edit the two consultation-log fields after sign-off. Only the owning faculty member may update them.
+router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), async (req, res) => {
+  try {
+    const apt = await Appointment.findOne({
+      _id: req.params.id,
+      facultyId: req.user.userId,
+      status: 'COMPLETED',
+    });
+    if (!apt) return res.status(404).json({ error: 'Completed consultation not found.' });
+
+    const casePresented = String(req.body.casePresented ?? '').trim();
+    const interventionTaken = String(req.body.interventionTaken ?? '').trim();
+    if (!casePresented || !interventionTaken) {
+      return res.status(400).json({ error: 'Enter both case presented and intervention / action taken.' });
+    }
+
+    apt.casePresented = casePresented;
+    apt.interventionTaken = interventionTaken;
+    await apt.save();
+
+    res.json({ message: 'Consultation log updated.', appointment: apt });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Could not update consultation log.' });
+  }
+});
+
 // Faculty cancels an APPROVED consultation (counted as "CANCELLED BY FACULTY" in the reports)
 router.patch('/appointment/:id/cancel', requireAuth(['FACULTY']), async (req, res) => {
   try {
