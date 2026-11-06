@@ -27,7 +27,7 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: { isOpen: boolea
                 <VStack align="stretch" spacing={1} pl={3}>
                   <Text>• Account details: full name, gender, Gmail address, role (student or faculty), and your password (stored only in encrypted form).</Text>
                   <Text>• School identity: School ID or Faculty ID, and your program, year, and section (students) or position (faculty).</Text>
-                  <Text>• Consultation records: appointment requests (date, time, purpose), and for completed consultations, the case presented, action taken, and remarks.</Text>
+                  <Text>• Consultation records: appointment requests (date, time, purpose), and for completed consultations, the case presented and action taken.</Text>
                   <Text>• Faculty availability: class schedules, consultation hours, live status and location, and personal calendar notes.</Text>
                   <Text>• In-app notifications about your appointments and account.</Text>
                 </VStack>
