@@ -205,82 +205,21 @@ export default function FacultyDashboard() {
   };
 
   const [consultLog, setConsultLog] = useState<any[]>([]);
-  const [logForm, setLogForm] = useState<{[id: string]: {casePresented: string, interventionTaken: string, remarks: string}}>({});
+  const [logForm, setLogForm] = useState<{ [id: string]: { casePresented: string; interventionTaken: string } }>({});
+  const [savingLogId, setSavingLogId] = useState<string | null>(null);
   // Shown right after a consultation is successfully signed off.
   const [completionModal, setCompletionModal] = useState<{ studentName: string; studentSection: string } | null>(null);
-
-  // Manual, print-only edits for the VAA-FM-035 consultation form table.
-  // System-booked rows (from consultLog) come pre-filled; blank rows are for
-  // walk-in consultations the faculty logs by hand. Edits here only affect
-  // the on-screen/exported copy of the form — they are NOT saved back to the
-  // appointment records in the database.
-  type FormRowField = 'studentName' | 'studentSection' | 'date' | 'casePresented' | 'interventionTaken' | 'remarks';
-  const [formEdits, setFormEdits] = useState<{ [rowIndex: number]: Partial<Record<FormRowField, string>> }>({});
-  const editFormCell = (rowIndex: number, field: FormRowField, value: string) => {
-    setFormEdits(prev => ({ ...prev, [rowIndex]: { ...prev[rowIndex], [field]: value } }));
-  };
-
-// Builds the effective value for one cell of the printable consultation
-// form: a manual edit (if the faculty typed one) wins, otherwise fall back
-// to the system record for that row, otherwise blank.
-function formCellValue(
-  formEdits: { [rowIndex: number]: Partial<Record<string, string>> },
-  rowIndex: number,
-  field: string,
-  entry: any
-) {
-  const edited = formEdits[rowIndex]?.[field];
-  if (edited !== undefined) return edited;
-  return entry?.[field] || '';
-}
-
-// Downloads the consultation form as a .doc file. There's no Word-generation
-// library in this project (and installing one this close to defense is risky),
-// so this uses the standard trick of serving HTML with a Word MIME type and a
-// .doc extension — Word/LibreOffice/Google Docs all open it as a real document.
-function downloadFormAsWord(tableHtml: string, facultyName: string) {
-  const html = `
-    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head><meta charset="utf-8"><title>Students' Consultation Form</title></head>
-    <body style="font-family: Calibri, Arial, sans-serif;">
-      <div style="text-align:center; margin-bottom:12px;">
-        <p style="margin:0;">Republic of the Philippines</p>
-        <p style="margin:0; font-weight:bold;">UNIVERSITY OF ANTIQUE</p>
-        <p style="margin:0;">Sibalom, Antique</p>
-        <h2 style="margin-top:14px; letter-spacing:1px;">STUDENTS' CONSULTATION FORM</h2>
-      </div>
-      <table style="width:100%; margin-bottom:10px;"><tr>
-        <td style="text-align:left;">Name of Faculty: <b>${facultyName}</b><br/>School Term: __________ Sem, AY __________</td>
-        <td style="text-align:right;">Consultation Schedule: __________</td>
-      </tr></table>
-      ${tableHtml}
-      <table style="width:100%; margin-top:10px; font-size:11px;"><tr>
-        <td style="text-align:left;">VAA-FM-035</td>
-        <td style="text-align:right;">Rev.1/01-15-20</td>
-      </tr></table>
-    </body>
-    </html>`;
-  const blob = new Blob(['﻿', html], { type: 'application/msword' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Consultation-Form-${facultyName.replace(/\s+/g, '-')}.doc`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
 
 const fetchLog = () => {
   authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/consultation-log/${userId}`)
     .then(r => r.json())
-    .then(setConsultLog)
+    .then(data => setConsultLog(Array.isArray(data) ? data : []))
     .catch(() => {});
 };
 useEffect(() => { fetchLog(); }, []);
 
 const submitLogEntry = async (aptId: string) => {
-  const entry = logForm[aptId] || { casePresented: '', interventionTaken: '', remarks: '' };
+  const entry = logForm[aptId] || { casePresented: '', interventionTaken: '' };
   const apt = myAppointments.find(a => a._id === aptId);
   try {
     const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${aptId}/complete`, {
@@ -295,6 +234,32 @@ const submitLogEntry = async (aptId: string) => {
     fetchData();
   } catch (error: any) {
     toast({ title: 'Failed', description: error.message, status: 'error' });
+  }
+};
+
+const updateSavedLogField = (aptId: string, field: 'casePresented' | 'interventionTaken', value: string) => {
+  setConsultLog(prev => prev.map(apt => apt._id === aptId ? { ...apt, [field]: value } : apt));
+};
+
+const saveConsultLogChanges = async (apt: any) => {
+  setSavingLogId(apt._id);
+  try {
+    const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${apt._id}/consultation-log`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        casePresented: apt.casePresented || '',
+        interventionTaken: apt.interventionTaken || '',
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not update this consultation log.');
+    setConsultLog(prev => prev.map(row => row._id === apt._id ? data.appointment : row));
+    toast({ title: 'Consultation log updated', status: 'success', duration: 2500 });
+  } catch (error: any) {
+    toast({ title: 'Could not save changes', description: error.message, status: 'error' });
+  } finally {
+    setSavingLogId(null);
   }
 };
 
@@ -1160,71 +1125,149 @@ const saveConsultationHours = async () => {
         {activePage === "log" && (
           <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
             <PageTitle>Consultation Log</PageTitle>
-            {/* Approved consultations awaiting sign-off */}
-            <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" mb={6} className="no-print">
-              <Heading size="md" color={textColor} mb={4}>Log consultation details</Heading>
-              {myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)').length === 0 ? (
-                <Text color={mutedText}>No completed consultations to log.</Text>
-              ) : myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)').map(apt => (
-                <Box key={apt._id} borderWidth="1px" borderColor={borderColor} borderRadius="md" p={4} mb={3}>
-                  <Text fontWeight="bold" color={textColor}>{apt.studentName} ({apt.studentSection}) — {formatDate(apt.date)} at {formatTime(apt.time)}{apt.status === 'MISSED (FACULTY)' && <Badge ml={2} colorScheme="orange">Counted as missed — log it late if it took place</Badge>}</Text>
-                  <Text fontSize="sm" color={mutedText} mb={3}>Student's stated reason: {apt.reason}</Text>
-                  <VStack spacing={2} align="stretch">
-                    <Textarea size="sm" placeholder="Case Presented" value={logForm[apt._id]?.casePresented || ''}
-                      onChange={e => setLogForm({...logForm, [apt._id]: {...logForm[apt._id], casePresented: e.target.value}})} />
-                    <Textarea size="sm" placeholder="Intervention / Action Taken" value={logForm[apt._id]?.interventionTaken || ''}
-                      onChange={e => setLogForm({...logForm, [apt._id]: {...logForm[apt._id], interventionTaken: e.target.value}})} />
-                    <Textarea size="sm" placeholder="Remarks" value={logForm[apt._id]?.remarks || ''}
-                      onChange={e => setLogForm({...logForm, [apt._id]: {...logForm[apt._id], remarks: e.target.value}})} />
-                    <ChakraButton size="sm" colorScheme="green" onClick={() => submitLogEntry(apt._id)}>Submit Consultation Log</ChakraButton>
-                  </VStack>
-                </Box>
-              ))}
+
+            <Flex className="no-print" justify="space-between" align="center" gap={3} flexWrap="wrap" mb={4}>
+              <Text color={mutedText} fontSize="sm">
+                Enter and update consultation details in the tables below. The official form is prepared only when you print or save as PDF.
+              </Text>
+              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>
+                Print / Save as PDF
+              </ChakraButton>
+            </Flex>
+
+            <Box className="no-print" bg={cardBg} p={5} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" mb={5}>
+              <Heading size="md" color={textColor} mb={1}>Ready for sign-off</Heading>
+              <Text color={mutedText} fontSize="sm" mb={4}>
+                Complete the consultation details in the row, then save it to add the entry to your records.
+              </Text>
+              <Box overflowX="auto">
+                <Table size="sm" minW="980px" variant="simple">
+                  <Thead>
+                    <Tr>
+                      <Th color={mutedText}>Student / Advisee</Th>
+                      <Th color={mutedText}>Course and Year</Th>
+                      <Th color={mutedText}>Date</Th>
+                      <Th color={mutedText}>Case Presented</Th>
+                      <Th color={mutedText}>Intervention / Action Taken</Th>
+                      <Th color={mutedText}>Action</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)').length === 0 ? (
+                      <Tr><Td colSpan={6} color={mutedText} py={5} textAlign="center">No consultations are waiting for sign-off.</Td></Tr>
+                    ) : myAppointments
+                      .filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)')
+                      .map(apt => (
+                        <Tr key={apt._id}>
+                          <Td minW="190px" color={textColor}>
+                            <Text fontWeight="600">{apt.studentName}</Text>
+                            {apt.status === 'MISSED (FACULTY)' && <Badge mt={1} colorScheme="orange">Late sign-off</Badge>}
+                          </Td>
+                          <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>
+                          <Td color={textColor} minW="110px">{formatDate(apt.date)}</Td>
+                          <Td minW="210px">
+                            <Textarea
+                              size="sm"
+                              rows={2}
+                              resize="vertical"
+                              aria-label={`Case presented for ${apt.studentName}`}
+                              placeholder="Enter case presented"
+                              value={logForm[apt._id]?.casePresented || ''}
+                              onChange={e => setLogForm(prev => ({
+                                ...prev,
+                                [apt._id]: { ...(prev[apt._id] || { casePresented: '', interventionTaken: '' }), casePresented: e.target.value },
+                              }))}
+                            />
+                          </Td>
+                          <Td minW="240px">
+                            <Textarea
+                              size="sm"
+                              rows={2}
+                              resize="vertical"
+                              aria-label={`Intervention or action taken for ${apt.studentName}`}
+                              placeholder="Enter intervention / action taken"
+                              value={logForm[apt._id]?.interventionTaken || ''}
+                              onChange={e => setLogForm(prev => ({
+                                ...prev,
+                                [apt._id]: { ...(prev[apt._id] || { casePresented: '', interventionTaken: '' }), interventionTaken: e.target.value },
+                              }))}
+                            />
+                          </Td>
+                          <Td minW="125px">
+                            <ChakraButton size="sm" colorScheme="green" onClick={() => submitLogEntry(apt._id)}>
+                              Complete &amp; Save
+                            </ChakraButton>
+                          </Td>
+                        </Tr>
+                      ))}
+                  </Tbody>
+                </Table>
+              </Box>
             </Box>
 
-            {/* The official form layout — always visible and editable here, not just
-                inside the print dialog. Rows pre-fill from completed consultations;
-                any cell can be typed into (e.g. to log a walk-in, or fix a typo)
-                before printing/exporting. Those edits only affect this view/export,
-                not the underlying appointment record. */}
-            <Box bg="white" color="black" p={8} borderRadius="lg" borderWidth="1px" borderColor={borderColor} id="printable-log">
-              <HStack justifyContent="flex-end" mb={4} className="no-print">
-                <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
-                <ChakraButton size="sm" colorScheme="gray" onClick={() => {
-                  const rows = Array.from({ length: Math.max(15, consultLog.length) }).map((_, i) => {
-                    const entry = consultLog[i];
-                    const v = (field: FormRowField) => formCellValue(formEdits, i, field, entry);
-                    return `<tr>
-                      <td style="border:1px solid black;padding:4px;">${i + 1}. ${v('studentName')}</td>
-                      <td style="border:1px solid black;padding:4px;">${v('studentSection')}</td>
-                      <td style="border:1px solid black;padding:4px;">${v('date')}</td>
-                      <td style="border:1px solid black;padding:4px;">${v('casePresented')}</td>
-                      <td style="border:1px solid black;padding:4px;">${v('interventionTaken')}</td>
-                      <td style="border:1px solid black;padding:4px;">${v('remarks')}</td>
-                    </tr>`;
-                  }).join('');
-                  const tableHtml = `<table style="width:100%; border-collapse:collapse; font-size:11px;">
-                    <thead><tr style="background:#4a5568;color:white;">
-                      <th style="border:1px solid black;padding:4px;">Name of Student/Advisee</th>
-                      <th style="border:1px solid black;padding:4px;">Course and Year</th>
-                      <th style="border:1px solid black;padding:4px;">Date</th>
-                      <th style="border:1px solid black;padding:4px;">Case Presented</th>
-                      <th style="border:1px solid black;padding:4px;">Intervention/Action Taken</th>
-                      <th style="border:1px solid black;padding:4px;">Remarks</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
-                  </table>`;
-                  downloadFormAsWord(tableHtml, userName || 'Faculty');
-                }}>
-                  Download as Word
-                </ChakraButton>
-              </HStack>
+            <Box className="no-print" bg={cardBg} p={5} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+              <Heading size="md" color={textColor} mb={1}>Saved consultation records</Heading>
+              <Text color={mutedText} fontSize="sm" mb={4}>
+                You can edit the case and action fields, then select Save Changes on the same row.
+              </Text>
+              <Box overflowX="auto">
+                <Table size="sm" minW="980px" variant="simple">
+                  <Thead>
+                    <Tr>
+                      <Th color={mutedText}>Student / Advisee</Th>
+                      <Th color={mutedText}>Course and Year</Th>
+                      <Th color={mutedText}>Date</Th>
+                      <Th color={mutedText}>Case Presented</Th>
+                      <Th color={mutedText}>Intervention / Action Taken</Th>
+                      <Th color={mutedText}>Action</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {consultLog.length === 0 ? (
+                      <Tr><Td colSpan={6} color={mutedText} py={5} textAlign="center">No saved consultation records yet.</Td></Tr>
+                    ) : consultLog.map(apt => (
+                      <Tr key={apt._id}>
+                        <Td minW="190px" color={textColor} fontWeight="600">{apt.studentName}</Td>
+                        <Td minW="130px" color={textColor}>{apt.studentSection || '—'}</Td>
+                        <Td minW="110px" color={textColor}>{formatDate(apt.date)}</Td>
+                        <Td minW="210px">
+                          <Textarea
+                            size="sm"
+                            rows={2}
+                            resize="vertical"
+                            aria-label={`Edit case presented for ${apt.studentName}`}
+                            value={apt.casePresented || ''}
+                            onChange={e => updateSavedLogField(apt._id, 'casePresented', e.target.value)}
+                          />
+                        </Td>
+                        <Td minW="240px">
+                          <Textarea
+                            size="sm"
+                            rows={2}
+                            resize="vertical"
+                            aria-label={`Edit intervention or action taken for ${apt.studentName}`}
+                            value={apt.interventionTaken || ''}
+                            onChange={e => updateSavedLogField(apt._id, 'interventionTaken', e.target.value)}
+                          />
+                        </Td>
+                        <Td minW="125px">
+                          <ChakraButton size="sm" colorScheme="blue" onClick={() => saveConsultLogChanges(apt)} isLoading={savingLogId === apt._id}>
+                            Save Changes
+                          </ChakraButton>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              </Box>
+            </Box>
 
-              <VStack spacing={0} mb={6}>
+            <Box id="printable-log" className="print-only" bg="white" color="black" p={6}>
+              <VStack spacing={0} mb={5}>
                 <Text fontSize="sm">Republic of the Philippines</Text>
                 <Text fontSize="sm" fontWeight="bold">UNIVERSITY OF ANTIQUE</Text>
                 <Text fontSize="sm">Sibalom, Antique</Text>
-                <Heading size="md" mt={4} letterSpacing="wide">STUDENTS' CONSULTATION FORM</Heading>
+                <Heading size="md" mt={3} letterSpacing="wide">STUDENTS' CONSULTATION FORM</Heading>
               </VStack>
 
               <HStack justifyContent="space-between" mb={4} fontSize="sm">
@@ -1243,35 +1286,18 @@ const saveConsultationHours = async () => {
                     <Th color="white" border="1px solid black">Date</Th>
                     <Th color="white" border="1px solid black">Case Presented</Th>
                     <Th color="white" border="1px solid black">Intervention/Action Taken</Th>
-                    <Th color="white" border="1px solid black">Remarks</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
                   {Array.from({ length: Math.max(15, consultLog.length) }).map((_, i) => {
                     const entry = consultLog[i];
-                    const cellInput = (field: FormRowField, placeholder = '') => (
-                      <Input
-                        variant="unstyled"
-                        size="sm"
-                        fontSize="xs"
-                        value={formCellValue(formEdits, i, field, entry)}
-                        placeholder={placeholder}
-                        onChange={e => editFormCell(i, field, e.target.value)}
-                      />
-                    );
                     return (
                       <Tr key={i} height="34px">
-                        <Td border="1px solid black" p={1}>
-                          <HStack spacing={1}>
-                            <Text fontSize="xs" whiteSpace="nowrap">{i + 1}.</Text>
-                            {cellInput('studentName')}
-                          </HStack>
-                        </Td>
-                        <Td border="1px solid black" p={1}>{cellInput('studentSection')}</Td>
-                        <Td border="1px solid black" p={1}>{cellInput('date')}</Td>
-                        <Td border="1px solid black" p={1}>{cellInput('casePresented')}</Td>
-                        <Td border="1px solid black" p={1}>{cellInput('interventionTaken')}</Td>
-                        <Td border="1px solid black" p={1}>{cellInput('remarks')}</Td>
+                        <Td border="1px solid black" p={1} fontSize="xs">{entry ? `${i + 1}. ${entry.studentName || ''}` : `${i + 1}.`}</Td>
+                        <Td border="1px solid black" p={1} fontSize="xs">{entry?.studentSection || ''}</Td>
+                        <Td border="1px solid black" p={1} fontSize="xs">{entry?.date ? formatDate(entry.date) : ''}</Td>
+                        <Td border="1px solid black" p={1} fontSize="xs" whiteSpace="pre-wrap">{entry?.casePresented || ''}</Td>
+                        <Td border="1px solid black" p={1} fontSize="xs" whiteSpace="pre-wrap">{entry?.interventionTaken || ''}</Td>
                       </Tr>
                     );
                   })}
