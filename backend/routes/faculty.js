@@ -1059,6 +1059,9 @@ router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), asyn
 
     const casePresented = String(req.body.casePresented ?? '').trim();
     const interventionTaken = String(req.body.interventionTaken ?? '').trim();
+    if (!casePresented || !interventionTaken) {
+      return res.status(400).json({ error: 'Enter both case presented and intervention / action taken.' });
+    }
     apt.casePresented = casePresented;
     apt.interventionTaken = interventionTaken;
     await apt.save();
