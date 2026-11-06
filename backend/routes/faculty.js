@@ -533,8 +533,8 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
     // No request limit (project decision, Nov 4): any number of students may request an hour; the professor accepts one.
     // One student, though, may not repeat himself (same professor + same reason) or double-book himself
     // (same date and hour with two professors). Rules and tests: utils/duplicateRequest.js.
-    const mine = await Appointment.find({ studentId, status: { $in: ['PENDING', 'APPROVED'] } }).select('facultyId date time reason status');
-    const conflict = findConflict(mine, { facultyId, date, time, reason });
+    const mine = await Appointment.find({ studentId, status: { $in: ['PENDING', 'APPROVED'] } }).select('facultyId date time duration reason status');
+    const conflict = findConflict(mine, { facultyId, date, time, duration, reason });
     if (conflict) {
       const f = await User.findById(facultyId).select('name');
       return res.status(409).json({ error: conflictMessage(conflict, f?.name || 'this professor'), code: conflict.code });
