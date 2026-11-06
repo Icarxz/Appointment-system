@@ -1,16 +1,14 @@
-import React, { useState } from 'react';
-import { ViewIcon, ViewOffIcon, EmailIcon, PhoneIcon, CalendarIcon, CheckCircleIcon, ChevronRightIcon } from '@chakra-ui/icons';
+import React from 'react';
+import { EmailIcon, PhoneIcon, CalendarIcon, CheckCircleIcon, ChevronRightIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
 import { isSafeAppLink, linkMatchesRole } from '../utils/deepLink';
 import GoogleSignInButton from './GoogleSignInButton';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 import {
-  Box, Flex, Heading, Text, Input, Button, VStack, useToast,
-  FormControl, FormLabel, useColorModeValue,
-  HStack, InputGroup, InputRightAddon,
-  InputRightElement,
-  IconButton,
-  Container, Tabs, TabList, Tab,
+  Box, Flex, Heading, Text, Button, VStack, useToast,
+  useColorModeValue,
+  HStack,
+  Container,
   SimpleGrid,
   Icon,
   Stack,
@@ -151,7 +149,6 @@ export default function LandingPage() {
   const modalBg = useColorModeValue('white', 'gray.800');
   const heroGradient = useColorModeValue('linear(to-b, #f3fafd, #e3f2f9)', 'linear(to-b, #0b1220, #0f1d33)');
   const faqHoverBg = useColorModeValue('#f3fafd', 'gray.700');
-  const linkColor = useColorModeValue('#0b6aa8', TEAL);
   const outlineBorder = useColorModeValue(NAVY, 'whiteAlpha.700');
   const outlineHoverBg = useColorModeValue('#dff0f8', 'whiteAlpha.200');
 
@@ -161,27 +158,9 @@ export default function LandingPage() {
 
   const goTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  // Login State
-  // The fields already show "@antiquespride.edu.ph" on the right, so keep only the part before any "@"
-  // (if someone types or pastes a full address, the domain is dropped instead of doubled).
-  const cleanEmailName = (v: string) => v.replace(/@.*$/, '').replace(/\s/g, '');
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [showLoginPw, setShowLoginPw] = useState(false);
-  // Which tab of the login box: students, or faculty & staff (Faculty, Dean, Admin). The server double-checks.
-  const [audience, setAudience] = useState<'STUDENT' | 'STAFF'>('STUDENT');
-
-  // Forgot Password modal state
-  const { isOpen: isForgotOpen, onOpen: onForgotOpen, onClose: onForgotClose } = useDisclosure();
   const { isOpen: isPrivacyOpen, onClose: onPrivacyClose } = useDisclosure();
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [isSendingReset, setIsSendingReset] = useState(false);
 
-  // --- THE TRUE LOGIN HANDLER ---
-  // Local development only: when the server has no email set up it hands back the link, shown here.
-  const [devLink, setDevLink] = useState<{ title: string; link: string; button: string } | null>(null);
-  // Shared by password login and Google sign-in: store the session and go to the right dashboard.
+  // After Google sign-in: store the session and go to the right dashboard.
   const finishLogin = (data: any) => {
     // Save secure data to local storage
     localStorage.setItem('userId', data._id);
@@ -210,13 +189,14 @@ export default function LandingPage() {
     else if (data.role === 'DEAN') navigate('/dean-dashboard');
   };
 
-  // Google sign-in: the server verifies the token and checks the school domain.
+  // The only way to sign in. The server verifies the token, checks the school domain and decides the role
+  // (student, faculty, dean or admin) from the roster / ADMIN_EMAILS, so there is no Student / Faculty choice here.
   const handleGoogleCredential = async (credential: string) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential, audience })
+        body: JSON.stringify({ credential })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
@@ -226,132 +206,18 @@ export default function LandingPage() {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    
-    try {
-      const fullLoginEmail = `${loginEmail.trim()}@antiquespride.edu.ph`.toLowerCase();
-
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/faculty/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: fullLoginEmail, password: loginPassword, audience })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.error);
-
-      finishLogin(data);
-
-    } catch (error: any) {
-      toast({ title: 'Authentication Failed', description: error.message, status: 'error', position: 'top' });
-    }
-    setIsLoggingIn(false);
-  };
-
-  // --- FORGOT PASSWORD HANDLER ---
-  // Always shows the same success message whether or not the email exists,
-  // because the backend intentionally gives a neutral response (prevents
-  // someone from using this form to check which emails are registered).
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSendingReset(true);
-
-    try {
-      const fullEmail = `${forgotEmail.trim()}@antiquespride.edu.ph`.toLowerCase();
-
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/faculty/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: fullEmail })
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Something went wrong.');
-
-      if (data.devLink) {
-        setDevLink({ title: 'Password reset link', link: data.devLink, button: 'Reset my password' });
-      } else {
-        toast({
-          title: 'Check your email',
-          description: data.message,
-          status: 'success',
-          duration: 6000
-        });
-      }
-      setForgotEmail('');
-      onForgotClose();
-    } catch (error: any) {
-      toast({ title: 'Request failed', description: error.message, status: 'error' });
-    }
-    setIsSendingReset(false);
-  };
-
-
-  // The original login/register form, unchanged, now shown inside the modal
+  // The sign-in box: Google only. New students are created on first sign-in; faculty, Dean and Admin accounts are added
+  // by the administrator, so their first sign-in simply works once they are on the list.
   const authTabs = (
-    <Box>
-      <Tabs isFitted index={audience === 'STUDENT' ? 0 : 1} onChange={(i) => setAudience(i === 0 ? 'STUDENT' : 'STAFF')} colorScheme="blue">
-        <TabList>
-          <Tab fontWeight="600">Student</Tab>
-          <Tab fontWeight="600">Faculty &amp; Staff</Tab>
-        </TabList>
-      </Tabs>
-              {/* LOGIN PANEL */}
-              <Box p={8}>
-                <Text fontSize="sm" color="gray.600" mb={4}>
-                  {audience === 'STUDENT'
-                    ? 'New here? Signing in with your school Google account creates your student account. You will then complete your profile with your School ID.'
-                    : 'Faculty, Dean and Admin accounts are added by the administrator, so there is no sign-up. Sign in with your school Google account.'}
-                </Text>
-                <form onSubmit={handleLogin}>
-                  <VStack spacing={5}>
-                    <FormControl isRequired>
-                      <FormLabel>School email</FormLabel>
-                      <InputGroup>
-                        <Input
-                          placeholder="e.g. jdelacruz"
-                          value={loginEmail}
-                          onChange={(e) => setLoginEmail(cleanEmailName(e.target.value))}
-                        />
-                        <InputRightAddon bg="gray.100" color="gray.600" fontWeight="bold">
-                          @antiquespride.edu.ph
-                        </InputRightAddon>
-                      </InputGroup>
-                    </FormControl>
-                    <FormControl isRequired>
-                      <FormLabel>Password</FormLabel>
-                      <InputGroup>
-                        <Input type={showLoginPw ? 'text' : 'password'} value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
-                        <InputRightElement>
-                          <IconButton
-                            aria-label="Toggle password visibility"
-                            icon={showLoginPw ? <ViewOffIcon /> : <ViewIcon />}
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setShowLoginPw(!showLoginPw)}
-                          />
-                        </InputRightElement>
-                      </InputGroup>
-                      <Flex justify="flex-end" mt={1}>
-                        <ChakraLink fontSize="sm" color={linkColor} onClick={onForgotOpen}>
-                          Forgot password?
-                        </ChakraLink>
-                      </Flex>
-                    </FormControl>
-                    <Button type="submit" colorScheme="blue" size="lg" w="100%" isLoading={isLoggingIn}>Secure Login</Button>
-                  </VStack>
-                </form>
-                <Flex align="center" my={5}>
-                  <Box flex="1" h="1px" bg="gray.200" /><Text mx={3} fontSize="xs" color="gray.500">OR</Text><Box flex="1" h="1px" bg="gray.200" />
-                </Flex>
-                <VStack spacing={2}>
-                  <GoogleSignInButton onCredential={handleGoogleCredential} />
-                  <Text fontSize="xs" color="gray.500">Use your @antiquespride.edu.ph account</Text>
-                </VStack>
-              </Box>
+    <Box p={8}>
+      <Text fontSize="sm" color="gray.600" mb={6}>
+        Sign in with your school Google account. First time here as a student? Signing in creates your account, and you
+        will then complete your profile with your School ID. Faculty, Dean and Admin accounts are added by the administrator.
+      </Text>
+      <VStack spacing={2}>
+        <GoogleSignInButton onCredential={handleGoogleCredential} />
+        <Text fontSize="xs" color="gray.500">Use your @antiquespride.edu.ph account</Text>
+      </VStack>
     </Box>
   );
 
@@ -597,61 +463,6 @@ export default function LandingPage() {
 
       <PrivacyPolicyModal isOpen={isPrivacyOpen} onClose={onPrivacyClose} />
 
-      {/* Local-development link window: shown instead of the terminal when email isn't set up */}
-      <Modal isOpen={!!devLink} onClose={() => setDevLink(null)} isCentered>
-        <ModalOverlay />
-        <ModalContent borderRadius="2xl" overflow="hidden" bg={modalBg}>
-          <ModalHeader color={headingColor}>{devLink?.title}</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody pb={8}>
-            <Text fontSize="sm" color="gray.500" mb={4}>
-              Email isn't set up on this server yet, so nothing was sent to the inbox. Use the link here instead.
-              It works the same way as the emailed one.
-            </Text>
-            <Input readOnly value={devLink?.link || ''} fontSize="xs" mb={4} onFocus={(e) => e.target.select()} />
-            <HStack>
-              <Button colorScheme="blue" flex="1" onClick={() => { if (devLink) window.location.assign(devLink.link); }}>
-                {devLink?.button}
-              </Button>
-              <Button variant="outline" onClick={() => { if (devLink) navigator.clipboard?.writeText(devLink.link); toast({ title: 'Link copied', status: 'success', duration: 2000, position: 'top' }); }}>
-                Copy
-              </Button>
-            </HStack>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
-
-      {/* Forgot Password Modal */}
-      <Modal isOpen={isForgotOpen} onClose={onForgotClose} isCentered>
-        <ModalOverlay />
-        <ModalContent borderRadius="2xl" overflow="hidden" bg={modalBg}>
-          <ModalHeader color={headingColor}>Reset your password</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody pb={8}>
-            <Text fontSize="sm" color="gray.500" mb={4}>
-              Enter the Gmail address you registered with and we'll send you a link to set a new password. The link expires in 15 minutes.
-            </Text>
-            <form onSubmit={handleForgotPassword}>
-              <FormControl isRequired>
-                <FormLabel>School email</FormLabel>
-                <InputGroup>
-                  <Input
-                    placeholder="e.g. jdelacruz"
-                    value={forgotEmail}
-                    onChange={(e) => setForgotEmail(cleanEmailName(e.target.value))}
-                  />
-                  <InputRightAddon bg="gray.100" color="gray.600" fontWeight="bold">
-                    @antiquespride.edu.ph
-                  </InputRightAddon>
-                </InputGroup>
-              </FormControl>
-              <Button type="submit" colorScheme="blue" size="lg" w="100%" mt={5} isLoading={isSendingReset}>
-                Send Reset Link
-              </Button>
-            </form>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
     </Box>
   );
 }
