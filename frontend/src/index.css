@@ -55,7 +55,69 @@
   #printable-log, #printable-log * { visibility: visible; }
   #printable-log { position: absolute; left: 0; top: 0; width: 100%; }
   .no-print { display: none !important; }
-  @page { size: landscape; margin: 10mm; }
+  @page { size: A4 landscape; margin: 6mm; }
+
+  /* The official 15-row consultation form is intentionally compact so it fits on one landscape page. */
+  #printable-log {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .consultation-print-form {
+    font-size: 10px !important;
+    line-height: 1.18 !important;
+  }
+  .consultation-print-heading {
+    margin-bottom: 8px !important;
+    font-size: 10px !important;
+  }
+  .consultation-print-heading .chakra-heading {
+    font-size: 15px !important;
+    margin-top: 3px !important;
+  }
+  .consultation-print-meta {
+    margin-bottom: 9px !important;
+    font-size: 9.5px !important;
+  }
+  .consultation-print-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+  .consultation-print-table th,
+  .consultation-print-table td {
+    height: 32px !important;
+    padding: 4px 5px !important;
+    font-size: 9px !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    border: 1px solid #000 !important;
+  }
+  .consultation-print-table th {
+    height: 28px !important;
+    padding: 4px 5px !important;
+    font-size: 8.5px !important;
+    line-height: 1.15 !important;
+    font-weight: 700 !important;
+  }
+  .consultation-print-table th:nth-child(1),
+  .consultation-print-table td:nth-child(1) { width: 23% !important; }
+  .consultation-print-table th:nth-child(2),
+  .consultation-print-table td:nth-child(2) { width: 8% !important; }
+  .consultation-print-table th:nth-child(3),
+  .consultation-print-table td:nth-child(3) { width: 15% !important; }
+  .consultation-print-table th:nth-child(4),
+  .consultation-print-table td:nth-child(4) { width: 12% !important; }
+  .consultation-print-table th:nth-child(5),
+  .consultation-print-table td:nth-child(5) { width: 19% !important; }
+  .consultation-print-table th:nth-child(6),
+  .consultation-print-table td:nth-child(6) { width: 23% !important; }
+  .consultation-print-table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
 
   /* Analytics reports: ExportBar adds this class to <body> while the print dialog is open. */
   body.printing-report #printable-report,

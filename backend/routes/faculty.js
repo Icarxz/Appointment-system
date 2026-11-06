@@ -719,7 +719,7 @@ router.patch('/users/:id/name', requireAuth(['ADMIN']), async (req, res) => {
 router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']), ownerOrStaff(r => r.params.facultyId), async (req, res) => {
   try {
     const { facultyId } = req.params;
-    const appointments = await Appointment.find({ facultyId }).sort({ createdAt: -1 });
+    const appointments = await Appointment.find({ facultyId }).populate('studentId', 'gender').sort({ createdAt: -1 });
 
     // Each request still waiting for an answer also carries `availableWindow`: how much uninterrupted bookable time
     // (consultation + vacant hours) there is from its start, up to the next class or approved appointment.
@@ -1012,7 +1012,11 @@ router.get('/faculty/:id/public-schedule', async (req, res) => {
 // Complete a consultation and record the log entry (digital sign-off)
 router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, res) => {
   try {
-    const { casePresented, interventionTaken, remarks } = req.body;
+    const caseValue = String(req.body.casePresented ?? '').trim();
+    const interventionValue = String(req.body.interventionTaken ?? '').trim();
+    if (!caseValue || !interventionValue) {
+      return res.status(400).json({ error: 'Enter both case presented and intervention / action taken.' });
+    }
     const apt = await Appointment.findOne({ _id: req.params.id, facultyId: req.user.userId });
     if (!apt) return res.status(404).json({ error: 'Appointment not found.' });
     // MISSED (FACULTY) is what the system sets automatically when an approved consultation was
@@ -1024,9 +1028,8 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, 
       return res.status(400).json({ error: 'This consultation has already been signed off and cannot be edited.' });
     }
 
-    apt.casePresented     = casePresented;
-    apt.interventionTaken = interventionTaken;
-    apt.remarks           = remarks;
+    apt.casePresented     = caseValue;
+    apt.interventionTaken = interventionValue;
     apt.status            = 'COMPLETED';
     apt.completedAt       = new Date();
     await apt.save();
@@ -1041,6 +1044,31 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, 
     res.json({ message: 'Consultation logged and signed off.', appointment: apt });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// Edit the two consultation-log fields after sign-off. Only the owning faculty member may update them.
+router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), async (req, res) => {
+  try {
+    const apt = await Appointment.findOne({
+      _id: req.params.id,
+      facultyId: req.user.userId,
+      status: 'COMPLETED',
+    }).populate('studentId', 'gender');
+    if (!apt) return res.status(404).json({ error: 'Completed consultation not found.' });
+
+    const casePresented = String(req.body.casePresented ?? '').trim();
+    const interventionTaken = String(req.body.interventionTaken ?? '').trim();
+    if (!casePresented || !interventionTaken) {
+      return res.status(400).json({ error: 'Enter both case presented and intervention / action taken.' });
+    }
+    apt.casePresented = casePresented;
+    apt.interventionTaken = interventionTaken;
+    await apt.save();
+
+    res.json({ message: 'Consultation log updated.', appointment: apt });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Could not update consultation log.' });
   }
 });
 
@@ -1152,7 +1180,7 @@ router.get('/consultation-log/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN'
     const log = await Appointment.find({ 
       facultyId: req.params.facultyId, 
       status: 'COMPLETED' 
-    }).sort({ completedAt: 1 });
+    }).populate('studentId', 'gender').sort({ completedAt: 1 });
     res.json(log);
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching consultation log.' });

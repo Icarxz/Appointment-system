@@ -573,7 +573,7 @@ export default function StudentDashboard() {
 
       {/* Accomplishment view: read-only summary of a signed-off consultation.
           The student can't edit this — only the faculty member who completed
-          the consultation can write casePresented/interventionTaken/remarks,
+          the consultation can write casePresented/interventionTaken,
           via FacultyDashboard's "Complete & Sign Off" form. */}
       <OnboardingModal
         isOpen={isProfileOpen}
@@ -642,10 +642,6 @@ export default function StudentDashboard() {
               <Box>
                 <Text fontSize="xs" fontWeight="700" color={mutedText} textTransform="uppercase">Intervention / Action Taken</Text>
                 <Text color={textColor}>{summaryApt?.interventionTaken || '—'}</Text>
-              </Box>
-              <Box>
-                <Text fontSize="xs" fontWeight="700" color={mutedText} textTransform="uppercase">Remarks</Text>
-                <Text color={textColor}>{summaryApt?.remarks || '—'}</Text>
               </Box>
               <Box>
                 <Text fontSize="xs" fontWeight="700" color={mutedText} textTransform="uppercase">Signed Off</Text>

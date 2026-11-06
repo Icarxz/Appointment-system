@@ -99,7 +99,6 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
                 <>
                   <Field label="Case presented"><Text whiteSpace="pre-wrap">{apt.casePresented || '—'}</Text></Field>
                   <Field label="Intervention / action taken"><Text whiteSpace="pre-wrap">{apt.interventionTaken || '—'}</Text></Field>
-                  <Field label="Remarks"><Text whiteSpace="pre-wrap">{apt.remarks || '—'}</Text></Field>
                   <Field label="Signed off"><Text>{formatDateTime(apt.completedAt)}</Text></Field>
                 </>
               )}
