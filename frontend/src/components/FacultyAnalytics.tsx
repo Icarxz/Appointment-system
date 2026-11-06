@@ -27,6 +27,15 @@ interface Data {
 const trend = (w: Window) => `${w.last4} in last 4 wks · ${w.prev4} before`;
 const pctText = (n: number | null) => (n === null ? '—' : `${n}%`);
 
+const OUTCOME_COLORS = {
+  completed: '#16A34A',       // green
+  missedStudent: '#F97316',   // orange
+  cancelledStudent: '#0D9488',// teal
+  missedFaculty: '#E11D48',   // rose
+  cancelledFaculty: '#64748B',// slate
+  expired: '#7C3AED',         // violet
+} as const;
+
 // A faculty member's own analytics. The server only ever returns the logged-in faculty's data.
 export default function FacultyAnalytics() {
   const [data, setData] = useState<Data | null>(null);
@@ -59,7 +68,7 @@ export default function FacultyAnalytics() {
         <KpiTile dense label="Requests" icon={<CheckCircleIcon />} value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="Requests you reviewed or that happened. Requests still waiting for your answer are not counted."
           onClick={() => open('Requests', data.drilldown.requests)} />
         <KpiTile dense label="Completed" icon={<CheckCircleIcon />} value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
-        <KpiTile dense label="Missed" icon={<WarningIcon />} value={k.missed.total} sub={`${k.missed.student} students · ${k.missed.faculty} faculty · ${pctText(k.missedRate)} missed rate`} accent="#f08a3c"
+        <KpiTile dense label="Missed" icon={<WarningIcon />} value={k.missed.total} sub={`${k.missed.student} students · ${k.missed.faculty} faculty · ${pctText(k.missedRate)} missed rate`} accent={OUTCOME_COLORS.missedStudent}
           hint="Missed rate = missed ÷ (completed + missed). Appeals do not reduce this number." onClick={() => open('Missed consultations', data.drilldown.missed, ['Missed by students', 'Missed by me'])} />
         <KpiTile dense label="Cancelled" icon={<CloseIcon boxSize={3} />} value={k.cancelled.student + k.cancelled.faculty} sub={`${k.cancelled.student} students · ${k.cancelled.faculty} faculty`} accent="#64748b"
           onClick={() => open('Cancelled consultations', data.drilldown.cancelled, ['Cancelled by students', 'Cancelled by me'])} />
@@ -72,12 +81,12 @@ export default function FacultyAnalytics() {
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
         <ChartCard title="What happened to requests" hint="Finished and cancelled requests.">
           <PieChart segments={[
-            { label: 'Completed', value: o.completed, color: '#16a34a' },
-            { label: 'Missed by students', value: o.studentNoShows, color: '#f08a3c' },
-            { label: 'Cancelled by students', value: o.cancelledByStudent, color: '#94a3b8' },
-            { label: 'Missed by me', value: o.missedByFaculty, color: '#e11d48' },
-            { label: 'Cancelled by me', value: o.cancelledByFaculty, color: '#64748b' },
-            { label: 'Expired (no response)', value: o.expired, color: '#ca8a04' },
+            { label: 'Completed', value: o.completed, color: OUTCOME_COLORS.completed },
+            { label: 'Missed by students', value: o.studentNoShows, color: OUTCOME_COLORS.missedStudent },
+            { label: 'Cancelled by students', value: o.cancelledByStudent, color: OUTCOME_COLORS.cancelledStudent },
+            { label: 'Missed by me', value: o.missedByFaculty, color: OUTCOME_COLORS.missedFaculty },
+            { label: 'Cancelled by me', value: o.cancelledByFaculty, color: OUTCOME_COLORS.cancelledFaculty },
+            { label: 'Expired (no response)', value: o.expired, color: OUTCOME_COLORS.expired },
           ]} />
         </ChartCard>
         <ChartCard title="Students by year level and program" hint="Different students who asked you for a consultation.">
