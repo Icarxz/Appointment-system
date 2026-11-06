@@ -55,7 +55,44 @@
   #printable-log, #printable-log * { visibility: visible; }
   #printable-log { position: absolute; left: 0; top: 0; width: 100%; }
   .no-print { display: none !important; }
-  @page { size: landscape; margin: 10mm; }
+  @page { size: A4 landscape; margin: 6mm; }
+
+  /* The official 15-row consultation form is intentionally compact so it fits on one landscape page. */
+  #printable-log {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .consultation-print-form {
+    font-size: 9px !important;
+    line-height: 1.12 !important;
+  }
+  .consultation-print-heading { margin-bottom: 5px !important; }
+  .consultation-print-meta { margin-bottom: 6px !important; }
+  .consultation-print-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+  .consultation-print-table th,
+  .consultation-print-table td {
+    height: 21px !important;
+    padding: 2px 3px !important;
+    font-size: 8px !important;
+    line-height: 1.1 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    border: 1px solid #000 !important;
+  }
+  .consultation-print-table th {
+    font-size: 7.5px !important;
+    font-weight: 700 !important;
+  }
+  .consultation-print-table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
 
   /* Analytics reports: ExportBar adds this class to <body> while the print dialog is open. */
   body.printing-report #printable-report,
