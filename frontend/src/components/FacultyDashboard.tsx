@@ -55,7 +55,30 @@ const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const timeToMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 const START_HOUR = 7;
 const END_HOUR   = 20;
-const SLOT_PX = 30; 
+const SLOT_PX = 30;
+
+const INTERVENTION_OPTIONS = [
+  'Provided academic guidance',
+  'Explained or clarified concepts',
+  'Reviewed student work or requirements',
+  'Demonstrated a procedure or solution',
+  'Recommended learning resources',
+  'Referred to another office or person',
+] as const;
+
+const interventionChoice = (value = '') =>
+  INTERVENTION_OPTIONS.includes(value as typeof INTERVENTION_OPTIONS[number]) ? value : value ? 'Others' : '';
+
+const interventionOtherText = (value = '') =>
+  value && value !== 'Others' && !INTERVENTION_OPTIONS.includes(value as typeof INTERVENTION_OPTIONS[number]) ? value : '';
+
+const printConsultationForm = () => {
+  const previousTitle = document.title;
+  document.title = ' ';
+  const restoreTitle = () => { document.title = previousTitle; };
+  window.addEventListener('afterprint', restoreTitle, { once: true });
+  window.print();
+}; 
 const TOTAL_SLOTS = (END_HOUR - START_HOUR) * 2;
 const GRID_HEIGHT = TOTAL_SLOTS * SLOT_PX;
 
@@ -219,8 +242,21 @@ const fetchLog = () => {
 useEffect(() => { fetchLog(); }, []);
 
 const submitLogEntry = async (aptId: string) => {
-  const entry = logForm[aptId] || { casePresented: '', interventionTaken: '' };
   const apt = myAppointments.find(a => a._id === aptId);
+  const draft = logForm[aptId] || { casePresented: '', interventionTaken: '' };
+  const entry = {
+    casePresented: (draft.casePresented ?? apt?.reason ?? '').trim(),
+    interventionTaken: draft.interventionTaken === 'Others' ? '' : draft.interventionTaken.trim(),
+  };
+  if (!entry.casePresented || !entry.interventionTaken) {
+    toast({
+      title: 'Complete the consultation details',
+      description: 'Enter the case presented and choose an intervention. If you select Others, describe it.',
+      status: 'warning',
+      duration: 3500,
+    });
+    return;
+  }
   try {
     const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${aptId}/complete`, {
       method: 'PATCH',
@@ -242,6 +278,17 @@ const updateSavedLogField = (aptId: string, field: 'casePresented' | 'interventi
 };
 
 const saveConsultLogChanges = async (apt: any) => {
+  const casePresented = String(apt.casePresented || apt.reason || '').trim();
+  const interventionTaken = apt.interventionTaken === 'Others' ? '' : String(apt.interventionTaken || '').trim();
+  if (!casePresented || !interventionTaken) {
+    toast({
+      title: 'Complete the consultation details',
+      description: 'Enter the case presented and choose an intervention. If you select Others, describe it.',
+      status: 'warning',
+      duration: 3500,
+    });
+    return;
+  }
   setSavingLogId(apt._id);
   try {
     const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${apt._id}/consultation-log`, {
@@ -1130,7 +1177,7 @@ const saveConsultationHours = async () => {
               <Text color={mutedText} fontSize="sm">
                 Enter and update consultation details in the tables below. The official form is prepared only when you print or save as PDF.
               </Text>
-              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>
+              <ChakraButton size="sm" colorScheme="blue" onClick={printConsultationForm}>
                 Print / Save as PDF
               </ChakraButton>
             </Flex>
@@ -1141,10 +1188,11 @@ const saveConsultationHours = async () => {
                 Complete the consultation details in the row, then save it to add the entry to your records.
               </Text>
               <Box overflowX="auto">
-                <Table size="sm" minW="980px" variant="simple">
+                <Table size="sm" minW="1120px" variant="simple">
                   <Thead>
                     <Tr>
                       <Th color={mutedText}>Student / Advisee</Th>
+                      <Th color={mutedText}>Gender</Th>
                       <Th color={mutedText}>Course and Year</Th>
                       <Th color={mutedText}>Date</Th>
                       <Th color={mutedText}>Case Presented</Th>
@@ -1154,7 +1202,7 @@ const saveConsultationHours = async () => {
                   </Thead>
                   <Tbody>
                     {myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)').length === 0 ? (
-                      <Tr><Td colSpan={6} color={mutedText} py={5} textAlign="center">No consultations are waiting for sign-off.</Td></Tr>
+                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No consultations are waiting for sign-off.</Td></Tr>
                     ) : myAppointments
                       .filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)')
                       .map(apt => (
@@ -1163,6 +1211,7 @@ const saveConsultationHours = async () => {
                             <Text fontWeight="600">{apt.studentName}</Text>
                             {apt.status === 'MISSED (FACULTY)' && <Badge mt={1} colorScheme="orange">Late sign-off</Badge>}
                           </Td>
+                          <Td color={textColor} minW="95px">{apt.studentId?.gender || '—'}</Td>
                           <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>
                           <Td color={textColor} minW="110px">{formatDate(apt.date)}</Td>
                           <Td minW="210px">
@@ -1172,7 +1221,7 @@ const saveConsultationHours = async () => {
                               resize="vertical"
                               aria-label={`Case presented for ${apt.studentName}`}
                               placeholder="Enter case presented"
-                              value={logForm[apt._id]?.casePresented || ''}
+                              value={logForm[apt._id]?.casePresented ?? apt.reason ?? ''}
                               onChange={e => setLogForm(prev => ({
                                 ...prev,
                                 [apt._id]: { ...(prev[apt._id] || { casePresented: '', interventionTaken: '' }), casePresented: e.target.value },
@@ -1180,18 +1229,32 @@ const saveConsultationHours = async () => {
                             />
                           </Td>
                           <Td minW="240px">
-                            <Textarea
+                            <Select
                               size="sm"
-                              rows={2}
-                              resize="vertical"
                               aria-label={`Intervention or action taken for ${apt.studentName}`}
-                              placeholder="Enter intervention / action taken"
-                              value={logForm[apt._id]?.interventionTaken || ''}
+                              placeholder="Select an intervention"
+                              value={interventionChoice(logForm[apt._id]?.interventionTaken || '')}
                               onChange={e => setLogForm(prev => ({
                                 ...prev,
                                 [apt._id]: { ...(prev[apt._id] || { casePresented: '', interventionTaken: '' }), interventionTaken: e.target.value },
                               }))}
-                            />
+                            >
+                              {INTERVENTION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                              <option value="Others">Others</option>
+                            </Select>
+                            {interventionChoice(logForm[apt._id]?.interventionTaken || '') === 'Others' && (
+                              <Input
+                                mt={2}
+                                size="sm"
+                                aria-label={`Other intervention for ${apt.studentName}`}
+                                placeholder="Specify the intervention"
+                                value={interventionOtherText(logForm[apt._id]?.interventionTaken || '')}
+                                onChange={e => setLogForm(prev => ({
+                                  ...prev,
+                                  [apt._id]: { ...(prev[apt._id] || { casePresented: '', interventionTaken: '' }), interventionTaken: e.target.value },
+                                }))}
+                              />
+                            )}
                           </Td>
                           <Td minW="125px">
                             <ChakraButton size="sm" colorScheme="green" onClick={() => submitLogEntry(apt._id)}>
@@ -1211,10 +1274,11 @@ const saveConsultationHours = async () => {
                 You can edit the case and action fields, then select Save Changes on the same row.
               </Text>
               <Box overflowX="auto">
-                <Table size="sm" minW="980px" variant="simple">
+                <Table size="sm" minW="1120px" variant="simple">
                   <Thead>
                     <Tr>
                       <Th color={mutedText}>Student / Advisee</Th>
+                      <Th color={mutedText}>Gender</Th>
                       <Th color={mutedText}>Course and Year</Th>
                       <Th color={mutedText}>Date</Th>
                       <Th color={mutedText}>Case Presented</Th>
@@ -1224,10 +1288,11 @@ const saveConsultationHours = async () => {
                   </Thead>
                   <Tbody>
                     {consultLog.length === 0 ? (
-                      <Tr><Td colSpan={6} color={mutedText} py={5} textAlign="center">No saved consultation records yet.</Td></Tr>
+                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No saved consultation records yet.</Td></Tr>
                     ) : consultLog.map(apt => (
                       <Tr key={apt._id}>
                         <Td minW="190px" color={textColor} fontWeight="600">{apt.studentName}</Td>
+                        <Td minW="95px" color={textColor}>{apt.studentId?.gender || '—'}</Td>
                         <Td minW="130px" color={textColor}>{apt.studentSection || '—'}</Td>
                         <Td minW="110px" color={textColor}>{formatDate(apt.date)}</Td>
                         <Td minW="210px">
@@ -1236,19 +1301,31 @@ const saveConsultationHours = async () => {
                             rows={2}
                             resize="vertical"
                             aria-label={`Edit case presented for ${apt.studentName}`}
-                            value={apt.casePresented || ''}
+                            value={apt.casePresented || apt.reason || ''}
                             onChange={e => updateSavedLogField(apt._id, 'casePresented', e.target.value)}
                           />
                         </Td>
                         <Td minW="240px">
-                          <Textarea
+                          <Select
                             size="sm"
-                            rows={2}
-                            resize="vertical"
                             aria-label={`Edit intervention or action taken for ${apt.studentName}`}
-                            value={apt.interventionTaken || ''}
+                            placeholder="Select an intervention"
+                            value={interventionChoice(apt.interventionTaken || '')}
                             onChange={e => updateSavedLogField(apt._id, 'interventionTaken', e.target.value)}
-                          />
+                          >
+                            {INTERVENTION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                            <option value="Others">Others</option>
+                          </Select>
+                          {interventionChoice(apt.interventionTaken || '') === 'Others' && (
+                            <Input
+                              mt={2}
+                              size="sm"
+                              aria-label={`Other intervention for ${apt.studentName}`}
+                              placeholder="Specify the intervention"
+                              value={interventionOtherText(apt.interventionTaken || '')}
+                              onChange={e => updateSavedLogField(apt._id, 'interventionTaken', e.target.value)}
+                            />
+                          )}
                         </Td>
                         <Td minW="125px">
                           <ChakraButton size="sm" colorScheme="blue" onClick={() => saveConsultLogChanges(apt)} isLoading={savingLogId === apt._id}>
@@ -1262,7 +1339,7 @@ const saveConsultationHours = async () => {
               </Box>
             </Box>
 
-            <Box id="printable-log" className="print-only" bg="white" color="black" p={6}>
+            <Box id="printable-log" className="print-only consultation-print-form" bg="white" color="black" p={6}>
               <VStack spacing={0} mb={5}>
                 <Text fontSize="sm">Republic of the Philippines</Text>
                 <Text fontSize="sm" fontWeight="bold">UNIVERSITY OF ANTIQUE</Text>
@@ -1278,10 +1355,11 @@ const saveConsultationHours = async () => {
                 <Text>Consultation Schedule: __________</Text>
               </HStack>
 
-              <Table id="consult-form-table" size="sm" variant="simple" border="1px solid black">
+              <Table id="consult-form-table" className="consultation-print-table" size="sm" variant="simple" border="1px solid black">
                 <Thead bg="gray.600">
                   <Tr>
                     <Th color="white" border="1px solid black">Name of Student/Advisee</Th>
+                    <Th color="white" border="1px solid black">Gender</Th>
                     <Th color="white" border="1px solid black">Course and Year</Th>
                     <Th color="white" border="1px solid black">Date</Th>
                     <Th color="white" border="1px solid black">Case Presented</Th>
@@ -1294,6 +1372,7 @@ const saveConsultationHours = async () => {
                     return (
                       <Tr key={i} height="34px">
                         <Td border="1px solid black" p={1} fontSize="xs">{entry ? `${i + 1}. ${entry.studentName || ''}` : `${i + 1}.`}</Td>
+                        <Td border="1px solid black" p={1} fontSize="xs">{entry?.studentId?.gender || ''}</Td>
                         <Td border="1px solid black" p={1} fontSize="xs">{entry?.studentSection || ''}</Td>
                         <Td border="1px solid black" p={1} fontSize="xs">{entry?.date ? formatDate(entry.date) : ''}</Td>
                         <Td border="1px solid black" p={1} fontSize="xs" whiteSpace="pre-wrap">{entry?.casePresented || ''}</Td>
