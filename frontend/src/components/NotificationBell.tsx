@@ -4,7 +4,7 @@ import {
   Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, Portal,
   Box, Flex, HStack, Text, CloseButton, useColorModeValue, useDisclosure,
 } from '@chakra-ui/react';
-import { EmailIcon } from '@chakra-ui/icons';
+import { BellIcon } from '@chakra-ui/icons';
 import moment from 'moment';
 import { authFetch } from './authFetch';
 import { isSafeAppLink, linkMatchesRole } from '../utils/deepLink';
@@ -73,7 +73,7 @@ export default function NotificationBell({ navText, navBg, compact = false }: Pr
     return isSafeAppLink(l) && linkMatchesRole(l, localStorage.getItem('userRole')) ? l : null;
   };
 
-  // Click a message: mark it read, then (when it has a link) close the mailbox and open the page / details drawer.
+  // Click a message: mark it read, then (when it has a link) close the panel and open the page / details drawer.
   const openItem = (n: AppNotification) => {
     markRead(n);
     const to = targetOf(n);
@@ -112,7 +112,7 @@ export default function NotificationBell({ navText, navBg, compact = false }: Pr
     <Popover placement={compact ? 'bottom-end' : 'right-start'} isLazy isOpen={isOpen} onOpen={() => { onOpen(); load(); }} onClose={onClose}>
       <PopoverTrigger>
         <button
-          aria-label={unread > 0 ? `Mail, ${unread} unread` : 'Mail'}
+          aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
           style={{
             display: 'flex', alignItems: 'center', gap: '10px', width: compact ? 'auto' : '100%',
             padding: compact ? '0 12px' : '9px 10px', minHeight: compact ? '44px' : undefined,
@@ -124,7 +124,7 @@ export default function NotificationBell({ navText, navBg, compact = false }: Pr
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
           <span style={{ position: 'relative', display: 'inline-flex' }}>
-            <EmailIcon boxSize="15px" />
+            <BellIcon boxSize="16px" />
             {unread > 0 && (
               <span style={{
                 position: 'absolute', top: '-9px', right: '-13px',
@@ -136,7 +136,7 @@ export default function NotificationBell({ navText, navBg, compact = false }: Pr
               </span>
             )}
           </span>
-          {!compact && <span style={{ marginLeft: '6px' }}>Mail</span>}
+          {!compact && <span style={{ marginLeft: '6px' }}>Notifications</span>}
         </button>
       </PopoverTrigger>
 
@@ -144,7 +144,7 @@ export default function NotificationBell({ navText, navBg, compact = false }: Pr
         <PopoverContent w="min(340px, calc(100vw - 16px))" bg={panelBg} borderColor={panelBorder} color={textColor} _focus={{ outline: 'none' }}>
           <PopoverHeader borderColor={panelBorder}>
             <Flex justify="space-between" align="center">
-              <Text fontWeight="700" fontSize="sm">Mail</Text>
+              <Text fontWeight="700" fontSize="sm">Notifications</Text>
               <HStack spacing={3}>
                 <button
                   onClick={markAllRead}
