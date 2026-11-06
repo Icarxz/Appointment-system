@@ -6,7 +6,7 @@ import BroadcastBanner from './BroadcastBanner';
 import {
   Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Badge, Text, 
   Button as ChakraButton, Select, Input, HStack, useToast, FormControl, 
-  FormLabel, Flex, VStack, Textarea, useColorMode, useColorModeValue
+  FormLabel, Flex, VStack, Textarea
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ProfileGate from './ProfileGate';
@@ -22,7 +22,7 @@ import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
 import PageTitle from './PageTitle';
 import RequestList from './RequestList';
-import { PAGE_PAD } from '../utils/uiTokens';
+import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import ExportBar from './ExportBar';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ function getEventPos(event: ScheduleEvent): { top: number; height: number } {
 
 export default function FacultyDashboard() {
   const toast = useToast();
-  const { colorMode } = useColorMode();
+  const palette = useNavPalette();
   
   const userId = localStorage.getItem('userId');
   const userName = localStorage.getItem('userName');
@@ -359,19 +359,19 @@ const saveConsultationHours = async () => {
   const visibleDayIndices = viewMode === "week" ? [0, 1, 2, 3, 4, 5] : [focusDay];
 
   // ── Color tokens (Synced with Chakra Dark Mode) ────────────────────────────
-  const dk = colorMode === 'dark';
+  const dk = palette.dk;
   const C = {
-    pageBg:    dk ? "#0c1421" : "#eef2f7",
-    sidebar:   dk ? "#070e1b" : "#0f2240",
-    surface:   dk ? "#111d30" : "#ffffff",
+    pageBg:    palette.pageBg,
+    sidebar:   palette.sidebar,
+    surface:   palette.surface,
     surfaceAlt:dk ? "#0d1828" : "#f8fafc",
-    border:    dk ? "#1e3048" : "#dde3ec",
+    border:    palette.border,
     borderFaint:dk? "#162035" : "#f0f3f7",
-    text:      dk ? "#e8f0fe" : "#0f2240",
-    textMid:   dk ? "#7a93b0" : "#6b7fa0",
-    navText:   dk ? "#7a93b0" : "#8eaecb",
-    navActive: dk ? "#ffffff" : "#ffffff",
-    navBg:     dk ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.10)",
+    text:      palette.text,
+    textMid:   palette.textMid,
+    navText:   palette.navText,
+    navActive: palette.navActive,
+    navBg:     palette.navBg,
     teach:     "#1d4ed8",
     teachBg:   dk ? "#162340"   : "#dbeafe",
     teachText: dk ? "#93c5fd"   : "#1e40af",
@@ -393,10 +393,10 @@ const saveConsultationHours = async () => {
     border: "none", cursor: "pointer", fontFamily: "inherit", letterSpacing:"0.01em",
   };
 
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
-  const textColor = useColorModeValue('gray.900', 'white');
-  const mutedText = useColorModeValue('gray.500', 'gray.400');
+  const cardBg = palette.surface;
+  const borderColor = palette.border;
+  const textColor = palette.text;
+  const mutedText = palette.textMid;
 
   // ── API Functions ────────────────────────────────────────────────────────
   const fetchData = () => {

@@ -17,6 +17,7 @@ import ScrollTable from './ScrollTable';
 import WelcomeHeader from './WelcomeHeader';
 import ExportBar from './ExportBar';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
+import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 
 const PAGE_TITLES = {
   reports: 'Reports & Analytics', roster: 'Faculty Roster', records: 'Consultation Records',
@@ -207,21 +208,8 @@ export default function DeanDashboard() {
                       <Td fontWeight="bold" color={C.text}>{prof.name}</Td>
                       <Td color={C.text}>{prof.programPosition}</Td>
                       <Td>
-                        <Badge colorScheme={
-                          prof.currentStatus === 'AVAILABLE'       ? 'green'  :
-                          prof.currentStatus === 'IN_CLASS'        ? 'blue'   :
-                          prof.currentStatus === 'IN_CONSULTATION' ? 'teal'   :
-                          prof.currentStatus === 'IN_MEETING'      ? 'yellow' :
-                          prof.currentStatus === 'ON_BREAK'        ? 'orange' :
-                          prof.currentStatus === 'ON_LEAVE'        ? 'purple' :
-                          prof.currentStatus === 'ABSENT'          ? 'red'    : 'gray'
-                        }>
-                          {({
-                            AVAILABLE: 'Available', IN_CLASS: 'In Class',
-                            IN_CONSULTATION: 'Consultation Hours', IN_MEETING: 'In a Meeting',
-                            ON_BREAK: 'On Break', OUT_OF_OFFICE: 'Out of Office',
-                            ON_LEAVE: 'On Leave', ABSENT: 'Absent', NOT_UPDATED: 'No Update',
-                          } as Record<string,string>)[prof.currentStatus] ?? prof.currentStatus}
+                        <Badge colorScheme={facultyStatusColor(prof.currentStatus)}>
+                          {facultyStatusLabel(prof.currentStatus)}
                         </Badge>
                       </Td>
                       <Td color={C.text}>{prof.currentLocation || prof.room || 'N/A'}</Td>

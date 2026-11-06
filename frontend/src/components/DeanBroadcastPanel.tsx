@@ -27,6 +27,8 @@ const DURATIONS = [
   { label: '7 days', value: 10080 },
 ];
 const AUDIENCE_LABEL = { ALL: 'Students & Faculty', STUDENT: 'Students only', FACULTY: 'Faculty only' };
+const PRIORITY_LABEL = { URGENT: 'Urgent', NOTICE: 'Notice' } as const;
+const BROADCAST_STATUS_LABEL = { ACTIVE: 'Active', EXPIRED: 'Expired', ENDED: 'Ended' } as const;
 const fmt = (s: string) => new Date(s).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 export default function DeanBroadcastPanel({ C }: { C: Palette }) {
@@ -110,14 +112,14 @@ export default function DeanBroadcastPanel({ C }: { C: Palette }) {
               </Select></Box>
             <Box><Text fontSize="xs" color={C.textMid} mb={1}>Priority</Text>
               <Select size="sm" value={priority} onChange={e => setPriority(e.target.value as typeof priority)} color={C.text}>
-                <option value="URGENT">Urgent (red)</option>
-                <option value="NOTICE">Notice (blue)</option>
+                <option value="URGENT">Urgent</option>
+                <option value="NOTICE">Notice</option>
               </Select></Box>
-            <Box><Text fontSize="xs" color={C.textMid} mb={1}>Show for</Text>
+            <Box><Text fontSize="xs" color={C.textMid} mb={1}>Display duration</Text>
               <Select size="sm" value={duration} onChange={e => setDuration(Number(e.target.value))} color={C.text}>
                 {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </Select></Box>
-            <Button colorScheme="red" size="sm" onClick={send} isLoading={sending}>Send broadcast</Button>
+            <Button colorScheme="blue" size="sm" onClick={send} isLoading={sending}>Send broadcast</Button>
           </HStack>
         </VStack>
       </Box>
@@ -130,7 +132,7 @@ export default function DeanBroadcastPanel({ C }: { C: Palette }) {
             <Flex key={b._id} justify="space-between" align="flex-start" gap={3} borderWidth="1px" borderColor={C.border} borderRadius="md" p={3}>
               <Box>
                 <HStack mb={1}>
-                  <Badge colorScheme={b.priority === 'URGENT' ? 'red' : 'blue'}>{b.priority}</Badge>
+                  <Badge colorScheme={b.priority === 'URGENT' ? 'red' : 'blue'}>{PRIORITY_LABEL[b.priority]}</Badge>
                   <Text fontWeight="700" color={C.text} fontSize="sm">{b.title}</Text>
                 </HStack>
                 <Text fontSize="sm" color={C.textMid} whiteSpace="pre-wrap">{b.message}</Text>
@@ -153,8 +155,8 @@ export default function DeanBroadcastPanel({ C }: { C: Palette }) {
                   <Td color={C.text}>{fmt(b.createdAt)}</Td>
                   <Td color={C.text}>{b.title}</Td>
                   <Td color={C.text}>{AUDIENCE_LABEL[b.audience]}</Td>
-                  <Td><Badge colorScheme={b.priority === 'URGENT' ? 'red' : 'blue'}>{b.priority}</Badge></Td>
-                  <Td><Badge colorScheme={b.status === 'ACTIVE' ? 'green' : 'gray'}>{b.status}</Badge></Td>
+                  <Td><Badge colorScheme={b.priority === 'URGENT' ? 'red' : 'blue'}>{PRIORITY_LABEL[b.priority]}</Badge></Td>
+                  <Td><Badge colorScheme={b.status === 'ACTIVE' ? 'green' : 'gray'}>{BROADCAST_STATUS_LABEL[b.status]}</Badge></Td>
                 </Tr>
               ))}
               {history.length === 0 && <Tr><Td colSpan={5} color={C.textMid}>No broadcasts sent yet.</Td></Tr>}

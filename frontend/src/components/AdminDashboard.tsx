@@ -3,7 +3,7 @@ import { cohortConfig } from '../data/cohortConfig';
 import { formatDate, formatDateTime } from './dateUtils';
 import { 
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
-  useToast, Select, HStack, Table, Thead, Tbody, Tr, Th, Td, Badge, useColorModeValue,
+  useToast, Select, HStack, Table, Thead, Tbody, Tr, Th, Td, Badge,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
@@ -14,8 +14,8 @@ import PageTitle from './PageTitle';
 import ExportBar from './ExportBar';
 import ScrollTable from './ScrollTable';
 import WelcomeHeader from './WelcomeHeader';
-import { PAGE_PAD } from '../utils/uiTokens';
-import { statusColor, statusLabel } from './appointmentStatus';
+import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
+import { facultyStatusColor, facultyStatusLabel, statusColor, statusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
 // import { QRCodeSVG } from 'qrcode.react';
 
@@ -67,10 +67,11 @@ export default function AdminDashboard() {
 
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
 
-  const cardBg = useColorModeValue('#ffffff', '#111d30');
-  const borderColor = useColorModeValue('#dde3ec', '#1e3048');
-  const textColor = useColorModeValue('#0f2240', '#e8f0fe');
-  const mutedText = useColorModeValue('#6b7fa0', '#7a93b0');
+  const palette = useNavPalette();
+  const cardBg = palette.surface;
+  const borderColor = palette.border;
+  const textColor = palette.text;
+  const mutedText = palette.textMid;
 
   const fetchAllData = () => {
     authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status`).then(res => res.json()).then(data => setFacultyList(data));
@@ -367,21 +368,8 @@ export default function AdminDashboard() {
                       <Td color={textColor}>{prof.programPosition}</Td>
                       <Td color={textColor}>{userById[prof._id]?.facultyId || (userById[prof._id]?.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
                       <Td>
-                        <Badge colorScheme={
-                          prof.currentStatus === 'AVAILABLE'       ? 'green'  :
-                          prof.currentStatus === 'IN_CLASS'        ? 'blue'   :
-                          prof.currentStatus === 'IN_CONSULTATION' ? 'teal'   :
-                          prof.currentStatus === 'IN_MEETING'      ? 'yellow' :
-                          prof.currentStatus === 'ON_BREAK'        ? 'orange' :
-                          prof.currentStatus === 'ON_LEAVE'        ? 'purple' :
-                          prof.currentStatus === 'ABSENT'          ? 'red'    : 'gray'
-                        }>
-                          {({
-                            AVAILABLE: 'Available', IN_CLASS: 'In Class',
-                            IN_CONSULTATION: 'Consultation Hours', IN_MEETING: 'In a Meeting',
-                            ON_BREAK: 'On Break', OUT_OF_OFFICE: 'Out of Office',
-                            ON_LEAVE: 'On Leave', ABSENT: 'Absent', NOT_UPDATED: 'No Update',
-                          } as Record<string,string>)[prof.currentStatus] ?? prof.currentStatus}
+                        <Badge colorScheme={facultyStatusColor(prof.currentStatus)}>
+                          {facultyStatusLabel(prof.currentStatus)}
                         </Badge>
                       </Td>
                       <Td>

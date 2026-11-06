@@ -64,6 +64,21 @@ export default extendTheme({
     Table: { baseStyle: { th: { fontSize: '11px', letterSpacing: '0.06em', fontWeight: 700 } } },
     Tabs: { baseStyle: { tab: { ...touchHeight, fontWeight: 600 } } },
     // Status badges wrap instead of being cut off ("WAITING FOR FACU…") when a column is narrow.
-    Badge: { baseStyle: { whiteSpace: 'normal', textAlign: 'center', borderRadius: 'md', fontWeight: 700, letterSpacing: '0.03em' } },
+    Badge: {
+      baseStyle: {
+        whiteSpace: 'normal',
+        textAlign: 'center',
+        borderRadius: 'full',
+        fontSize: 'xs',
+        fontWeight: 700,
+        lineHeight: 1.2,
+        letterSpacing: '0.01em',
+        textTransform: 'none',
+        px: 2.5,
+        py: 1,
+      },
+      // Subtle semantic backgrounds keep status chips readable without competing with page content.
+      defaultProps: { variant: 'subtle' },
+    },
   },
 });
