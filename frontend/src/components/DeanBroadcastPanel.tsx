@@ -92,7 +92,7 @@ export default function DeanBroadcastPanel({ C }: { C: Palette }) {
       <Box {...card}>
         <Heading size="md" color={C.text} mb={1}>Executive Broadcast</Heading>
         <Text fontSize="sm" color={C.textMid} mb={4}>
-          Pins an announcement at the top of every Student / Faculty dashboard and adds it to their mailbox.
+          Pins an announcement at the top of every Student / Faculty dashboard and adds it to their notifications.
         </Text>
         <VStack align="stretch" spacing={3}>
           <Input value={title} maxLength={120} onChange={e => setTitle(e.target.value)} placeholder="Title, e.g. CCIS Faculty Meeting Today" color={C.text} />
