@@ -1012,7 +1012,7 @@ router.get('/faculty/:id/public-schedule', async (req, res) => {
 // Complete a consultation and record the log entry (digital sign-off)
 router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, res) => {
   try {
-    const { casePresented, interventionTaken, remarks } = req.body;
+    const { casePresented, interventionTaken } = req.body;
     const apt = await Appointment.findOne({ _id: req.params.id, facultyId: req.user.userId });
     if (!apt) return res.status(404).json({ error: 'Appointment not found.' });
     // MISSED (FACULTY) is what the system sets automatically when an approved consultation was
@@ -1026,7 +1026,6 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, 
 
     apt.casePresented     = casePresented;
     apt.interventionTaken = interventionTaken;
-    apt.remarks           = remarks;
     apt.status            = 'COMPLETED';
     apt.completedAt       = new Date();
     await apt.save();
@@ -1056,10 +1055,6 @@ router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), asyn
 
     const casePresented = String(req.body.casePresented ?? '').trim();
     const interventionTaken = String(req.body.interventionTaken ?? '').trim();
-    if (!casePresented || !interventionTaken) {
-      return res.status(400).json({ error: 'Enter both case presented and intervention / action taken.' });
-    }
-
     apt.casePresented = casePresented;
     apt.interventionTaken = interventionTaken;
     await apt.save();
