@@ -644,10 +644,6 @@ export default function StudentDashboard() {
                 <Text color={textColor}>{summaryApt?.interventionTaken || '—'}</Text>
               </Box>
               <Box>
-                <Text fontSize="xs" fontWeight="700" color={mutedText} textTransform="uppercase">Remarks</Text>
-                <Text color={textColor}>{summaryApt?.remarks || '—'}</Text>
-              </Box>
-              <Box>
                 <Text fontSize="xs" fontWeight="700" color={mutedText} textTransform="uppercase">Signed Off</Text>
                 <Text color={textColor}>{formatDateTime(summaryApt?.completedAt)}</Text>
               </Box>
