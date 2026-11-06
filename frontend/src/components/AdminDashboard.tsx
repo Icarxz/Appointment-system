@@ -513,12 +513,11 @@ export default function AdminDashboard() {
                   <Th color={mutedText}>Faculty</Th>
                   <Th color={mutedText}>Case Presented</Th>
                   <Th color={mutedText}>Intervention Taken</Th>
-                  <Th color={mutedText}>Remarks</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {filteredRecords.length === 0 && (
-                  <Tr><Td colSpan={6}><Text color={mutedText} py={4} textAlign="center">No completed consultations found.</Text></Td></Tr>
+                  <Tr><Td colSpan={5}><Text color={mutedText} py={4} textAlign="center">No completed consultations found.</Text></Td></Tr>
                 )}
                 {filteredRecords.map(r => (
                   <Tr key={r._id}>
@@ -527,7 +526,6 @@ export default function AdminDashboard() {
                     <Td color={textColor}>{r.facultyId?.name || 'Unknown'}</Td>
                     <Td maxW="200px" color={textColor}>{r.casePresented}</Td>
                     <Td maxW="200px" color={textColor}>{r.interventionTaken}</Td>
-                    <Td maxW="160px" color={textColor}>{r.remarks}</Td>
                   </Tr>
                 ))}
               </Tbody>
