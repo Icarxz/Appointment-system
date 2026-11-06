@@ -1054,7 +1054,7 @@ router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), asyn
       _id: req.params.id,
       facultyId: req.user.userId,
       status: 'COMPLETED',
-    });
+    }).populate('studentId', 'gender');
     if (!apt) return res.status(404).json({ error: 'Completed consultation not found.' });
 
     const casePresented = String(req.body.casePresented ?? '').trim();
