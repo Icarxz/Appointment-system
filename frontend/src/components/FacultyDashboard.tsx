@@ -1340,15 +1340,15 @@ const saveConsultationHours = async () => {
             </Box>
 
             <Box id="printable-log" className="print-only consultation-print-form" bg="white" color="black" p={6}>
-              <VStack spacing={0} mb={5}>
-                <Text fontSize="sm">Republic of the Philippines</Text>
-                <Text fontSize="sm" fontWeight="bold">UNIVERSITY OF ANTIQUE</Text>
-                <Text fontSize="sm">Sibalom, Antique</Text>
-                <Heading size="md" mt={3} letterSpacing="wide">STUDENTS' CONSULTATION FORM</Heading>
+              <VStack spacing={0} mb={2} className="consultation-print-heading">
+                <Text fontSize="xs">Republic of the Philippines</Text>
+                <Text fontSize="xs" fontWeight="bold">UNIVERSITY OF ANTIQUE</Text>
+                <Text fontSize="xs">Sibalom, Antique</Text>
+                <Heading size="sm" mt={1} letterSpacing="wide">STUDENTS' CONSULTATION FORM</Heading>
               </VStack>
 
-              <HStack justifyContent="space-between" mb={4} fontSize="sm">
-                <VStack align="start" spacing={1}>
+              <HStack justifyContent="space-between" mb={2} fontSize="xs" className="consultation-print-meta">
+                <VStack align="start" spacing={0}>
                   <Text>Name of Faculty: <b>{userName}</b></Text>
                   <Text>School Term: __________ Sem, AY __________</Text>
                 </VStack>
@@ -1370,7 +1370,7 @@ const saveConsultationHours = async () => {
                   {Array.from({ length: Math.max(15, consultLog.length) }).map((_, i) => {
                     const entry = consultLog[i];
                     return (
-                      <Tr key={i} height="34px">
+                      <Tr key={i} height="21px">
                         <Td border="1px solid black" p={1} fontSize="xs">{entry ? `${i + 1}. ${entry.studentName || ''}` : `${i + 1}.`}</Td>
                         <Td border="1px solid black" p={1} fontSize="xs">{entry?.studentId?.gender || ''}</Td>
                         <Td border="1px solid black" p={1} fontSize="xs">{entry?.studentSection || ''}</Td>
