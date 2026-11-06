@@ -89,6 +89,18 @@
     font-size: 7.5px !important;
     font-weight: 700 !important;
   }
+  .consultation-print-table th:nth-child(1),
+  .consultation-print-table td:nth-child(1) { width: 23% !important; }
+  .consultation-print-table th:nth-child(2),
+  .consultation-print-table td:nth-child(2) { width: 8% !important; }
+  .consultation-print-table th:nth-child(3),
+  .consultation-print-table td:nth-child(3) { width: 15% !important; }
+  .consultation-print-table th:nth-child(4),
+  .consultation-print-table td:nth-child(4) { width: 12% !important; }
+  .consultation-print-table th:nth-child(5),
+  .consultation-print-table td:nth-child(5) { width: 19% !important; }
+  .consultation-print-table th:nth-child(6),
+  .consultation-print-table td:nth-child(6) { width: 23% !important; }
   .consultation-print-table tr {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
