@@ -295,8 +295,8 @@ const saveConsultLogChanges = async (apt: any) => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        casePresented: apt.casePresented || '',
-        interventionTaken: apt.interventionTaken || '',
+        casePresented,
+        interventionTaken,
       }),
     });
     const data = await response.json();
