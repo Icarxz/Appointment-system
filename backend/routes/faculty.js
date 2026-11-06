@@ -55,6 +55,7 @@ const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
 
 // Booking / cancellation time limits (appointment date + time are Manila time)
+const { findConflict, conflictMessage } = require('../utils/duplicateRequest');
 const { BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS } = require('../utils/appointmentTime'); // 1 hour to book, 1 hour to cancel
 const hoursUntil = (date, time) => (manilaDate(date, time).getTime() - Date.now()) / 36e5;
 
@@ -529,8 +530,15 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
     }
     const duration = slot.duration;
 
-    // No request limit and no anti-spam check (project decision, Nov 4): any number of students may request an hour;
-    // the professor accepts one.
+    // No request limit (project decision, Nov 4): any number of students may request an hour; the professor accepts one.
+    // One student, though, may not repeat himself (same professor + same reason) or double-book himself
+    // (same date and hour with two professors). Rules and tests: utils/duplicateRequest.js.
+    const mine = await Appointment.find({ studentId, status: { $in: ['PENDING', 'APPROVED'] } }).select('facultyId date time duration reason status');
+    const conflict = findConflict(mine, { facultyId, date, time, duration, reason });
+    if (conflict) {
+      const f = await User.findById(facultyId).select('name');
+      return res.status(409).json({ error: conflictMessage(conflict, f?.name || 'this professor'), code: conflict.code });
+    }
 
     // Save the pending request
     const newAppointment = await Appointment.create({
