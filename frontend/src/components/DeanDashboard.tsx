@@ -170,12 +170,11 @@ export default function DeanDashboard() {
                     <Th color={C.textMid}>Faculty</Th>
                     <Th color={C.textMid}>Case Presented</Th>
                     <Th color={C.textMid}>Intervention Taken</Th>
-                    <Th color={C.textMid}>Remarks</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
                   {filteredRecords.length === 0 && (
-                    <Tr><Td colSpan={6}><Text color={C.textMid} py={4} textAlign="center">No completed consultations found.</Text></Td></Tr>
+                    <Tr><Td colSpan={5}><Text color={C.textMid} py={4} textAlign="center">No completed consultations found.</Text></Td></Tr>
                   )}
                   {filteredRecords.map((r: any) => (
                     <Tr key={r._id}>
@@ -184,7 +183,6 @@ export default function DeanDashboard() {
                       <Td color={C.text}>{r.facultyId?.name || 'Unknown'}</Td>
                       <Td maxW="200px" color={C.text}>{r.casePresented}</Td>
                       <Td maxW="200px" color={C.text}>{r.interventionTaken}</Td>
-                      <Td maxW="160px" color={C.text}>{r.remarks}</Td>
                     </Tr>
                   ))}
                 </Tbody>
