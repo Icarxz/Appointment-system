@@ -89,7 +89,7 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
               <Field label="Purpose"><Text whiteSpace="pre-wrap">{apt.reason}</Text></Field>
 
               {apt.appeal?.reason && (
-                <Field label={`Appeal by ${apt.appeal.by === 'FACULTY' ? 'faculty' : 'student'}`}>
+                <Field label={`Reason given by ${apt.appeal.by === 'FACULTY' ? 'faculty' : 'student'}`}>
                   <Text whiteSpace="pre-wrap">{apt.appeal.reason}</Text>
                   {apt.appeal.submittedAt && <Text fontSize="xs" color={muted}>Submitted {formatDateTime(apt.appeal.submittedAt)}</Text>}
                 </Field>

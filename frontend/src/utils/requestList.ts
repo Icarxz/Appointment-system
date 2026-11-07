@@ -16,7 +16,7 @@ export interface ListItem {
 export type NextAction = 'CAN_CANCEL' | 'CAN_APPEAL' | 'HAS_ACCOMPLISHMENT' | 'NEEDS_ANSWER' | 'CAN_MARK_NO_SHOW';
 export const NEXT_ACTION_LABELS: Record<NextAction, string> = {
   CAN_CANCEL: 'Can cancel',
-  CAN_APPEAL: 'Can appeal',
+  CAN_APPEAL: 'Can add a reason',
   HAS_ACCOMPLISHMENT: 'Has accomplishment',
   NEEDS_ANSWER: 'Needs my answer',
   CAN_MARK_NO_SHOW: 'Student did not show',

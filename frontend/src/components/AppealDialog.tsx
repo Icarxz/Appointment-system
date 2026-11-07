@@ -14,7 +14,7 @@ interface Props {
   onDone: () => void;
 }
 
-// Appeal a missed or cancelled consultation: pick a reason (or type your own) and submit.
+// Add a reason for a missed or cancelled consultation: pick a reason (or type your own) and submit.
 export default function AppealDialog({ apt, role, describe, onClose, onDone }: Props) {
   const toast = useToast();
   const [reason, setReason] = useState('');
@@ -29,10 +29,10 @@ export default function AppealDialog({ apt, role, describe, onClose, onDone }: P
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast({ title: 'Appeal submitted', description: role === 'STUDENT' ? 'Your professor will review it.' : 'The Dean will review it.', status: 'success' });
+      toast({ title: 'Reason submitted', description: role === 'STUDENT' ? 'Your professor can see it.' : 'The Dean can see it.', status: 'success' });
       onDone();
     } catch (e: any) {
-      toast({ title: 'Could not submit appeal', description: e.message, status: 'error', position: 'top' });
+      toast({ title: 'Could not submit reason', description: e.message, status: 'error', position: 'top' });
     }
     setBusy(false);
   };
@@ -41,7 +41,7 @@ export default function AppealDialog({ apt, role, describe, onClose, onDone }: P
     <Modal isOpen={!!apt} onClose={() => !busy && onClose()} isCentered>
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>Submit an appeal</ModalHeader>
+        <ModalHeader>Add your reason</ModalHeader>
         <ModalCloseButton isDisabled={busy} />
         <ModalBody>
           <Text fontSize="sm" mb={4}>{describe}</Text>
@@ -55,7 +55,7 @@ export default function AppealDialog({ apt, role, describe, onClose, onDone }: P
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" mr={3} onClick={onClose} isDisabled={busy}>Close</Button>
-          <Button colorScheme="blue" onClick={submit} isLoading={busy} isDisabled={!reason.trim()}>Submit appeal</Button>
+          <Button colorScheme="blue" onClick={submit} isLoading={busy} isDisabled={!reason.trim()}>Submit reason</Button>
         </ModalFooter>
       </ModalContent>
     </Modal>
