@@ -378,6 +378,7 @@ export default function AdminDashboard() {
               color={textColor}
               borderColor={borderColor}
             />
+            </HStack>
             <ScrollTable><Table variant="simple" size="sm">
               <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
