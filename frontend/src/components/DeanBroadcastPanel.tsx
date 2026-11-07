@@ -105,18 +105,18 @@ export default function DeanBroadcastPanel({ C }: { C: Palette }) {
           </Box>
           <HStack spacing={3} flexWrap="wrap" align="flex-end">
             <Box><Text fontSize="xs" color={C.textMid} mb={1}>Send to</Text>
-              <Select size="sm" value={audience} onChange={e => setAudience(e.target.value as typeof audience)} color={C.text}>
+              <Select value={audience} onChange={e => setAudience(e.target.value as typeof audience)} color={C.text}>
                 <option value="ALL">Students &amp; Faculty</option>
                 <option value="STUDENT">Students only</option>
                 <option value="FACULTY">Faculty only</option>
               </Select></Box>
             <Box><Text fontSize="xs" color={C.textMid} mb={1}>Priority</Text>
-              <Select size="sm" value={priority} onChange={e => setPriority(e.target.value as typeof priority)} color={C.text}>
+              <Select value={priority} onChange={e => setPriority(e.target.value as typeof priority)} color={C.text}>
                 <option value="URGENT">Urgent</option>
                 <option value="NOTICE">Notice</option>
               </Select></Box>
             <Box><Text fontSize="xs" color={C.textMid} mb={1}>Display duration</Text>
-              <Select size="sm" value={duration} onChange={e => setDuration(Number(e.target.value))} color={C.text}>
+              <Select value={duration} onChange={e => setDuration(Number(e.target.value))} color={C.text}>
                 {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </Select></Box>
             <Button colorScheme="blue" size="sm" onClick={send} isLoading={sending}>Send broadcast</Button>

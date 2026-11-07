@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { formatDate, formatDateTime } from './dateUtils';
 import {
   Box, Heading, Table, Thead, Tbody, Tr, Th, Td,
-  Badge, Text, Button as ChakraButton, HStack
+  Badge, Text, Button as ChakraButton, HStack, Input
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ProfileGate from './ProfileGate';
@@ -163,13 +163,14 @@ export default function DeanDashboard() {
                 <SearchableSelect placeholder="All faculty" value={recordsFaculty} onChange={setRecordsFaculty} maxW="190px" options={[...new Map(consultationRecords.filter(r => r.facultyId?._id).map(r => [r.facultyId._id, { value: r.facultyId._id, label: r.facultyId.name || 'Unknown' }])).values()]} />
                 <SearchableSelect placeholder="All cases" value={recordsCase} onChange={setRecordsCase} maxW="190px" options={[...new Set(consultationRecords.map(r => r.casePresented).filter(Boolean))].sort().map(value => ({ value, label: value }))} />
               </HStack>
-              <input
+              <Input
                 placeholder="Search by student, faculty, or reason..."
+                aria-label="Search consultation records"
                 value={recordsSearch}
                 onChange={(e) => setRecordsSearch(e.target.value)}
-                style={{ width: '100%', maxWidth: '320px', padding: '8px 12px', borderRadius: '6px', border: `1px solid ${C.border}`, background: 'transparent', color: C.text }}
+                w="100%" maxW="320px"
               />
-              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
+              <ChakraButton colorScheme="blue" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
             </HStack>
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={C.text}>Consultation Records</Heading>
@@ -212,7 +213,7 @@ export default function DeanDashboard() {
               <Text color={C.textMid} fontSize="sm">Live status of every faculty member.</Text>
               <SearchableSelect placeholder="All positions" value={rosterPosition} onChange={setRosterPosition} maxW="220px" options={[...new Set(facultyRoster.map(f => f.programPosition).filter(Boolean))].sort().map(position => ({ value: position, label: position }))} />
               <SearchableSelect placeholder="All live statuses" value={rosterStatus} onChange={setRosterStatus} maxW="190px" options={[...new Set(facultyRoster.map(f => f.currentStatus).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
-              <ChakraButton size="sm" colorScheme="blue" onClick={handleExportCSV}>Export CSV Report</ChakraButton>
+              <ChakraButton colorScheme="blue" onClick={handleExportCSV}>Export CSV Report</ChakraButton>
             </HStack>
             <ScrollTable>
               <Table variant="simple" size="sm">

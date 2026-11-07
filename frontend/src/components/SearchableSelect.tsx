@@ -4,6 +4,7 @@ import {
   Text, VStack, HStack, Box, useDisclosure,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, SearchIcon } from '@chakra-ui/icons';
+import { useFieldStyle } from '../utils/uiTokens';
 
 export interface SearchableOption {
   value: string;
@@ -15,17 +16,21 @@ interface Props {
   options: SearchableOption[];
   onChange: (value: string) => void;
   placeholder?: string;
+  /** Width of the field. A fixed value like "190px" keeps side-by-side filters on one row; "100%" fills its parent. */
   maxW?: string;
+  /** Same sizes as Chakra's <Select>, so a filter bar can mix both without a height mismatch. */
+  size?: 'sm' | 'md';
   isDisabled?: boolean;
   ariaLabel?: string;
 }
 
 export default function SearchableSelect({
   value, options, onChange, placeholder = 'Select an option',
-  maxW = '100%', isDisabled = false, ariaLabel,
+  maxW = '100%', size = 'md', isDisabled = false, ariaLabel,
 }: Props) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [query, setQuery] = useState('');
+  const f = useFieldStyle();
   const selected = options.find(option => option.value === value);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -37,16 +42,21 @@ export default function SearchableSelect({
   return (
     <Popover isOpen={isOpen} onOpen={onOpen} onClose={close} placement="bottom-start" isLazy matchWidth>
       <PopoverTrigger>
+        {/* Looks like a themed <Select>/<Input>: same background, border, radius, height, hover and focus ring. */}
         <Button
-          type="button" variant="outline" width="100%" maxW={maxW}
+          type="button" variant="outline" size={size} w={maxW} maxW="100%" flexShrink={0}
           justifyContent="space-between" fontWeight="normal"
+          bg={f.bg} color={f.text} borderColor={f.border} boxShadow="0 1px 1px rgba(15, 34, 64, 0.04)"
+          _hover={{ bg: f.bg, borderColor: f.hover }}
+          _active={{ bg: f.bg, transform: 'none' }}
+          _focusVisible={{ outline: 'none', borderColor: '#2563eb', boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.25)' }}
           isDisabled={isDisabled} aria-label={ariaLabel || placeholder}
-          rightIcon={<ChevronDownIcon />}
+          rightIcon={<ChevronDownIcon boxSize={5} />}
         >
           <Text noOfLines={1} textAlign="left">{selected?.label || placeholder}</Text>
         </Button>
       </PopoverTrigger>
-      <PopoverContent maxW={maxW} zIndex={1500}>
+      <PopoverContent maxW={maxW} zIndex={1500} bg={f.bg} color={f.text} borderColor={f.border}>
         <PopoverBody p={2}>
           <HStack mb={2}>
             <SearchIcon color="gray.400" />
