@@ -102,7 +102,9 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
             ) : (
               <FormControl isRequired>
                 <FormLabel>Academic Position</FormLabel>
-                <Input placeholder="e.g. IT Instructor or Program Head" value={position} onChange={e => setPosition(e.target.value)} />
+                <Select placeholder="Select position" value={position} onChange={e => setPosition(e.target.value)}>
+                  {facultyPositions.map(item => <option key={item} value={item}>{item}</option>)}
+                </Select>
               </FormControl>
             )}
             {needsId && (
