@@ -15,6 +15,7 @@ import ProfilePage from './ProfilePage';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
 import ScrollTable from './ScrollTable';
+import SearchableSelect from './SearchableSelect';
 import WelcomeHeader from './WelcomeHeader';
 import ExportBar from './ExportBar';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
@@ -49,6 +50,10 @@ export default function DeanDashboard() {
   const [facultyRoster, setFacultyRoster] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [recordsSearch, setRecordsSearch] = useState('');
+  const [recordsFaculty, setRecordsFaculty] = useState('');
+  const [recordsCase, setRecordsCase] = useState('');
+  const [rosterPosition, setRosterPosition] = useState('');
+  const [rosterStatus, setRosterStatus] = useState('');
 
   const fetchData = () => {
     // Phase 1 Analytics: Pull live board data
@@ -97,11 +102,16 @@ export default function DeanDashboard() {
     const q = recordsSearch.trim().toLowerCase();
     if (!q) return consultationRecords;
     return consultationRecords.filter((r: any) =>
-      r.studentName?.toLowerCase().includes(q) ||
-      r.facultyId?.name?.toLowerCase().includes(q) ||
-      r.reason?.toLowerCase().includes(q)
+      (!q || r.studentName?.toLowerCase().includes(q) || r.facultyId?.name?.toLowerCase().includes(q) || r.reason?.toLowerCase().includes(q)) &&
+      (!recordsFaculty || r.facultyId?._id === recordsFaculty) &&
+      (!recordsCase || r.casePresented === recordsCase)
     );
-  }, [consultationRecords, recordsSearch]);
+  }, [consultationRecords, recordsSearch, recordsFaculty, recordsCase]);
+
+  const filteredRoster = useMemo(() => facultyRoster.filter(f =>
+    (!rosterPosition || f.programPosition === rosterPosition) &&
+    (!rosterStatus || f.currentStatus === rosterStatus)
+  ), [facultyRoster, rosterPosition, rosterStatus]);
 
   return (
     <>
@@ -150,6 +160,10 @@ export default function DeanDashboard() {
         {activePage === 'records' && (
           <Box id="print-area" bg={C.surface} p={6} borderRadius="lg" borderWidth="1px" borderColor={C.border} shadow="sm">
             <HStack justifyContent="space-between" spacing={0} gap={3} flexWrap="wrap" mb={4} className="no-print">
+              <HStack spacing={2} flexWrap="wrap">
+                <SearchableSelect placeholder="All faculty" value={recordsFaculty} onChange={setRecordsFaculty} maxW="190px" options={[...new Map(consultationRecords.filter(r => r.facultyId?._id).map(r => [r.facultyId._id, { value: r.facultyId._id, label: r.facultyId.name || 'Unknown' }])).values()]} />
+                <SearchableSelect placeholder="All cases" value={recordsCase} onChange={setRecordsCase} maxW="190px" options={[...new Set(consultationRecords.map(r => r.casePresented).filter(Boolean))].sort().map(value => ({ value, label: value }))} />
+              </HStack>
               <input
                 placeholder="Search by student, faculty, or reason..."
                 value={recordsSearch}
@@ -197,13 +211,15 @@ export default function DeanDashboard() {
           <Box bg={C.surface} p={6} borderRadius="lg" borderWidth="1px" borderColor={C.border} shadow="sm">
             <HStack justifyContent="space-between" spacing={0} gap={3} flexWrap="wrap" mb={6}>
               <Text color={C.textMid} fontSize="sm">Live status of every faculty member.</Text>
+              <SearchableSelect placeholder="All positions" value={rosterPosition} onChange={setRosterPosition} maxW="220px" options={[...new Set(facultyRoster.map(f => f.programPosition).filter(Boolean))].sort().map(position => ({ value: position, label: position }))} />
+              <SearchableSelect placeholder="All live statuses" value={rosterStatus} onChange={setRosterStatus} maxW="190px" options={[...new Set(facultyRoster.map(f => f.currentStatus).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
               <ChakraButton size="sm" colorScheme="blue" onClick={handleExportCSV}>Export CSV Report</ChakraButton>
             </HStack>
             <ScrollTable>
               <Table variant="simple" size="sm">
                 <Thead><Tr><Th color={C.textMid}>Name</Th><Th color={C.textMid}>Position</Th><Th color={C.textMid}>Live Status</Th><Th color={C.textMid}>Location</Th></Tr></Thead>
                 <Tbody>
-                  {facultyRoster.map((prof) => (
+                  {filteredRoster.map((prof) => (
                     <Tr key={prof._id}>
                       <Td fontWeight="bold" color={C.text}>{prof.name}</Td>
                       <Td color={C.text}>{prof.programPosition}</Td>
