@@ -21,6 +21,7 @@ import DashboardShell from './DashboardShell';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
 import PageTitle from './PageTitle';
+import type { IconName } from './NavIcon';
 import RequestList from './RequestList';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import ExportBar from './ExportBar';
@@ -29,7 +30,7 @@ import ExportBar from './ExportBar';
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile";
+type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours";
 type ViewMode  = "week" | "day";
 type EventType = "teaching" | "appointment" | "consultation" | "note";
 
@@ -768,16 +769,16 @@ const saveConsultationHours = async () => {
       portalLabel="Faculty Portal"
       userName={userName || ''}
       extras={<ProfileGate role="FACULTY" />}
-      onOpenProfile={() => setActivePage("profile")}
-      profileActive={activePage === "profile"}
       nav={([
-        { page: "status",    label: "My Status" },
-        { page: "schedule",  label: "Master Schedule" },
-        { page: "requests",  label: `Requests (${myAppointments.filter(a => a.status === 'PENDING').length})` },
-        { page: "log",       label: "Consultation Log" },
-        { page: "analytics", label: "My Analytics" },
-      ] as { page: Page; label: string }[]).map(({ page, label }) => ({
-        key: page, label, active: activePage === page, onClick: () => setActivePage(page),
+        { page: "schedule",  section: "Consultations", icon: "calendar",  label: "Master Schedule" },
+        { page: "requests",  section: "Consultations", icon: "inbox",     label: "Requests", badge: myAppointments.filter(a => a.status === 'PENDING').length },
+        { page: "log",       section: "Consultations", icon: "clipboard", label: "Consultation Log" },
+        { page: "status",    section: "Availability",  icon: "activity",  label: "Status & Notices" },
+        { page: "hours",     section: "Availability",  icon: "clock",     label: "Consultation Hours" },
+        { page: "analytics", section: "Insights",      icon: "chart",     label: "My Analytics" },
+        { page: "profile",   section: "Account",       icon: "user",      label: "My Profile" },
+      ] as { page: Page; section: string; icon: IconName; label: string; badge?: number }[]).map(({ page, ...item }) => ({
+        key: page, ...item, active: activePage === page, onClick: () => setActivePage(page),
       }))}
     >
         <WelcomeHeader name={userName || ''} actions={activePage === 'analytics' ? <ExportBar solid csvPath="/api/analytics/me.csv" fileBase="my-analytics" /> : undefined} />
@@ -800,7 +801,7 @@ const saveConsultationHours = async () => {
                   </>
                 ) : (
                   <>
-                    <h1 style={{ fontSize: "16px", fontWeight: 700, margin: 0, letterSpacing: "-0.015em" }}>My Itinerary</h1>
+                    <h1 style={{ fontSize: "16px", fontWeight: 700, margin: 0, letterSpacing: "-0.015em" }}>Master Schedule</h1>
                     <p style={{ fontSize: "11px", color: C.textMid, margin: "2px 0 0" }}>{weekLabel}</p>
                   </>
                 )}
@@ -1048,7 +1049,7 @@ const saveConsultationHours = async () => {
         ─────────────────────────────────────────────────────────────── */}
         {activePage === "status" && (
           <div style={{ padding: "clamp(16px, 4vw, 32px)", overflowY: "auto" }}>
-            <PageTitle>My Status & Notices</PageTitle>
+            <PageTitle>Status & Notices</PageTitle>
             <Box display="flex" gap={6} flexDirection={{ base: 'column', md: 'row' }}>
               
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
@@ -1066,9 +1067,6 @@ const saveConsultationHours = async () => {
                 </VStack>
               </Box>
 
-              {/* <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
-                <Heading size="md" color={textColor} mb={6}>Fixed Consultation Hours</Heading>
-              </Box> */}
               
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
                 <Heading size="md" color={textColor} mb={6}>Post a Notice (Students)</Heading>
@@ -1082,8 +1080,14 @@ const saveConsultationHours = async () => {
                 </form>
               </Box>
             </Box>
+          </div>
+        )}
 
-            <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
+        {/* PAGE: CONSULTATION HOURS (fixed + added weekly hours; moved out of Status & Notices) */}
+        {activePage === "hours" && (
+          <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
+            <PageTitle>Consultation Hours</PageTitle>
+            <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" maxW="760px">
               <Heading size="md" color={textColor} mb={2}>Fixed Consultation Hours</Heading>
               <Text fontSize="sm" color={mutedText} mb={4}>Must total exactly 4 hours per week, distributed however you like.</Text>
               <VStack spacing={3} align="stretch">
@@ -1126,7 +1130,7 @@ const saveConsultationHours = async () => {
                 </VStack>
               </Box>
             </Box>
-          </div>
+          </Box>
         )}
 
         {/* ───────────────────────────────────────────────────────────────

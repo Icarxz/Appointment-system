@@ -6,6 +6,8 @@ import {
 } from '@chakra-ui/react';
 import { HamburgerIcon } from '@chakra-ui/icons';
 import SidebarIdentity from './SidebarIdentity';
+import NavIcon from './NavIcon';
+import type { IconName } from './NavIcon';
 import NotificationBell from './NotificationBell';
 import LogoutConfirm from './LogoutConfirm';
 import { SIDEBAR_WIDTH, useNavPalette } from '../utils/uiTokens';
@@ -15,6 +17,13 @@ export interface NavItem {
   label: string;
   active: boolean;
   onClick: () => void;
+  /** Small icon shown before the label. */
+  icon?: IconName;
+  /** A count shown as a pill (pending requests, ...). Hidden when 0 or missing. */
+  badge?: number;
+  /** Heading the item is listed under. Items with the same section sit together under one small heading.
+   *  The section called "Account" is pinned to the bottom of the sidebar, above Dark Mode and Logout. */
+  section?: string;
   /** A collapsible group (Admin's "User Management"). The group opens by itself when a child is active. */
   children?: NavItem[];
 }
@@ -55,14 +64,17 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
 
   const itemStyle = (active: boolean, sub = false): React.CSSProperties => ({
     ...btnBase, width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
-    padding: sub ? '8px 10px' : '10px 10px', minHeight: isMobile ? '44px' : undefined, borderRadius: '7px',
+    padding: sub ? '8px 10px' : '9px 10px', minHeight: isMobile ? '44px' : undefined, borderRadius: '8px',
     background: active ? C.navBg : 'transparent', color: active ? C.navActive : C.navText,
-    fontWeight: active ? 600 : 400, fontSize: sub ? '12.5px' : '13px', textAlign: 'left',
-    borderLeft: sub ? 'none' : (active ? '2px solid #2563eb' : '2px solid transparent'), transition: 'all 0.15s ease',
+    fontWeight: active ? 600 : 500, fontSize: sub ? '12.5px' : '13px', textAlign: 'left',
+    boxShadow: sub ? 'none' : (active ? 'inset 3px 0 0 #3b82f6' : 'inset 3px 0 0 transparent'), transition: 'background 0.15s ease, color 0.15s ease',
   });
-  const dot = (active: boolean) => (
-    <span aria-hidden style={{ width: '5px', height: '5px', borderRadius: '50%', background: active ? '#60a5fa' : 'transparent', border: active ? 'none' : '1.5px solid #3a5373', flexShrink: 0 }} />
-  );
+  const lead = (item: NavItem) => item.icon
+    ? <span style={{ display: 'inline-flex', color: item.active ? '#60a5fa' : 'inherit', opacity: item.active ? 1 : 0.85 }}><NavIcon name={item.icon} /></span>
+    : <span aria-hidden style={{ width: '5px', height: '5px', borderRadius: '50%', background: item.active ? '#60a5fa' : 'transparent', border: item.active ? 'none' : '1.5px solid #3a5373', flexShrink: 0 }} />;
+  const pill = (n?: number) => (n && n > 0)
+    ? <span aria-label={`${n} waiting`} style={{ marginLeft: 'auto', minWidth: '20px', padding: '1px 7px', borderRadius: '999px', background: '#2563eb', color: '#fff', fontSize: '11px', fontWeight: 700, textAlign: 'center', lineHeight: '18px' }}>{n > 99 ? '99+' : n}</span>
+    : null;
 
   // The portals switch pages with state, not the URL, so the "close on navigation" effect above never fires for them.
   // Choosing a page must close the phone menu itself, or the drawer keeps covering the page that was just opened.
@@ -75,14 +87,14 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
       return (
         <div key={item.key}>
           <button onClick={() => setOpenGroups(g => ({ ...g, [item.key]: !expanded }))} aria-expanded={expanded} style={itemStyle(childActive)}>
-            {dot(childActive)}
+            {lead({ ...item, active: childActive })}
             <span style={{ flex: 1 }}>{item.label}</span>
             <span aria-hidden style={{ fontSize: '10px', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>▾</span>
           </button>
           {expanded && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '3px 0 3px 14px', paddingLeft: '8px', borderLeft: `1px solid ${C.navLine}` }}>
               {item.children.map(c => (
-                <button key={c.key} onClick={() => choose(c.onClick)} aria-current={c.active ? 'page' : undefined} style={itemStyle(c.active, true)}>{c.label}</button>
+                <button key={c.key} onClick={() => choose(c.onClick)} aria-current={c.active ? 'page' : undefined} style={itemStyle(c.active, true)}>{c.label}{pill(c.badge)}</button>
               ))}
             </div>
           )}
@@ -91,10 +103,29 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
     }
     return (
       <button key={item.key} onClick={() => choose(item.onClick)} aria-current={item.active ? 'page' : undefined} style={itemStyle(item.active)}>
-        {dot(item.active)}
-        {item.label}
+        {lead(item)}
+        <span style={{ minWidth: 0 }}>{item.label}</span>
+        {pill(item.badge)}
       </button>
     );
+  };
+
+  // Group the items under their section headings, keeping the order they were given in.
+  // "Account" items are pinned to the bottom instead of following the other sections.
+  const mainNav = nav.filter(i => i.section !== 'Account');
+  const accountNav = nav.filter(i => i.section === 'Account');
+  const sectionLabel = (text: string) => (
+    <div key={`h-${text}`} style={{ padding: '16px 10px 6px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5f7a99' }}>{text}</div>
+  );
+  const renderNav = (items: NavItem[]) => {
+    const out: React.ReactNode[] = [];
+    let last: string | undefined;
+    items.forEach(item => {
+      if (item.section && item.section !== last) out.push(sectionLabel(item.section));
+      last = item.section;
+      out.push(renderItem(item));
+    });
+    return out;
   };
 
   const sidebarBody = (
@@ -106,14 +137,23 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
       <SidebarIdentity name={userName} onClick={onOpenProfile ? () => choose(onOpenProfile) : undefined} active={profileActive} />
       {/* On phones the bell lives in the top bar instead, so it keeps polling while the menu is closed. */}
       {showMailbox && !isMobile && <NotificationBell navText={C.navText} navBg={C.navBg} />}
-      <nav aria-label={`${portalLabel} menu`} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-        {nav.map(renderItem)}
+      <nav aria-label={`${portalLabel} menu`} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        {renderNav(mainNav)}
       </nav>
       <div style={{ flex: 1, minHeight: '16px' }} />
-      <button onClick={toggleColorMode} style={{ ...btnBase, padding: '10px 12px', minHeight: isMobile ? '44px' : undefined, borderRadius: '7px', border: `1px solid ${C.navLine}`, background: 'transparent', color: C.navText, fontSize: '12px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-        <span aria-hidden>{C.dk ? '☀' : '☾'}</span> {C.dk ? 'Light Mode' : 'Dark Mode'}
-      </button>
-      <button onClick={() => setLogoutOpen(true)} style={{ ...btnBase, padding: '10px 12px', minHeight: isMobile ? '44px' : undefined, borderRadius: '7px', background: '#dc2626', color: '#fff', fontSize: '12px', fontWeight: 600 }}>Logout</button>
+      {accountNav.length > 0 && (
+        <nav aria-label="Account" style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingTop: '10px', marginBottom: '10px', borderTop: `1px solid ${C.navLine}` }}>
+          {accountNav.map(renderItem)}
+        </nav>
+      )}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button onClick={toggleColorMode} aria-label={C.dk ? 'Switch to light mode' : 'Switch to dark mode'} title={C.dk ? 'Light mode' : 'Dark mode'} style={{ ...btnBase, flex: 1, padding: '9px 10px', minHeight: isMobile ? '44px' : undefined, borderRadius: '8px', border: `1px solid ${C.navLine}`, background: 'transparent', color: C.navText, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+          <span aria-hidden>{C.dk ? '☀' : '☾'}</span> {C.dk ? 'Light' : 'Dark'}
+        </button>
+        <button onClick={() => setLogoutOpen(true)} style={{ ...btnBase, flex: 1, padding: '9px 10px', minHeight: isMobile ? '44px' : undefined, borderRadius: '8px', border: '1px solid rgba(248,113,113,0.45)', background: 'transparent', color: '#fca5a5', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+          <NavIcon name="logout" size={14} /> Logout
+        </button>
+      </div>
     </div>
   );
 
