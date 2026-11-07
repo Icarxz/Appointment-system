@@ -8,6 +8,7 @@ import {
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ClassGridEditor from './ClassGridEditor';
+import ProfilePage from './ProfilePage';
 import ProfileGate from './ProfileGate';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
@@ -32,7 +33,7 @@ export default function AdminDashboard() {
   const toast = useToast();
   const userName = localStorage.getItem('userName');
 
-  const [activePage, setActivePage] = useState('home');
+  const [activePage, setActivePage] = useState('appointments');
   const [facultyList, setFacultyList] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [userTab, setUserTab] = useState<'faculty' | 'students'>('faculty');
@@ -240,34 +241,32 @@ export default function AdminDashboard() {
       showMailbox={false}
       extras={<ProfileGate role="ADMIN" />}
       nav={[
-        { key: 'home', label: 'Class Schedules', active: activePage === 'home', onClick: () => setActivePage('home') },
-        { key: 'appointments', label: `Appointments (${appointments.filter(a => a.status === 'PENDING').length})`, active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
-        {
-          key: 'users', label: 'User Management', active: activePage === 'provision' || activePage === 'users', onClick: () => {},
-          children: [
-            { key: 'provision', label: 'Provision Account', active: activePage === 'provision', onClick: () => setActivePage('provision') },
-            { key: 'faculty', label: `Faculty (${allUsers.filter(u => u.role === 'FACULTY').length || facultyList.length})`, active: activePage === 'users' && userTab === 'faculty', onClick: () => { setUserTab('faculty'); setActivePage('users'); } },
-            { key: 'students', label: `Students (${allUsers.filter(u => u.role === 'STUDENT').length})`, active: activePage === 'users' && userTab === 'students', onClick: () => { setUserTab('students'); setActivePage('users'); } },
-          ],
-        },
-        { key: 'analytics', label: 'Reports & Analytics', active: activePage === 'analytics', onClick: () => setActivePage('analytics') },
-        { key: 'records', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
+        { key: 'appointments', section: 'Operations', icon: 'inbox', label: 'Appointments', badge: appointments.filter(a => a.status === 'PENDING').length, active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
+        { key: 'home', section: 'Operations', icon: 'grid', label: 'Class Schedules', active: activePage === 'home', onClick: () => setActivePage('home') },
+        { key: 'provision', section: 'People', icon: 'userPlus', label: 'Provision Account', active: activePage === 'provision', onClick: () => setActivePage('provision') },
+        { key: 'faculty', section: 'People', icon: 'users', label: `Faculty (${allUsers.filter(u => u.role === 'FACULTY').length || facultyList.length})`, active: activePage === 'users' && userTab === 'faculty', onClick: () => { setUserTab('faculty'); setActivePage('users'); } },
+        { key: 'students', section: 'People', icon: 'graduation', label: `Students (${allUsers.filter(u => u.role === 'STUDENT').length})`, active: activePage === 'users' && userTab === 'students', onClick: () => { setUserTab('students'); setActivePage('users'); } },
+        { key: 'analytics', section: 'Reports', icon: 'chart', label: 'Reports & Analytics', active: activePage === 'analytics', onClick: () => setActivePage('analytics') },
+        { key: 'records', section: 'Reports', icon: 'file', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
+        { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
       ]}
     >
       <WelcomeHeader name={userName || ''} actions={activePage === 'analytics' ? <ExportBar solid csvPath="/api/analytics/report.csv" fileBase="ccis-sync-report" /> : undefined} />
       <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
         {/* The analytics page has no title (the menu already says where you are), like the faculty analytics. */}
         {activePage !== 'analytics' && <PageTitle>
-          {activePage === 'home' && "Teaching Schedules"}
+          {activePage === 'home' && "Class Schedules"}
           {activePage === 'provision' && "Provision Account"}
           {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : "Student Management")}
-          {activePage === 'appointments' && "Appointment Management"}
+          {activePage === 'appointments' && "Appointments"}
           {activePage === 'records' && "Consultation Records"}
+          {activePage === 'profile' && "My Profile"}
         </PageTitle>}
+
+        {activePage === 'profile' && <ProfilePage />}
 
         {activePage === 'home' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <Heading size="sm" mb={4} textTransform="uppercase" color={mutedText}>Class schedule</Heading>
             <FormControl maxW="360px" mb={5}>
               <FormLabel color={textColor}>Instructor</FormLabel>
               <Select placeholder="Choose..." value={selectedFacultyId} onChange={(e) => setSelectedFacultyId(e.target.value)} color={textColor} borderColor={borderColor}>
@@ -284,7 +283,6 @@ export default function AdminDashboard() {
           <Box display="flex" gap={8} flexDir={{ base: 'column', xl: 'row' }}>
             <Box flex={{ base: 'none', xl: '0 0 420px' }}>
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-                <Heading size="sm" mb={6} textTransform="uppercase" color={mutedText}>Provision Account</Heading>
                 <form onSubmit={handleAddFaculty}>
                   <VStack spacing={4}>
                     <FormControl isRequired><FormLabel color={textColor}>Full Name</FormLabel><Input value={name} onChange={(e) => setName(e.target.value)} color={textColor} borderColor={borderColor}/></FormControl>

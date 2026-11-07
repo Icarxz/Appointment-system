@@ -99,7 +99,7 @@ export default function AnalyticsReport() {
           onClick={() => open('Requests', data.drilldown.requests)} />
         <KpiTile dense label="Completed" icon={<CheckCircleIcon />} value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
         <KpiTile dense label="Missed" icon={<WarningIcon />} value={k.missed.total} sub={`${k.missed.student} students · ${k.missed.faculty} faculty · ${pctText(k.missedRate)} missed rate`} accent="#f08a3c"
-          hint={`Missed rate: ${pctText(k.missedRate)} = missed ÷ (completed + missed). Appeals do not reduce this number.`}
+          hint={`Missed rate: ${pctText(k.missedRate)} = missed ÷ (completed + missed). Reasons given do not reduce this number.`}
           onClick={() => open('Missed consultations', data.drilldown.missed, 'Missed by students', 'Missed by faculty')} />
         <KpiTile dense label="Cancelled" icon={<CloseIcon boxSize={3} />} value={o.cancelledStudent + o.cancelledFaculty} sub={`${o.cancelledStudent} students · ${o.cancelledFaculty} faculty`} accent="#64748b"
           onClick={() => open('Cancelled consultations', data.drilldown.cancelled, 'Cancelled by students', 'Cancelled by faculty')} />
@@ -178,10 +178,10 @@ export default function AnalyticsReport() {
   const outcomes = (
     <Grid templateColumns={{ base: '1fr', xl: TILE_COLUMNS }} gap={4} alignItems="start">
       <SimpleGrid columns={{ base: 2, md: 3, xl: 1 }} spacing={3}>
-        <KpiTile dense label="Appeal rate" value={pctText(a.appealRate)} sub="missed consultations that got an appeal" accent="#f08a3c" hint="Appeals on 'Missed (student)' ÷ all 'Missed (student)'." />
-        <KpiTile dense label="Student appeals" value={a.total} sub="reasons given for a missed or cancelled consultation" accent="#16a34a" />
-        <KpiTile dense label="Faculty appeals" value={a.faculty.made} sub="reasons faculty gave to the Dean" accent="#8b5cf6" />
-        <KpiTile dense label="Missed by students" value={k.missed.student} sub="appeals never reduce this" accent="#64748b" />
+        <KpiTile dense label="Reason rate" value={pctText(a.appealRate)} sub="missed consultations that got a reason" accent="#f08a3c" hint="Reasons given for 'Missed (student)' ÷ all 'Missed (student)'." />
+        <KpiTile dense label="Student reasons" value={a.total} sub="given for a missed or cancelled consultation" accent="#16a34a" />
+        <KpiTile dense label="Faculty reasons" value={a.faculty.made} sub="faculty gave to the Dean" accent="#8b5cf6" />
+        <KpiTile dense label="Missed by students" value={k.missed.student} sub="reasons never reduce this" accent="#64748b" />
       </SimpleGrid>
 
       <VStack align="stretch" spacing={6} minW={0}>
@@ -189,7 +189,7 @@ export default function AnalyticsReport() {
         <LineChart data={data.weeklyMissed} color="#f08a3c" />
       </ChartCard>
 
-      <ChartCard title="Consultation appeals by reason" hint="Student appeals that a faculty member has reviewed. Use the dropdowns to zoom to a program, year level or section.">
+      <ChartCard title="Reasons for missed or cancelled consultations" hint="Reasons students gave. Use the dropdowns to zoom to a program, year level or section.">
         <AppealsByReason rows={data.appeals.rows} reasons={data.appeals.reasons} />
       </ChartCard>
 

@@ -11,6 +11,7 @@ import { useDeepLink } from '../utils/useDeepLink';
 import AnalyticsReport from './AnalyticsReport';
 import DeanBroadcastPanel from './DeanBroadcastPanel';
 import DeanAppeals from './DeanAppeals';
+import ProfilePage from './ProfilePage';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
 import ScrollTable from './ScrollTable';
@@ -21,7 +22,7 @@ import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 
 const PAGE_TITLES = {
   reports: 'Reports & Analytics', roster: 'Faculty Roster', records: 'Consultation Records',
-  appeals: 'Faculty Appeals', broadcast: 'Executive Broadcast',
+  appeals: 'Faculty Appeals', broadcast: 'Executive Broadcast', profile: 'My Profile',
 } as const;
 
 // === Helper function for time formatting ===
@@ -38,7 +39,7 @@ export default function DeanDashboard() {
   const userName = localStorage.getItem('userName');
 
   // Unified Page State
-  const [activePage, setActivePage] = useState<'broadcast' | 'roster' | 'reports' | 'records' | 'appeals'>('reports');
+  const [activePage, setActivePage] = useState<'broadcast' | 'roster' | 'reports' | 'records' | 'appeals' | 'profile'>('reports');
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
   const { aptId, closeApt } = useDeepLink(['broadcast', 'roster', 'reports', 'records', 'appeals'] as const, setActivePage);
   
@@ -110,11 +111,12 @@ export default function DeanDashboard() {
       showMailbox
       extras={<ProfileGate role="DEAN" />}
       nav={[
-        { key: 'reports', label: 'Reports & Analytics', active: activePage === 'reports', onClick: () => setActivePage('reports') },
-        { key: 'roster', label: 'Faculty Roster', active: activePage === 'roster', onClick: () => setActivePage('roster') },
-        { key: 'records', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
-        { key: 'appeals', label: 'Faculty Appeals', active: activePage === 'appeals', onClick: () => setActivePage('appeals') },
-        { key: 'broadcast', label: 'Executive Broadcast', active: activePage === 'broadcast', onClick: () => setActivePage('broadcast') },
+        { key: 'reports', section: 'Overview', icon: 'chart', label: 'Reports & Analytics', active: activePage === 'reports', onClick: () => setActivePage('reports') },
+        { key: 'appeals', section: 'Oversight', icon: 'flag', label: 'Faculty Appeals', active: activePage === 'appeals', onClick: () => setActivePage('appeals') },
+        { key: 'roster', section: 'Oversight', icon: 'users', label: 'Faculty Roster', active: activePage === 'roster', onClick: () => setActivePage('roster') },
+        { key: 'records', section: 'Oversight', icon: 'file', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
+        { key: 'broadcast', section: 'Communicate', icon: 'megaphone', label: 'Executive Broadcast', active: activePage === 'broadcast', onClick: () => setActivePage('broadcast') },
+        { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
       ]}
     >
       <WelcomeHeader name={userName || ''} actions={activePage === 'reports' ? <ExportBar solid csvPath="/api/analytics/report.csv" fileBase="ccis-sync-report" /> : undefined} />
@@ -194,7 +196,7 @@ export default function DeanDashboard() {
         {activePage === 'roster' && (
           <Box bg={C.surface} p={6} borderRadius="lg" borderWidth="1px" borderColor={C.border} shadow="sm">
             <HStack justifyContent="space-between" spacing={0} gap={3} flexWrap="wrap" mb={6}>
-              <Heading size="md" color={C.text}>CCIS Faculty Roster</Heading>
+              <Text color={C.textMid} fontSize="sm">Live status of every faculty member.</Text>
               <ChakraButton size="sm" colorScheme="blue" onClick={handleExportCSV}>Export CSV Report</ChakraButton>
             </HStack>
             <ScrollTable>
@@ -218,6 +220,8 @@ export default function DeanDashboard() {
             </ScrollTable>
           </Box>
         )}
+
+        {activePage === 'profile' && <ProfilePage />}
 
         {activePage === 'appeals' && <DeanAppeals />}
 

@@ -19,9 +19,9 @@ interface Props {
 }
 
 /**
- * Appeal button / status for one appointment row.
- *  - STUDENT and FACULTY can appeal their own missed or cancelled consultations (reason dropdown + "Other Reason").
- *  - Appeals are a record of the reason only. Nobody accepts or rejects them.
+ * "Add reason" button / status for one appointment row.
+ *  - STUDENT and FACULTY can add a reason for their own missed or cancelled consultations (reason dropdown + "Other Reason").
+ *  - A reason is a record only. Nobody accepts or rejects it. (The code and the API still call it an "appeal".)
  */
 export default function AppealControls({ apt, role, onChanged }: Props) {
   const toast = useToast();
@@ -56,31 +56,31 @@ export default function AppealControls({ apt, role, onChanged }: Props) {
       {appeal && (
         <>
           <Badge colorScheme="blue" textTransform="none">
-            {appeal.by === 'FACULTY' && role !== 'FACULTY' ? 'Faculty appeal' : appeal.by === 'STUDENT' && role !== 'STUDENT' ? 'Student appeal' : 'Your appeal'}: submitted
+            {appeal.by === 'FACULTY' && role !== 'FACULTY' ? 'Faculty reason' : appeal.by === 'STUDENT' && role !== 'STUDENT' ? 'Student reason' : 'Your reason'}: submitted
           </Badge>
           <Text fontSize="xs" color={mutedText}>Reason: {appeal.reason}</Text>
         </>
       )}
       {canAppeal && (
-        <Button size="xs" variant="outline" colorScheme="blue" onClick={() => { setReason(''); setOpen(true); }}>Appeal</Button>
+        <Button size="xs" variant="outline" colorScheme="blue" onClick={() => { setReason(''); setOpen(true); }}>Add reason</Button>
       )}
 
       <Modal isOpen={open} onClose={() => !busy && setOpen(false)} isCentered>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Submit an appeal</ModalHeader>
+          <ModalHeader>Add your reason</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <Text fontSize="sm" mb={3}>
               {role === 'STUDENT'
-                ? 'Your appeal tells the professor why you missed or cancelled. It is a record of your reason; no approval is needed.'
-                : 'Your appeal tells the Dean why you missed or cancelled. It is a record of your reason; no approval is needed.'}
+                ? 'Tell the professor why you missed or cancelled. It is a record of your reason; no approval is needed.'
+                : 'Tell the Dean why you missed or cancelled. It is a record of your reason; no approval is needed.'}
             </Text>
             <CancelReasonPicker key={apt._id} options={role === 'STUDENT' ? STUDENT_APPEAL_REASONS : FACULTY_APPEAL_REASONS} onChange={setReason} />
           </ModalBody>
           <ModalFooter gap={2}>
             <Button variant="ghost" onClick={() => setOpen(false)} isDisabled={busy}>Close</Button>
-            <Button colorScheme="blue" isLoading={busy} isDisabled={!reason.trim()} onClick={() => send(base, 'POST', { reason }, 'Appeal submitted')}>Submit appeal</Button>
+            <Button colorScheme="blue" isLoading={busy} isDisabled={!reason.trim()} onClick={() => send(base, 'POST', { reason }, 'Reason submitted')}>Submit reason</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

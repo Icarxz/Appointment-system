@@ -100,7 +100,7 @@ export function CohortTable({ rows, emptyText = 'No registered students for this
   );
 }
 
-// Students' decided appeals by reason (columns) and year level or section (rows), plus an
+// Students' reasons for missed or cancelled consultations, by reason (columns) and year level or section (rows), plus an
 // accepted/rejected split per reason so the validity of each reason is visible.
 export function AppealsByReason({ rows, reasons }: { rows: AppealRow[]; reasons: string[] }) {
   const t = useTheme();
@@ -116,15 +116,15 @@ export function AppealsByReason({ rows, reasons }: { rows: AppealRow[]; reasons:
   return (
     <Box>
       <FilterBar programs={f.programs} years={f.years} program={f.program} year={f.year} onProgram={f.setProgram} onYear={f.setYear} />
-      {f.kept.length === 0 ? <Text fontSize="sm" color={t.muted}>No appeals for this selection yet.</Text> : (
+      {f.kept.length === 0 ? <Text fontSize="sm" color={t.muted}>No reasons for this selection yet.</Text> : (
         <VStack align="stretch" spacing={5}>
           <Box>
-            <Text fontSize="xs" fontWeight="700" color={t.muted} mb={2}>Why students appealed</Text>
+            <Text fontSize="xs" fontWeight="700" color={t.muted} mb={2}>Reasons students gave</Text>
             {perReason.map(p => (
               <Flex key={p.reason} align="center" gap={3} mb={2}>
                 <Text fontSize="sm" color={t.text} w={{ base: '120px', md: '210px' }} flexShrink={0} noOfLines={1} title={p.reason}>{p.reason}</Text>
                 <Flex flex="1" bg={t.tint} borderRadius="4px" h="14px" overflow="hidden">
-                  <Box bg="#2563eb" w={`${(p.count / biggest) * 100}%`} title={`${p.count} appeals`} />
+                  <Box bg="#2563eb" w={`${(p.count / biggest) * 100}%`} title={`${p.count} reasons`} />
                 </Flex>
                 <Text fontSize="xs" color={t.muted} w="60px" textAlign="right" flexShrink={0}>{p.count}</Text>
               </Flex>
@@ -135,7 +135,7 @@ export function AppealsByReason({ rows, reasons }: { rows: AppealRow[]; reasons:
               <Thead><Tr>
                 <Th color={t.muted}>{f.year === 'All' ? 'Year level' : 'Section'}</Th>
                 {reasons.map(r => <Th key={r} color={t.muted} isNumeric whiteSpace="normal" minW="96px">{r}</Th>)}
-                <Th color={t.muted} isNumeric>Total appeals</Th>
+                <Th color={t.muted} isNumeric>Total reasons</Th>
               </Tr></Thead>
               <Tbody>
                 {f.rowKeys.map(rk => (
@@ -153,7 +153,7 @@ export function AppealsByReason({ rows, reasons }: { rows: AppealRow[]; reasons:
           </Box>
         </VStack>
       )}
-      <Text fontSize="xs" color={t.muted} mt={2}>Every student appeal is counted. Appeals are a record of the reason; they do not remove the miss from the totals.</Text>
+      <Text fontSize="xs" color={t.muted} mt={2}>Every student reason is counted. A reason is a record only; it does not remove the miss from the totals.</Text>
     </Box>
   );
 }

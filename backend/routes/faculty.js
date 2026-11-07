@@ -810,9 +810,9 @@ router.post('/appointment/:id/appeal', requireAuth(['STUDENT', 'FACULTY']), asyn
       : String(apt.studentId) === String(req.user.userId);
     if (!mine) return res.status(403).json({ error: 'Forbidden' });
     if (!APPEALABLE[role].includes(apt.status)) {
-      return res.status(400).json({ error: 'Only a missed or cancelled consultation can be appealed.' });
+      return res.status(400).json({ error: 'Only a missed or cancelled consultation can have a reason added.' });
     }
-    if (apt.appeal && apt.appeal.status) return res.status(400).json({ error: 'You already submitted an appeal for this consultation.' });
+    if (apt.appeal && apt.appeal.status) return res.status(400).json({ error: 'You already added a reason for this consultation.' });
     const reason = String(req.body.reason || '').trim().slice(0, 300);
     if (!reason) return res.status(400).json({ error: 'Please select or enter a reason.' });
 
@@ -821,14 +821,14 @@ router.post('/appointment/:id/appeal', requireAuth(['STUDENT', 'FACULTY']), asyn
 
     const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
     if (role === 'STUDENT') {
-      await notify(apt.facultyId, { type: 'APPEAL', title: 'Student appeal', message: `${apt.studentName} appealed the consultation on ${when}. Reason: ${reason}`, appointmentId: apt._id });
+      await notify(apt.facultyId, { type: 'APPEAL', title: 'Student reason', message: `${apt.studentName} added a reason for the missed or cancelled consultation on ${when}. Reason: ${reason}`, appointmentId: apt._id });
     } else {
       const me = await User.findById(req.user.userId).select('name');
       await notifyRole('DEAN', { type: 'APPEAL', title: 'Faculty appeal', message: `${me ? me.name : 'A faculty member'} appealed the consultation with ${apt.studentName} on ${when}. Reason: ${reason}`, appointmentId: apt._id });
     }
-    res.json({ message: 'Appeal submitted.', appointment: apt });
+    res.json({ message: 'Reason submitted.', appointment: apt });
   } catch (error) {
-    res.status(500).json({ error: 'Server error submitting the appeal.' });
+    res.status(500).json({ error: 'Server error submitting the reason.' });
   }
 });
 

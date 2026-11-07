@@ -38,7 +38,7 @@ function commonSections({ purposes, cohorts, appeals }) {
   return [
     { title: 'Why students come', header: ['Purpose', 'Requests', 'Percent'], rows: (purposes?.items || []).map((p) => [p.label, p.count, `${p.percent}%`]) },
     { title: 'Students by program, year level and section', header: ['Program / year / section', 'Students'], rows: (cohorts || []).map((c) => [cohortLabel(c), c.count]) },
-    { title: 'Student appeals by reason (record only)', header: ['Program / year / section', 'Reason', 'Appeals'], rows: (appeals?.rows || []).map((r) => [cohortLabel(r), r.reason, r.count]) },
+    { title: 'Reasons students gave (record only)', header: ['Program / year / section', 'Reason', 'Count'], rows: (appeals?.rows || []).map((r) => [cohortLabel(r), r.reason, r.count]) },
   ];
 }
 
@@ -55,7 +55,7 @@ function sharedReportCsv(report, { generatedAt, role }) {
     ] },
     { title: 'Faculty load', header: ['Faculty', 'Requests', 'Completed'], rows: (report.facultyLoad || []).map((f) => [f.name, f.requests, f.completed]) },
     ...commonSections({ purposes: report.purposes, cohorts: report.cohortStudents, appeals: report.appeals }),
-    { title: 'Appeals summary', rows: [['Appeal rate', pct(report.appeals?.summary?.appealRate)], ['Student appeals', report.appeals?.summary?.total], ['Faculty appeals', report.appeals?.summary?.faculty?.made]] },
+    { title: 'Reasons summary', rows: [['Reason rate', pct(report.appeals?.summary?.appealRate)], ['Student reasons', report.appeals?.summary?.total], ['Faculty reasons', report.appeals?.summary?.faculty?.made]] },
   ];
   if (report.accountHealth) {
     sections.push({ title: 'Profile completion (counts only)', header: ['Role', 'Complete', 'Incomplete'], rows: (report.accountHealth.profile || []).map((p) => [p.role, p.complete, p.incomplete]) });

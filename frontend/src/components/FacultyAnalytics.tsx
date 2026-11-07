@@ -69,7 +69,7 @@ export default function FacultyAnalytics() {
           onClick={() => open('Requests', data.drilldown.requests)} />
         <KpiTile dense label="Completed" icon={<CheckCircleIcon />} value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
         <KpiTile dense label="Missed" icon={<WarningIcon />} value={k.missed.total} sub={`${k.missed.student} students · ${k.missed.faculty} faculty · ${pctText(k.missedRate)} missed rate`} accent={OUTCOME_COLORS.missedStudent}
-          hint="Missed rate = missed ÷ (completed + missed). Appeals do not reduce this number." onClick={() => open('Missed consultations', data.drilldown.missed, ['Missed by students', 'Missed by me'])} />
+          hint="Missed rate = missed ÷ (completed + missed). Reasons given do not reduce this number." onClick={() => open('Missed consultations', data.drilldown.missed, ['Missed by students', 'Missed by me'])} />
         <KpiTile dense label="Cancelled" icon={<CloseIcon boxSize={3} />} value={k.cancelled.student + k.cancelled.faculty} sub={`${k.cancelled.student} students · ${k.cancelled.faculty} faculty`} accent="#64748b"
           onClick={() => open('Cancelled consultations', data.drilldown.cancelled, ['Cancelled by students', 'Cancelled by me'])} />
         <KpiTile dense label="Approved" icon={<CheckIcon />} value={k.approved.total} sub={`${k.approved.last4} in last 4 wks · ${o.declined} declined`} accent="#0891b2" hint="Requests you approved. Approval rate = approved ÷ (approved + declined). Requests that expired unanswered are shown separately and do not lower it."
@@ -98,10 +98,10 @@ export default function FacultyAnalytics() {
         <HBarChart color="#0891b2" items={s.purposes.items.map(p => ({ label: p.label, value: p.count, note: `${p.percent}%` }))} emptyText="No requests yet." />
       </ChartCard>
 
-      <ChartCard title="Appeals from my students, by reason" hint="Reasons your students gave. Appeals do not remove a no-show from your totals.">
+      <ChartCard title="Reasons from my students" hint="Reasons your students gave for missed or cancelled consultations. They do not remove a no-show from your totals.">
         <AppealsByReason rows={appeals.rows} reasons={appeals.reasons} />
         <Text fontSize="xs" color={muted} mt={2}>
-          Appeal rate {pctText(appeals.summary.appealRate)} · student appeals: {appeals.summary.total} · my own appeals to the Dean: {appeals.summary.faculty.made}
+          Reason rate {pctText(appeals.summary.appealRate)} · student reasons: {appeals.summary.total} · my own reasons to the Dean: {appeals.summary.faculty.made}
         </Text>
       </ChartCard>
 
