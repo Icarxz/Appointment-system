@@ -110,15 +110,30 @@ export default function AdminDashboard() {
   }, [appointments]);
 
   const [recordsSearch, setRecordsSearch] = useState('');
+  const [recordsFaculty, setRecordsFaculty] = useState('');
+  const [recordsCase, setRecordsCase] = useState('');
+  const [appointmentStatus, setAppointmentStatus] = useState('');
+  const [appointmentFaculty, setAppointmentFaculty] = useState('');
+  const [facultyPositionFilter, setFacultyPositionFilter] = useState('');
+  const [facultyStatusFilter, setFacultyStatusFilter] = useState('');
   const filteredRecords = React.useMemo(() => {
     const q = recordsSearch.trim().toLowerCase();
     if (!q) return consultationRecords;
     return consultationRecords.filter(r =>
-      r.studentName?.toLowerCase().includes(q) ||
-      r.facultyId?.name?.toLowerCase().includes(q) ||
-      r.reason?.toLowerCase().includes(q)
+      (!q || r.studentName?.toLowerCase().includes(q) || r.facultyId?.name?.toLowerCase().includes(q) || r.reason?.toLowerCase().includes(q)) &&
+      (!recordsFaculty || r.facultyId?._id === recordsFaculty) &&
+      (!recordsCase || r.casePresented === recordsCase)
     );
-  }, [consultationRecords, recordsSearch]);
+  }, [consultationRecords, recordsSearch, recordsFaculty, recordsCase]);
+
+  const filteredAppointments = React.useMemo(() => appointments.filter(a =>
+    (!appointmentStatus || a.status === appointmentStatus) &&
+    (!appointmentFaculty || a.facultyId?._id === appointmentFaculty)
+  ), [appointments, appointmentStatus, appointmentFaculty]);
+  const filteredFacultyList = React.useMemo(() => facultyList.filter(f =>
+    (!facultyPositionFilter || f.programPosition === facultyPositionFilter) &&
+    (!facultyStatusFilter || f.currentStatus === facultyStatusFilter)
+  ), [facultyList, facultyPositionFilter, facultyStatusFilter]);
 
   const handleAddFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -351,7 +366,10 @@ export default function AdminDashboard() {
 
         {activePage === 'users' && userTab === 'faculty' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <Input
+            <HStack spacing={3} mb={4} flexWrap="wrap">
+              <SearchableSelect placeholder="All positions" value={facultyPositionFilter} onChange={setFacultyPositionFilter} maxW="220px" options={[...new Set(facultyList.map(f => f.programPosition).filter(Boolean))].sort().map(position => ({ value: position, label: position }))} />
+              <SearchableSelect placeholder="All live statuses" value={facultyStatusFilter} onChange={setFacultyStatusFilter} maxW="190px" options={[...new Set(facultyList.map(f => f.currentStatus).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
+              <Input
               placeholder="Search by name, position or email..."
               value={facultySearch}
               onChange={(e) => setFacultySearch(e.target.value)}
@@ -363,7 +381,7 @@ export default function AdminDashboard() {
             <ScrollTable><Table variant="simple" size="sm">
               <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
-                {facultyList
+                {filteredFacultyList
                   .filter(prof =>
                     prof.name.toLowerCase().includes(facultySearch.toLowerCase()) ||
                     prof.programPosition.toLowerCase().includes(facultySearch.toLowerCase()) ||
@@ -482,8 +500,11 @@ export default function AdminDashboard() {
 
         {activePage === 'records' && (
           <Box id="print-area" bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <HStack justifyContent="space-between" mb={4} className="no-print">
-              <Input
+            <HStack justifyContent="space-between" mb={4} flexWrap="wrap" className="no-print">
+              <HStack spacing={2} flexWrap="wrap">
+                <SearchableSelect placeholder="All faculty" value={recordsFaculty} onChange={setRecordsFaculty} maxW="190px" options={[...new Map(consultationRecords.filter(r => r.facultyId?._id).map(r => [r.facultyId._id, { value: r.facultyId._id, label: r.facultyId.name || 'Unknown' }])).values()]} />
+                <SearchableSelect placeholder="All cases" value={recordsCase} onChange={setRecordsCase} maxW="190px" options={[...new Set(consultationRecords.map(r => r.casePresented).filter(Boolean))].sort().map(value => ({ value, label: value }))} />
+                <Input
                 placeholder="Search by student, faculty, or reason..."
                 value={recordsSearch}
                 onChange={(e) => setRecordsSearch(e.target.value)}
@@ -526,10 +547,14 @@ export default function AdminDashboard() {
 
         {activePage === 'appointments' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+            <HStack spacing={3} mb={4} flexWrap="wrap">
+              <SearchableSelect placeholder="All statuses" value={appointmentStatus} onChange={setAppointmentStatus} maxW="180px" options={[...new Set(appointments.map(a => a.status).filter(Boolean))].sort().map(status => ({ value: status, label: statusLabel(status) }))} />
+              <SearchableSelect placeholder="All faculty" value={appointmentFaculty} onChange={setAppointmentFaculty} maxW="220px" options={[...new Map(appointments.filter(a => a.facultyId?._id).map(a => [a.facultyId._id, { value: a.facultyId._id, label: a.facultyId.name || 'Unknown' }])).values()]} />
+            </HStack>
             <ScrollTable><Table variant="simple" size="sm">
               <Thead><Tr><Th color={mutedText}>Student</Th><Th color={mutedText}>Target Faculty</Th><Th color={mutedText}>Date/Time</Th><Th color={mutedText}>Reason</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
-                {appointments.map(apt => (
+                {filteredAppointments.map(apt => (
                   <Tr key={apt._id}>
                     <Td fontWeight="bold" color={textColor}>
                       {apt.studentName} ({apt.studentSection})
