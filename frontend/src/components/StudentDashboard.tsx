@@ -21,6 +21,7 @@ import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
 import { PAGE_PAD, CARD_PAD, useNavPalette } from '../utils/uiTokens';
 import RequestList from './RequestList';
+import SearchableSelect from './SearchableSelect';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
 import { manilaToday, addDaysIso, mondayOf, weeksBetween, weekLabel } from '../utils/weekUtils';
@@ -384,18 +385,17 @@ export default function StudentDashboard() {
             <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
               <Flex gap={3} mb={4} wrap="wrap">
                 <Input placeholder="Search faculty by name..." value={statusSearch} onChange={(e) => setStatusSearch(e.target.value)} maxW="280px" color={textColor} borderColor={borderColor} />
-                <Select placeholder="Gender" value={fGender} onChange={(e) => setFGender(e.target.value)} maxW="150px" color={textColor} borderColor={borderColor}>
-                  <option value="Male">Male</option><option value="Female">Female</option>
-                </Select>
-                <Select placeholder="Position" value={fPosition} onChange={(e) => setFPosition(e.target.value)} maxW="220px" color={textColor} borderColor={borderColor}>
-                  {positionOptions.map(p => <option key={p} value={p}>{p}</option>)}
-                </Select>
-                <Select placeholder="Status" value={fStatus} onChange={(e) => setFStatus(e.target.value)} maxW="200px" color={textColor} borderColor={borderColor}>
-                  <option value="IN_CLASS">In Class</option>
-                  <option value="IN_CONSULTATION">In Consultation</option>
-                  <option value="LEAVE_ABSENT">On Leave / Absent</option>
-                  <option value="OTHER">Other (Available, Meeting, Break, Out of Office...)</option>
-                </Select>
+                <SearchableSelect placeholder="Gender" value={fGender} onChange={setFGender} maxW="150px"
+                  options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
+                <SearchableSelect placeholder="Position" value={fPosition} onChange={setFPosition} maxW="220px"
+                  options={positionOptions.map(p => ({ value: p, label: p }))} />
+                <SearchableSelect placeholder="Status" value={fStatus} onChange={setFStatus} maxW="240px"
+                  options={[
+                    { value: 'IN_CLASS', label: 'In Class' },
+                    { value: 'IN_CONSULTATION', label: 'In Consultation' },
+                    { value: 'LEAVE_ABSENT', label: 'On Leave / Absent' },
+                    { value: 'OTHER', label: 'Other (Available, Meeting, Break, Out of Office...)' },
+                  ]} />
               </Flex>
               <Text fontSize="xs" color={mutedText} mb={2}>
                 Not Published means the faculty member has not yet shared their current availability.
