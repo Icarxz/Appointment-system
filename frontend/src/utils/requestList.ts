@@ -5,6 +5,7 @@ export interface ListItem {
   status: string;
   date: string;      // "YYYY-MM-DD" (Manila)
   time: string;      // "HH:MM"
+  createdAt?: string; // when the request was submitted (ISO string from the server)
   reason: string;
   facultyId?: { _id?: string; name: string } | null;
   studentName?: string;
@@ -64,9 +65,23 @@ export function applyFilters<T extends ListItem>(
     (!f.action || actionsOf(a).includes(f.action)));
 }
 
-/** Newest first: by date, then by time within the day. */
+/** The day a request was submitted, in Manila time ("YYYY-MM-DD"). '' for old records without createdAt. */
+const requestedDay = (a: ListItem): string =>
+  a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) : '';
+
+/**
+ * Newest date first. Inside a date, the most recently submitted day comes first, but requests submitted on the
+ * SAME day stay in submission order (first requested on top), never sorted by time.
+ */
 export function sortNewestFirst<T extends ListItem>(items: T[]): T[] {
-  return [...items].sort((a, b) => (a.date === b.date ? b.time.localeCompare(a.time) : b.date.localeCompare(a.date)));
+  return [...items].sort((a, b) => {
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    const dayA = requestedDay(a), dayB = requestedDay(b);
+    if (dayA !== dayB) return dayB.localeCompare(dayA);   // different submission days: newer day first
+    const byCreated = (a.createdAt || '').localeCompare(b.createdAt || '');
+    // Same day: first submitted on top. _id (Mongo ObjectId) also sorts by creation time, so it is the fallback.
+    return byCreated !== 0 ? byCreated : a._id.localeCompare(b._id);
+  });
 }
 
 export function paginate<T>(items: T[], page: number, size: number): { rows: T[]; page: number; pages: number } {

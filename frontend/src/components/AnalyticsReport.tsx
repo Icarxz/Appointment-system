@@ -4,6 +4,7 @@ import {
   TabPanel, TabPanels, Table, Tabs, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useDisclosure,
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
+import { usePrintReport } from '../utils/printReport';
 import { CheckCircleIcon, CloseIcon, TimeIcon, WarningIcon } from '@chakra-ui/icons';
 import SimpleBarChart from './SimpleBarChart';
 import { ChartCard, HBarChart, Heatmap, KpiTile, LineChart, StackedBar } from './AnalyticsCharts';
@@ -46,6 +47,15 @@ const trend = (w: Window) => `${w.last4} in last 4 wks · ${w.prev4} before`; //
 const ROLE_NAMES: Record<string, string> = { STUDENT: 'Students', FACULTY: 'Faculty', DEAN: 'Deans', ADMIN: 'Admins' };
 const OUTCOME_COLORS = { completed: '#16a34a', upcoming: '#2563eb', declined: '#dc2626', expired: '#ca8a04', missedStudent: '#f08a3c', missedFaculty: '#e11d48', cancelledStudent: '#94a3b8', cancelledFaculty: '#64748b' };
 
+// Which part of the report goes to paper: one tab, or 'all' (the Print button in the Welcome bar prints every tab).
+type PrintScope = 'all' | 'overview' | 'outcomes' | 'demand' | 'health';
+
+const PrintIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M6 9V3h12v6" /><rect x="3" y="9" width="18" height="9" rx="2" /><path d="M6 14h12v7H6z" />
+  </svg>
+);
+
 // The Reports & Analytics page shared by Admin and Dean. Admin also gets an "Account health" tab.
 export default function AnalyticsReport() {
   const [data, setData] = useState<ReportData | null>(null);
@@ -53,7 +63,9 @@ export default function AnalyticsReport() {
   const [loading, setLoading] = useState(true);
   const [outcomeView, setOutcomeView] = useState<'faculty' | 'student'>('faculty');
   const [panel, setPanel] = useState<{ title: string; data: Drilldown; studentLabel?: string; facultyLabel?: string } | null>(null);
+  const [printScope, setPrintScope] = useState<PrintScope>('all');
   const drawer = useDisclosure();
+  const print = usePrintReport();
 
   const border = useColorModeValue('#dde3ec', '#1e3048');
   const surface = useColorModeValue('#ffffff', '#111d30');
@@ -76,6 +88,13 @@ export default function AnalyticsReport() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // After the print dialog closes, go back to "everything" so the Welcome-bar Print button still prints all tabs.
+  useEffect(() => {
+    const reset = () => setPrintScope('all');
+    window.addEventListener('afterprint', reset);
+    return () => window.removeEventListener('afterprint', reset);
+  }, []);
+
   if (loading && !data) return <Flex justify="center" py={12}><Spinner color="blue.400" /></Flex>;
   if (error && !data) {
     return (
@@ -90,7 +109,19 @@ export default function AnalyticsReport() {
   const { kpis: k, outcomes: o } = data;
   const open = (title: string, d: Drilldown, studentLabel?: string, facultyLabel?: string) => { setPanel({ title, data: d, studentLabel, facultyLabel }); drawer.onOpen(); };
   const countCell = (n: number, color: string) => <Td isNumeric color={n > 0 ? color : muted} fontWeight={n > 0 ? 700 : 400}>{n}</Td>;
-  const tableBox = { maxH: '340px', overflowY: 'auto' as const, borderWidth: '1px', borderColor: border, borderRadius: 'md' };
+  // On paper the tables show every row (no inner scrolling).
+  const tableBox = { maxH: '340px', overflowY: 'auto' as const, borderWidth: '1px', borderColor: border, borderRadius: 'md', sx: { '@media print': { maxHeight: 'none', overflow: 'visible' } } };
+
+  // Print / Save as PDF for ONE tab: only that tab's content goes to paper.
+  const printTab = (scope: PrintScope) => { setPrintScope(scope); print(); };
+  const tabPrintBar = (scope: PrintScope, title: string) => (
+    <>
+      <Flex justify="flex-end" mb={3} className="no-print">
+        <Button size="xs" variant="outline" leftIcon={<PrintIcon />} onClick={() => printTab(scope)} aria-label={`Print or save the ${title} tab as PDF`}>Print / Save as PDF</Button>
+      </Flex>
+      <Text className="print-only" fontWeight="700" fontSize="md" color="black" mb={3}>{title}</Text>
+    </>
+  );
 
   const overview = (
     <Grid templateColumns={{ base: '1fr', xl: TILE_COLUMNS }} gap={4} alignItems="start">
@@ -194,7 +225,7 @@ export default function AnalyticsReport() {
       </ChartCard>
 
       <ChartCard title={outcomeView === 'faculty' ? 'Faculty outcomes' : 'Student outcomes'}>
-        <HStack mb={3}>
+        <HStack mb={3} className="no-print">
           <Select size="sm" w="160px" value={outcomeView} onChange={e => setOutcomeView(e.target.value as 'faculty' | 'student')} color={text} borderColor={border} aria-label="Outcome view">
             <option value="faculty">Faculty</option>
             <option value="student">Student</option>
@@ -260,25 +291,33 @@ export default function AnalyticsReport() {
     </VStack>
   );
 
+  // Printing: the Welcome-bar button (scope 'all') shows every tab one after another; a tab's own button (scope = that tab)
+  // shows only that tab. The tab buttons themselves never print.
+  const printSx = {
+    '@media print': {
+      '[role=tabpanel]': { display: 'block !important' },
+      '[role=tablist]': { display: 'none' },
+      ...(printScope !== 'all' ? { [`[role=tabpanel]:not([data-scope="${printScope}"])`]: { display: 'none !important' } } : {}),
+    },
+  };
+
   return (
     <VStack align="stretch" spacing={4} id="printable-report">
       <Text className="print-only" fontWeight="700" fontSize="lg" color="black">CCIS Sync: Reports &amp; Analytics (generated {new Date(data.generatedAt).toLocaleString()})</Text>
       <HStack justify="space-between" className="no-print" flexWrap="wrap">
         <Text fontSize="xs" color={muted}>Calculated live by the database · updated {new Date(data.generatedAt).toLocaleTimeString()}</Text>
-        {/* Download CSV and Print / Save as PDF are in the Welcome bar, like on the faculty analytics. */}
+        {/* Download CSV and Print / Save as PDF (all tabs) are in the Welcome bar, like on the faculty analytics. */}
         <Button size="xs" variant="outline" onClick={load} isLoading={loading}>Refresh</Button>
       </HStack>
-      {/* Printing shows every tab's content one after another, without the tab buttons. */}
-      <Tabs variant="soft-rounded" size="sm" colorScheme="blue"
-        sx={{ '@media print': { '[role=tabpanel]': { display: 'block !important' }, '[role=tablist]': { display: 'none' } } }}>
+      <Tabs variant="soft-rounded" size="sm" colorScheme="blue" sx={printSx}>
         <TabList mb={4} flexWrap="wrap" gap={1}>
           <Tab>Overview</Tab><Tab>Outcomes</Tab><Tab>Demand</Tab>{health && <Tab>Account health</Tab>}
         </TabList>
         <TabPanels>
-          <TabPanel px={0}>{overview}</TabPanel>
-          <TabPanel px={0}>{outcomes}</TabPanel>
-          <TabPanel px={0}>{demand}</TabPanel>
-          {health && <TabPanel px={0}>{health}</TabPanel>}
+          <TabPanel px={0} data-scope="overview">{tabPrintBar('overview', 'Overview')}{overview}</TabPanel>
+          <TabPanel px={0} data-scope="outcomes">{tabPrintBar('outcomes', 'Outcomes')}{outcomes}</TabPanel>
+          <TabPanel px={0} data-scope="demand">{tabPrintBar('demand', 'Demand')}{demand}</TabPanel>
+          {health && <TabPanel px={0} data-scope="health">{tabPrintBar('health', 'Account health')}{health}</TabPanel>}
         </TabPanels>
       </Tabs>
       <DrilldownDrawer isOpen={drawer.isOpen} onClose={drawer.onClose} title={panel?.title || ''} data={panel?.data || null} studentLabel={panel?.studentLabel} facultyLabel={panel?.facultyLabel} />
