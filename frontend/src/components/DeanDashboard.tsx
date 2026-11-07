@@ -22,7 +22,7 @@ import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 
 const PAGE_TITLES = {
   reports: 'Reports & Analytics', roster: 'Faculty Roster', records: 'Consultation Records',
-  appeals: 'Faculty Appeals', broadcast: 'Executive Broadcast', profile: 'My Profile',
+  appeals: 'Faculty Reasons', broadcast: 'Executive Broadcast', profile: 'My Profile',
 } as const;
 
 // === Helper function for time formatting ===
@@ -112,7 +112,7 @@ export default function DeanDashboard() {
       extras={<ProfileGate role="DEAN" />}
       nav={[
         { key: 'reports', section: 'Overview', icon: 'chart', label: 'Reports & Analytics', active: activePage === 'reports', onClick: () => setActivePage('reports') },
-        { key: 'appeals', section: 'Oversight', icon: 'flag', label: 'Faculty Appeals', active: activePage === 'appeals', onClick: () => setActivePage('appeals') },
+        { key: 'appeals', section: 'Oversight', icon: 'flag', label: 'Faculty Reasons', active: activePage === 'appeals', onClick: () => setActivePage('appeals') },
         { key: 'roster', section: 'Oversight', icon: 'users', label: 'Faculty Roster', active: activePage === 'roster', onClick: () => setActivePage('roster') },
         { key: 'records', section: 'Oversight', icon: 'file', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
         { key: 'broadcast', section: 'Communicate', icon: 'megaphone', label: 'Executive Broadcast', active: activePage === 'broadcast', onClick: () => setActivePage('broadcast') },
