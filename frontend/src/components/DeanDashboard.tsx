@@ -100,7 +100,6 @@ export default function DeanDashboard() {
 
   const filteredRecords = useMemo(() => {
     const q = recordsSearch.trim().toLowerCase();
-    if (!q) return consultationRecords;
     return consultationRecords.filter((r: any) =>
       (!q || r.studentName?.toLowerCase().includes(q) || r.facultyId?.name?.toLowerCase().includes(q) || r.reason?.toLowerCase().includes(q)) &&
       (!recordsFaculty || r.facultyId?._id === recordsFaculty) &&
