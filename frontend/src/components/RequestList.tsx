@@ -8,6 +8,7 @@ import { formatTime } from './dateUtils';
 import AppealControls from './AppealControls';
 import { statusColor, statusLabel, isBeforeCutoff, hasStarted, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
 import { useNavPalette } from '../utils/uiTokens';
+import SearchableSelect from './SearchableSelect';
 import {
   NEXT_ACTION_LABELS, NO_FILTERS, applyFilters, distinct, facultyNextActions, groupByDate, nextActions, paginate,
   professorKey, sortNewestFirst, studentKey,
@@ -136,28 +137,21 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
       <Flex gap={3} wrap="wrap" align="flex-end" mb={5}>
         <Grid flex="1" minW="240px" gap={3} templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }}>
           {filterBox(isStudent ? 'Professor' : 'Student', (
-            <Select value={filters.professor} onChange={e => set({ professor: e.target.value })} bg={C.surface} borderColor={C.border} color={C.text}>
-              <option value="">{isStudent ? 'All Professors' : 'All Students'}</option>
-              {Array.from(people.entries()).sort((a, b) => a[1].localeCompare(b[1])).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
-            </Select>
+            <SearchableSelect value={filters.professor} onChange={value => set({ professor: value })}
+              placeholder={isStudent ? 'All Professors' : 'All Students'}
+              options={Array.from(people.entries()).sort((a, b) => a[1].localeCompare(b[1])).map(([key, name]) => ({ value: key, label: name }))} />
           ))}
           {filterBox('Reason', (
-            <Select value={filters.reason} onChange={e => set({ reason: e.target.value })} bg={C.surface} borderColor={C.border} color={C.text}>
-              <option value="">All Reasons</option>
-              {reasons.map(r => <option key={r} value={r}>{r.length > 50 ? `${r.slice(0, 50)}…` : r}</option>)}
-            </Select>
+            <SearchableSelect value={filters.reason} onChange={value => set({ reason: value })} placeholder="All Reasons"
+              options={reasons.map(reason => ({ value: reason, label: reason.length > 50 ? `${reason.slice(0, 50)}…` : reason }))} />
           ))}
           {filterBox('Status', (
-            <Select value={filters.status} onChange={e => set({ status: e.target.value })} bg={C.surface} borderColor={C.border} color={C.text}>
-              <option value="">All Statuses</option>
-              {statuses.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-            </Select>
+            <SearchableSelect value={filters.status} onChange={value => set({ status: value })} placeholder="All Statuses"
+              options={statuses.map(status => ({ value: status, label: statusLabel(status) }))} />
           ))}
           {filterBox('Action', (
-            <Select value={filters.action} onChange={e => set({ action: e.target.value as Filters['action'] })} bg={C.surface} borderColor={C.border} color={C.text}>
-              <option value="">All Actions</option>
-              {ACTION_OPTIONS[role].map(k => <option key={k} value={k}>{NEXT_ACTION_LABELS[k]}</option>)}
-            </Select>
+            <SearchableSelect value={filters.action} onChange={value => set({ action: value as Filters['action'] })} placeholder="All Actions"
+              options={ACTION_OPTIONS[role].map(action => ({ value: action, label: NEXT_ACTION_LABELS[action] }))} />
           ))}
         </Grid>
         <IconButton aria-label="Clear filters" title="Clear filters" icon={<RepeatIcon />} variant="outline" bg={C.surface} borderColor={C.border}
