@@ -49,6 +49,7 @@ const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const { STUDENT_ID_REGEX: SCHOOL_ID_REGEX, EMPLOYEE_ID_REGEX: FACULTY_ID_REGEX } = require('../utils/idValidator');
 const Broadcast = require('../models/Broadcast');
 const { isProfileComplete, parseList, audienceMismatch } = require('../utils/signInPolicy');
+const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
@@ -376,6 +377,9 @@ router.post('/add', requireAuth(STAFF), async (req, res) => {
   try {
     if (!EMAIL_REGEX.test(email)) {
       return res.status(400).json({ error: 'Please enter a valid email address (a single "@", e.g. name@gmail.com).' });
+    }
+    if (!isApprovedFacultyPosition(programPosition)) {
+      return res.status(400).json({ error: 'Please select one of the approved positions: Faculty, Librarian, Program Head (BS INFO), Program Head (BS COMSCI), Program Head (BLIS), or Dean.' });
     }
     const existingUser = await User.findOne({ email });
     if (existingUser) {

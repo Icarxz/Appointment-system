@@ -7,6 +7,7 @@ const RosterEntry = require('../models/RosterEntry');
 const { requireAuth } = require('../middleware/auth');
 const { decideSignIn, parseList, isProfileComplete, audienceMismatch } = require('../utils/signInPolicy');
 const { validateId } = require('../utils/idValidator');
+const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
 
 const router = express.Router();
 
@@ -119,6 +120,9 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
     if (!['Male', 'Female', 'Prefer not to say'].includes(gender)) return res.status(400).json({ error: 'Gender is required.' });
     if (!programPosition || !String(programPosition).trim()) {
       return res.status(400).json({ error: user.role === 'STUDENT' ? 'Program, year and section are required.' : 'Position is required.' });
+    }
+    if (user.role !== 'STUDENT' && !isApprovedFacultyPosition(programPosition)) {
+      return res.status(400).json({ error: 'Please select one of the approved positions: Faculty, Librarian, Program Head (BS INFO), Program Head (BS COMSCI), Program Head (BLIS), or Dean.' });
     }
 
     // Students use the student ID format; faculty and dean use the employee format. Admin has no ID.

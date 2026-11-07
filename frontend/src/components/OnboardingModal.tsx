@@ -27,6 +27,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
   const [year, setYear] = useState('');
   const [section, setSection] = useState('');
   const [position, setPosition] = useState('');
+  const facultyPositions = ['Faculty', 'Librarian', 'Program Head (BS INFO)', 'Program Head (BS COMSCI)', 'Program Head (BLIS)', 'Dean'];
   const [idValue, setIdValue] = useState('');
   const [privacy, setPrivacy] = useState(false);
   const [error, setError] = useState('');
@@ -36,7 +37,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
     setError('');
     if (!gender) return setError('Please select your gender.');
     if (isStudent && !(program && year && section)) return setError('Please select your program, year and section.');
-    if (!isStudent && !position.trim()) return setError('Please enter your position.');
+    if (!isStudent && !position) return setError('Please select your position.');
     if (needsId && !isValidId(idValue, idKind)) return setError(`Enter a valid ${isStudent ? 'Student' : 'Employee'} ID (${idHint(idKind)}).`);
     if (!privacy) return setError('Please accept the Privacy Policy.');
 
@@ -47,7 +48,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           gender,
-          programPosition: isStudent ? `${program} ${year}${section}` : position.trim(),
+          programPosition: isStudent ? `${program} ${year}${section}` : position,
           idValue: needsId ? idValue : undefined,
           privacyAccepted: true,
         }),
@@ -101,7 +102,9 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
             ) : (
               <FormControl isRequired>
                 <FormLabel>Academic Position</FormLabel>
-                <Input placeholder="e.g. IT Instructor or Program Head" value={position} onChange={e => setPosition(e.target.value)} />
+                <Select placeholder="Select position" value={position} onChange={e => setPosition(e.target.value)}>
+                  {facultyPositions.map(item => <option key={item} value={item}>{item}</option>)}
+                </Select>
               </FormControl>
             )}
             {needsId && (
