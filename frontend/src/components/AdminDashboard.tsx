@@ -14,6 +14,7 @@ import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
 import ExportBar from './ExportBar';
 import ScrollTable from './ScrollTable';
+import SearchableSelect from './SearchableSelect';
 import WelcomeHeader from './WelcomeHeader';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel, statusColor, statusLabel } from './appointmentStatus';
@@ -50,6 +51,10 @@ export default function AdminDashboard() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [programPosition, setProgramPosition] = useState('');
+  const provisionPositionOptions = Array.from(new Set([
+    'Faculty', 'FACULTY', 'Faculty / Librarian', 'Instructor', 'Program Head, BSIT', 'Dean, CCIS', 'Librarian',
+    ...facultyList.map(f => (f.programPosition || '').trim()),
+  ].filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const [room, setRoom] = useState('');
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
@@ -269,9 +274,8 @@ export default function AdminDashboard() {
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <FormControl maxW="360px" mb={5}>
               <FormLabel color={textColor}>Instructor</FormLabel>
-              <Select placeholder="Choose..." value={selectedFacultyId} onChange={(e) => setSelectedFacultyId(e.target.value)} color={textColor} borderColor={borderColor}>
-                {facultyList.map(f => <option key={f._id} value={f._id}>{f.name}</option>)}
-              </Select>
+              <SearchableSelect placeholder="Choose instructor..." value={selectedFacultyId} onChange={setSelectedFacultyId} maxW="360px"
+                options={facultyList.map(f => ({ value: f._id, label: f.name }))} />
             </FormControl>
             {selectedFacultyId
               ? <ClassGridEditor key={selectedFacultyId} facultyId={selectedFacultyId} facultyName={facultyList.find(f => f._id === selectedFacultyId)?.name || ''} />
@@ -306,7 +310,8 @@ export default function AdminDashboard() {
                     <HStack w="100%">
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Program & Position</FormLabel>
-                        <Input value={programPosition} onChange={(e) => setProgramPosition(e.target.value)} color={textColor} placeholder="e.g. Dean, CCIS" borderColor={borderColor}/>
+                        <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
+                          options={provisionPositionOptions.map(position => ({ value: position, label: position }))} />
                       </FormControl>
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Room / Office</FormLabel>
@@ -392,34 +397,18 @@ export default function AdminDashboard() {
         {activePage === 'users' && userTab === 'students' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <HStack spacing={3} mb={4}>
-              <Select
-                placeholder="Program"
-                value={filterProgram}
-                onChange={(e) => { setFilterProgram(e.target.value); setFilterYear(''); setFilterSection(''); }}
-                maxW="180px" color={textColor} borderColor={borderColor}
-              >
-                {Object.keys(cohortConfig).map(prog => <option key={prog} value={prog}>{prog}</option>)}
-              </Select>
+              <SearchableSelect placeholder="Program" value={filterProgram}
+                onChange={value => { setFilterProgram(value); setFilterYear(''); setFilterSection(''); }}
+                maxW="180px" options={Object.keys(cohortConfig).map(prog => ({ value: prog, label: prog }))} />
 
-              <Select
-                placeholder="Year"
-                value={filterYear}
-                onChange={(e) => { setFilterYear(e.target.value); setFilterSection(''); }}
-                isDisabled={!filterProgram}
-                maxW="120px" color={textColor} borderColor={borderColor}
-              >
-                {filterProgram && Object.keys(cohortConfig[filterProgram]).map(y => <option key={y} value={y}>{y}</option>)}
-              </Select>
+              <SearchableSelect placeholder="Year" value={filterYear}
+                onChange={value => { setFilterYear(value); setFilterSection(''); }}
+                isDisabled={!filterProgram} maxW="120px"
+                options={filterProgram ? Object.keys(cohortConfig[filterProgram]).map(y => ({ value: y, label: y })) : []} />
 
-              <Select
-                placeholder="Section"
-                value={filterSection}
-                onChange={(e) => setFilterSection(e.target.value)}
-                isDisabled={!filterYear}
-                maxW="120px" color={textColor} borderColor={borderColor}
-              >
-                {filterProgram && filterYear && cohortConfig[filterProgram][filterYear].map(sec => <option key={sec} value={sec}>{sec}</option>)}
-              </Select>
+              <SearchableSelect placeholder="Section" value={filterSection} onChange={setFilterSection}
+                isDisabled={!filterYear} maxW="120px"
+                options={filterProgram && filterYear ? cohortConfig[filterProgram][filterYear].map(sec => ({ value: sec, label: sec })) : []} />
 
               <Input
                 placeholder="Search by name or email..."
