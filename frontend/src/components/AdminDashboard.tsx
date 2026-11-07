@@ -51,10 +51,14 @@ export default function AdminDashboard() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [programPosition, setProgramPosition] = useState('');
-  const provisionPositionOptions = Array.from(new Set([
-    'Faculty', 'FACULTY', 'Faculty / Librarian', 'Instructor', 'Program Head, BSIT', 'Dean, CCIS', 'Librarian',
-    ...facultyList.map(f => (f.programPosition || '').trim()),
-  ].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const provisionPositionOptions = [
+    'Faculty',
+    'Librarian',
+    'Program Head (BS INFO)',
+    'Program Head (BS COMSCI)',
+    'Program Head (BLIS)',
+    'Dean',
+  ];
   const [room, setRoom] = useState('');
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
