@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon server.js",
-    "check-email": "node scripts/checkEmail.js"
+    "check-email": "node scripts/checkEmail.js",
+    "migrate-faculty-positions": "node scripts/migrateFacultyPositions.js"
   },
   "keywords": [],
   "author": "",
