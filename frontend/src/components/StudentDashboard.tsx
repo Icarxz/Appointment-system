@@ -362,20 +362,19 @@ export default function StudentDashboard() {
       portalLabel="Student Portal"
       userName={userName}
       nav={[
-        { key: 'home', label: 'Faculty Status', active: activePage === 'home', onClick: () => setActivePage('home') },
-        { key: 'appointments', label: 'Book Consultation', active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
-        { key: 'requests', label: 'My Requests', active: activePage === 'requests', onClick: () => setActivePage('requests') },
+        { key: 'home', section: 'Find & Book', icon: 'users', label: 'Faculty Status', active: activePage === 'home', onClick: () => setActivePage('home') },
+        { key: 'appointments', section: 'Find & Book', icon: 'calendarPlus', label: 'Book Consultation', active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
+        { key: 'requests', section: 'My Activity', icon: 'inbox', label: 'My Requests', badge: myRequests.filter(r => r.status === 'PENDING').length, active: activePage === 'requests', onClick: () => setActivePage('requests') },
+        { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
       ]}
-      onOpenProfile={() => setActivePage('profile')}
-      profileActive={activePage === 'profile'}
     >
         <WelcomeHeader name={userName} />
         <BroadcastBanner userRole="STUDENT" />
         <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
           <PageTitle>
-            {activePage === 'home' && "Live Faculty Status"}
-            {activePage === 'appointments' && "Schedule a Consultation"}
-            {activePage === 'requests' && "My Appointment Requests"}
+            {activePage === 'home' && "Faculty Status"}
+            {activePage === 'appointments' && "Book Consultation"}
+            {activePage === 'requests' && "My Requests"}
             {activePage === 'profile' && "My Profile"}
           </PageTitle>
 
