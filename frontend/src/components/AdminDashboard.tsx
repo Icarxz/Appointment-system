@@ -118,7 +118,6 @@ export default function AdminDashboard() {
   const [facultyStatusFilter, setFacultyStatusFilter] = useState('');
   const filteredRecords = React.useMemo(() => {
     const q = recordsSearch.trim().toLowerCase();
-    if (!q) return consultationRecords;
     return consultationRecords.filter(r =>
       (!q || r.studentName?.toLowerCase().includes(q) || r.facultyId?.name?.toLowerCase().includes(q) || r.reason?.toLowerCase().includes(q)) &&
       (!recordsFaculty || r.facultyId?._id === recordsFaculty) &&
@@ -512,6 +511,7 @@ export default function AdminDashboard() {
                 maxW="320px" color={textColor} borderColor={borderColor}
               />
               <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
+              </HStack>
             </HStack>
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={textColor}>Consultation Records</Heading>
