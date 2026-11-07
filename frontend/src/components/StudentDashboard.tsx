@@ -218,7 +218,29 @@ export default function StudentDashboard() {
     return seen;
   }, [myRequests]);
 
-  const positionOptions = Array.from(new Set(faculty.map(f => (f.programPosition || '').trim()).filter(Boolean))).sort();
+  // Keep the student-facing faculty filter aligned with the approved Provision Account roles.
+  const positionOptions = [
+    'Faculty',
+    'Librarian',
+    'Program Head (BS INFO)',
+    'Program Head (BS COMSCI)',
+    'Program Head (BLIS)',
+    'Dean',
+  ];
+  const normalizeFacultyPosition = (rawPosition: string = '') => {
+    const raw = rawPosition.trim().toLowerCase();
+    if (!raw) return '';
+    if (raw.includes('dean')) return 'Dean';
+    if (raw.includes('librarian')) return 'Librarian';
+    if (raw.includes('program head') || raw.includes('programhead')) {
+      if (/blis|library and information science/.test(raw)) return 'Program Head (BLIS)';
+      if (/comsci|computer science|bscs/.test(raw)) return 'Program Head (BS COMSCI)';
+      if (/bsit|bs info|information technology|\bit\b/.test(raw)) return 'Program Head (BS INFO)';
+      return '';
+    }
+    if (/faculty|instructor/.test(raw)) return 'Faculty';
+    return '';
+  };
   const statusGroups: Record<string, string[]> = {
     IN_CLASS: ['IN_CLASS'], IN_CONSULTATION: ['IN_CONSULTATION'], LEAVE_ABSENT: ['ON_LEAVE', 'ABSENT'],
   };
@@ -227,7 +249,7 @@ export default function StudentDashboard() {
   const statusFiltered = faculty.filter(f =>
     f.name.toLowerCase().includes(statusSearch.toLowerCase()) &&
     (!fGender || f.gender === fGender) &&
-    (!fPosition || (f.programPosition || '').trim() === fPosition) &&
+    (!fPosition || normalizeFacultyPosition(f.programPosition || '') === fPosition) &&
     (!fStatus || matchesStatus(f.currentStatus))
   );
 
