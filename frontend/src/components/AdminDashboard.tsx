@@ -3,7 +3,7 @@ import { cohortConfig } from '../data/cohortConfig';
 import { formatDate, formatDateTime } from './dateUtils';
 import { 
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
-  useToast, Select, HStack, Table, Thead, Tbody, Tr, Th, Td, Badge,
+  useToast, Select, HStack, Flex, SimpleGrid, Table, Thead, Tbody, Tr, Th, Td, Badge,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
@@ -266,29 +266,32 @@ export default function AdminDashboard() {
 
         {activePage === 'provision' && (
           <Box display="flex" gap={8} flexDir={{ base: 'column', xl: 'row' }}>
-            <Box flex={{ base: 'none', xl: '0 0 420px' }}>
+            <Box flex={{ base: 'none', xl: '0 0 520px' }}>
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
                 <form onSubmit={handleAddFaculty}>
-                  <VStack spacing={4}>
-                    <FormControl isRequired><FormLabel color={textColor}>Full Name</FormLabel><Input value={name} onChange={(e) => setName(e.target.value)} color={textColor} borderColor={borderColor}/></FormControl>
-                    
-                    <HStack w="100%">
+                  <VStack spacing={4} align="stretch">
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Full Name</FormLabel>
+                      <Input value={name} onChange={(e) => setName(e.target.value)} color={textColor} borderColor={borderColor}/>
+                    </FormControl>
+
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Email</FormLabel>
                         <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} color={textColor} borderColor={borderColor}/>
                       </FormControl>
-                      
+
                       <FormControl isRequired>
-                        <FormLabel color={textColor}>Access Level (Role)</FormLabel>
+                        <FormLabel color={textColor}>Access Level</FormLabel>
                         <Select value={role} onChange={(e) => setRole(e.target.value)} color={textColor} borderColor={borderColor}>
                           <option value="FACULTY">Faculty Member</option>
                           <option value="DEAN">College Dean</option>
                           <option value="ADMIN">System Admin</option>
                         </Select>
                       </FormControl>
-                    </HStack>
+                    </SimpleGrid>
 
-                    <HStack w="100%">
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Program & Position</FormLabel>
                         <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
@@ -298,8 +301,8 @@ export default function AdminDashboard() {
                         <FormLabel color={textColor}>Room / Office</FormLabel>
                         <Input value={room} onChange={(e) => setRoom(e.target.value)} color={textColor} placeholder="e.g. Dean's Office" borderColor={borderColor}/>
                       </FormControl>
-                    </HStack>
-                    
+                    </SimpleGrid>
+
                     <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={loading}>Generate Account</ChakraButton>
                   </VStack>
                 </form>
@@ -328,19 +331,20 @@ export default function AdminDashboard() {
 
         {activePage === 'users' && userTab === 'faculty' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <HStack spacing={3} mb={4} flexWrap="wrap">
+            <Flex gap={3} mb={4} flexWrap="wrap" align="center">
               <SearchableSelect placeholder="All positions" value={facultyPositionFilter} onChange={setFacultyPositionFilter} maxW="220px" options={[...new Set(facultyList.map(f => f.programPosition).filter(Boolean))].sort().map(position => ({ value: position, label: position }))} />
               <SearchableSelect placeholder="All live statuses" value={facultyStatusFilter} onChange={setFacultyStatusFilter} maxW="190px" options={[...new Set(facultyList.map(f => f.currentStatus).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
               <Input
-              placeholder="Search by name, position or email..."
-              value={facultySearch}
-              onChange={(e) => setFacultySearch(e.target.value)}
-              mb={4}
-              maxW="400px"
-              color={textColor}
-              borderColor={borderColor}
-            />
-            </HStack>
+                placeholder="Search by name, position or email..."
+                value={facultySearch}
+                onChange={(e) => setFacultySearch(e.target.value)}
+                flex="1"
+                minW="240px"
+                maxW="400px"
+                color={textColor}
+                borderColor={borderColor}
+              />
+            </Flex>
             <ScrollTable><Table variant="simple" size="sm">
               <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
@@ -381,7 +385,7 @@ export default function AdminDashboard() {
         
         {activePage === 'users' && userTab === 'students' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <HStack spacing={3} mb={4}>
+            <Flex gap={3} mb={4} flexWrap="wrap" align="center">
               <SearchableSelect placeholder="Program" value={filterProgram}
                 onChange={value => { setFilterProgram(value); setFilterYear(''); setFilterSection(''); }}
                 maxW="180px" options={Object.keys(cohortConfig).map(prog => ({ value: prog, label: prog }))} />
@@ -399,9 +403,11 @@ export default function AdminDashboard() {
                 placeholder="Search by name or email..."
                 value={studentSearch}
                 onChange={(e) => setStudentSearch(e.target.value)}
+                flex="1"
+                minW="220px"
                 color={textColor} borderColor={borderColor}
               />
-            </HStack>
+            </Flex>
 
             <ScrollTable><Table variant="simple" size="sm">
               <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>School ID</Th><Th color={mutedText}>Program / Section</Th><Th color={mutedText}>Email</Th><Th color={mutedText}>Action</Th></Tr></Thead>
@@ -463,19 +469,17 @@ export default function AdminDashboard() {
 
         {activePage === 'records' && (
           <Box id="print-area" bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <HStack justifyContent="space-between" mb={4} flexWrap="wrap" className="no-print">
-              <HStack spacing={2} flexWrap="wrap">
-                <SearchableSelect placeholder="All faculty" value={recordsFaculty} onChange={setRecordsFaculty} maxW="190px" options={[...new Map(consultationRecords.filter(r => r.facultyId?._id).map(r => [r.facultyId._id, { value: r.facultyId._id, label: r.facultyId.name || 'Unknown' }])).values()]} />
-                <SearchableSelect placeholder="All cases" value={recordsCase} onChange={setRecordsCase} maxW="190px" options={[...new Set(consultationRecords.map(r => r.casePresented).filter(Boolean))].sort().map(value => ({ value, label: value }))} />
-                <Input
+            <Flex gap={3} mb={4} flexWrap="wrap" align="center" className="no-print">
+              <SearchableSelect placeholder="All faculty" value={recordsFaculty} onChange={setRecordsFaculty} maxW="190px" options={[...new Map(consultationRecords.filter(r => r.facultyId?._id).map(r => [r.facultyId._id, { value: r.facultyId._id, label: r.facultyId.name || 'Unknown' }])).values()]} />
+              <SearchableSelect placeholder="All cases" value={recordsCase} onChange={setRecordsCase} maxW="190px" options={[...new Set(consultationRecords.map(r => r.casePresented).filter(Boolean))].sort().map(value => ({ value, label: value }))} />
+              <Input
                 placeholder="Search by student, faculty, or reason..."
                 value={recordsSearch}
                 onChange={(e) => setRecordsSearch(e.target.value)}
-                maxW="320px" color={textColor} borderColor={borderColor}
+                flex="1" minW="220px" maxW="320px" color={textColor} borderColor={borderColor}
               />
-              <ChakraButton size="sm" colorScheme="blue" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
-              </HStack>
-            </HStack>
+              <ChakraButton colorScheme="blue" ml="auto" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
+            </Flex>
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={textColor}>Consultation Records</Heading>
               <Text fontSize="sm" color={mutedText}>Generated {formatDateTime(new Date())}</Text>
