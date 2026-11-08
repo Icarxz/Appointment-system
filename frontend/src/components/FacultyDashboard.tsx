@@ -25,6 +25,9 @@ import type { IconName } from './NavIcon';
 import RequestList from './RequestList';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import ExportBar from './ExportBar';
+import SearchableSelect from './SearchableSelect';
+import { cohortConfig } from '../data/cohortConfig';
+import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -246,7 +249,7 @@ const submitLogEntry = async (aptId: string) => {
   const apt = myAppointments.find(a => a._id === aptId);
   const draft = logForm[aptId] || { casePresented: '', interventionTaken: '' };
   const entry = {
-    casePresented: (draft.casePresented ?? apt?.reason ?? '').trim(),
+    casePresented: String(apt?.reason ?? '').trim(), // not editable: always the Purpose of Meeting
     interventionTaken: draft.interventionTaken === 'Others' ? '' : draft.interventionTaken.trim(),
   };
   if (!entry.casePresented || !entry.interventionTaken) {
@@ -274,7 +277,7 @@ const submitLogEntry = async (aptId: string) => {
   }
 };
 
-const updateSavedLogField = (aptId: string, field: 'casePresented' | 'interventionTaken', value: string) => {
+const updateSavedLogField = (aptId: string, field: 'interventionTaken', value: string) => { // the case presented is read-only
   setConsultLog(prev => prev.map(apt => apt._id === aptId ? { ...apt, [field]: value } : apt));
 };
 
@@ -367,6 +370,34 @@ const saveConsultationHours = async () => {
 };
 
   // ── Derived values ────────────────────────────────────────────────────────
+  // ── Consultation Log filters: Gender, Program, Year, Section, Sort by date, Search ──
+  const [logSearch, setLogSearch] = useState('');
+  const [logGender, setLogGender] = useState('');
+  const [logProgram, setLogProgram] = useState('');
+  const [logYear, setLogYear] = useState('');
+  const [logSection, setLogSection] = useState('');
+  const [logSort, setLogSort] = useState<'desc' | 'asc'>('desc'); // by consultation date
+  const logFiltersActive = !!(logSearch || logGender || logProgram || logYear || logSection || logSort !== 'desc');
+  const clearLogFilters = () => { setLogSearch(''); setLogGender(''); setLogProgram(''); setLogYear(''); setLogSection(''); setLogSort('desc'); };
+  const matchesLogFilters = (apt: any) => {
+    const section = apt.studentSection || '';
+    const c = parseCohort(section);
+    const q = logSearch.trim().toLowerCase();
+    return matchesGender(apt.studentId?.gender, logGender) &&
+      (!logProgram || c.program === logProgram || section.startsWith(logProgram)) &&
+      (!logYear || c.year === logYear) &&
+      (!logSection || c.section === logSection) &&
+      (!q || (apt.studentName || '').toLowerCase().includes(q) || (apt.casePresented || apt.reason || '').toLowerCase().includes(q));
+  };
+  const sortLogRows = (rows: any[]) => [...rows].sort((a, b) => {
+    const ka = (a.date || '') + ' ' + (a.time || '');
+    const kb = (b.date || '') + ' ' + (b.time || '');
+    return logSort === 'asc' ? ka.localeCompare(kb) : kb.localeCompare(ka);
+  });
+  const signOffAll = myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)');
+  const pendingSignOff = sortLogRows(signOffAll.filter(matchesLogFilters));
+  const savedLog = sortLogRows(consultLog.filter(matchesLogFilters));
+
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const weekLabel = useMemo(() => formatWeekLabel(weekDates), [weekDates]);
   const visibleDayIndices = viewMode === "week" ? [0, 1, 2, 3, 4, 5] : [focusDay];
@@ -1186,6 +1217,35 @@ const saveConsultationHours = async () => {
               </ChakraButton>
             </Flex>
 
+            <FilterPanel
+              columns={{ base: 1, sm: 2, lg: 3 }}
+              shown={pendingSignOff.length + savedLog.length} total={signOffAll.length + consultLog.length} noun="consultations"
+              canClear={logFiltersActive} onClear={clearLogFilters}
+            >
+              <FilterField label="Gender">
+                <SearchableSelect placeholder="All genders" value={logGender} onChange={setLogGender} maxW="100%" options={GENDER_OPTIONS} />
+              </FilterField>
+              <FilterField label="Program">
+                <SearchableSelect placeholder="All programs" value={logProgram} onChange={setLogProgram} maxW="100%"
+                  options={Object.keys(cohortConfig).map(p => ({ value: p, label: p }))} />
+              </FilterField>
+              <FilterField label="Year">
+                <SearchableSelect placeholder="All years" value={logYear} onChange={setLogYear} maxW="100%"
+                  options={[...new Set(Object.values(cohortConfig).flatMap(p => Object.keys(p)))].sort().map(y => ({ value: y, label: 'Year ' + y }))} />
+              </FilterField>
+              <FilterField label="Section">
+                <SearchableSelect placeholder="All sections" value={logSection} onChange={setLogSection} maxW="100%"
+                  options={[...new Set(Object.values(cohortConfig).flatMap(p => Object.values(p).flat()))].sort().map(sec => ({ value: sec, label: 'Section ' + sec }))} />
+              </FilterField>
+              <FilterField label="Sort by date">
+                <SearchableSelect placeholder="Newest first" value={logSort} onChange={(v) => setLogSort(v === 'asc' ? 'asc' : 'desc')} maxW="100%"
+                  options={[{ value: 'desc', label: 'Newest first' }, { value: 'asc', label: 'Oldest first' }]} />
+              </FilterField>
+              <FilterField label="Search">
+                <Input placeholder="Student or case..." value={logSearch} onChange={(e) => setLogSearch(e.target.value)} color={textColor} borderColor={borderColor} bg={cardBg} />
+              </FilterField>
+            </FilterPanel>
+
             <Box className="no-print" bg={cardBg} p={5} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" mb={5}>
               <Heading size="md" color={textColor} mb={1}>Ready for sign-off</Heading>
               <Text color={mutedText} fontSize="sm" mb={4}>
@@ -1205,32 +1265,20 @@ const saveConsultationHours = async () => {
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)').length === 0 ? (
+                    {pendingSignOff.length === 0 ? (
                       <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No consultations are waiting for sign-off.</Td></Tr>
-                    ) : myAppointments
-                      .filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)')
-                      .map(apt => (
+                    ) : pendingSignOff.map(apt => (
                         <Tr key={apt._id}>
                           <Td minW="190px" color={textColor}>
-                            <Text fontWeight="600">{apt.studentName}</Text>
+                            <PersonCell name={apt.studentName} />
                             {apt.status === 'MISSED (FACULTY)' && <Badge mt={1} colorScheme="orange">Late sign-off</Badge>}
                           </Td>
-                          <Td color={textColor} minW="95px">{apt.studentId?.gender || '—'}</Td>
+                          <Td minW="95px"><GenderBadge gender={apt.studentId?.gender} /></Td>
                           <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>
                           <Td color={textColor} minW="110px">{formatDate(apt.date)}</Td>
                           <Td minW="210px">
-                            <Textarea
-                              size="sm"
-                              rows={2}
-                              resize="vertical"
-                              aria-label={`Case presented for ${apt.studentName}`}
-                              placeholder="Enter case presented"
-                              value={logForm[apt._id]?.casePresented ?? apt.reason ?? ''}
-                              onChange={e => setLogForm(prev => ({
-                                ...prev,
-                                [apt._id]: { ...(prev[apt._id] || { casePresented: '', interventionTaken: '' }), casePresented: e.target.value },
-                              }))}
-                            />
+                            {/* Read-only: it is the student's Purpose of Meeting, so choosing an intervention never touches it. */}
+                            <Text fontSize="sm" color={textColor} whiteSpace="pre-wrap" overflowWrap="anywhere">{apt.reason || '—'}</Text>
                           </Td>
                           <Td minW="240px">
                             <Select
@@ -1291,23 +1339,16 @@ const saveConsultationHours = async () => {
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {consultLog.length === 0 ? (
+                    {savedLog.length === 0 ? (
                       <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No saved consultation records yet.</Td></Tr>
-                    ) : consultLog.map(apt => (
+                    ) : savedLog.map(apt => (
                       <Tr key={apt._id}>
-                        <Td minW="190px" color={textColor} fontWeight="600">{apt.studentName}</Td>
-                        <Td minW="95px" color={textColor}>{apt.studentId?.gender || '—'}</Td>
+                        <Td minW="190px" color={textColor}><PersonCell name={apt.studentName} /></Td>
+                        <Td minW="95px"><GenderBadge gender={apt.studentId?.gender} /></Td>
                         <Td minW="130px" color={textColor}>{apt.studentSection || '—'}</Td>
                         <Td minW="110px" color={textColor}>{formatDate(apt.date)}</Td>
                         <Td minW="210px">
-                          <Textarea
-                            size="sm"
-                            rows={2}
-                            resize="vertical"
-                            aria-label={`Edit case presented for ${apt.studentName}`}
-                            value={apt.casePresented || apt.reason || ''}
-                            onChange={e => updateSavedLogField(apt._id, 'casePresented', e.target.value)}
-                          />
+                          <Text fontSize="sm" color={textColor} whiteSpace="pre-wrap" overflowWrap="anywhere">{apt.casePresented || apt.reason || '—'}</Text>
                         </Td>
                         <Td minW="240px">
                           <Select

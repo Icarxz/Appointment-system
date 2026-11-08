@@ -3,7 +3,7 @@ import { cohortConfig } from '../data/cohortConfig';
 import { formatDate, formatDateTime } from './dateUtils';
 import { 
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
-  useToast, Select, HStack, Flex, SimpleGrid, Table, Thead, Tbody, Tr, Th, Td, Badge,
+  useToast, Select, HStack, Flex, SimpleGrid, Avatar, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
@@ -22,6 +22,65 @@ import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
 // import { QRCodeSVG } from 'qrcode.react';
+
+// ---------- Shared helpers for the People / Records pages ----------
+const GENDER_OPTIONS = [
+  { value: 'Male', label: 'Male' },
+  { value: 'Female', label: 'Female' },
+  { value: 'Prefer not to say', label: 'Prefer not to say' },
+  { value: 'Not provided', label: 'Not provided' }, // older accounts created before gender was collected
+];
+const matchesGender = (g: string | undefined, filter: string) =>
+  !filter || (filter === 'Not provided' ? !g : g === filter);
+
+// "BS INFO 1A" -> { program: 'BS INFO', year: '1', section: 'A' }
+const parseCohort = (pp?: string) => {
+  const m = (pp || '').trim().match(/^(.*\S)\s+(\d+)([A-Za-z]+)$/);
+  return m ? { program: m[1], year: m[2], section: m[3].toUpperCase() } : { program: '', year: '', section: '' };
+};
+
+function GenderBadge({ gender }: { gender?: string }) {
+  if (!gender) return <Text as="span" opacity={0.5}>—</Text>;
+  const color = gender === 'Male' ? 'blue' : gender === 'Female' ? 'pink' : 'gray';
+  return <Badge colorScheme={color} borderRadius="full" px={2}>{gender}</Badge>;
+}
+
+function PersonCell({ name, sub }: { name: string; sub?: string }) {
+  return (
+    <HStack spacing={3} align="center">
+      <Avatar size="sm" name={name} />
+      <Box minW={0}>
+        <Text fontWeight="bold" lineHeight="short">{name}</Text>
+        {sub && <Text fontSize="xs" opacity={0.65} lineHeight="short">{sub}</Text>}
+      </Box>
+    </HStack>
+  );
+}
+
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Box minW={0}>
+      <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" opacity={0.65} mb={1}>{label}</Text>
+      {children}
+    </Box>
+  );
+}
+
+function FilterPanel({ children, shown, total, noun, canClear, onClear }: {
+  children: React.ReactNode; shown: number; total: number; noun: string; canClear: boolean; onClear: () => void;
+}) {
+  const bg = useColorModeValue('gray.50', 'whiteAlpha.50');
+  const line = useColorModeValue('gray.200', 'whiteAlpha.200');
+  return (
+    <Box bg={bg} borderWidth="1px" borderColor={line} borderRadius="lg" p={4} mb={4} className="no-print">
+      <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3} alignItems="end">{children}</SimpleGrid>
+      <Flex mt={3} align="center" justify="space-between" gap={3} flexWrap="wrap">
+        <Text fontSize="xs" opacity={0.7}>Showing {shown} of {total} {noun}</Text>
+        {canClear && <ChakraButton size="xs" variant="ghost" colorScheme="blue" onClick={onClear}>Clear filters</ChakraButton>}
+      </Flex>
+    </Box>
+  );
+}
 
 export const formatTime = (timeStr: string) => {
   if (!timeStr) return '';
@@ -45,6 +104,8 @@ export default function AdminDashboard() {
   const [filterProgram, setFilterProgram] = useState('');
   const [filterYear, setFilterYear] = useState('');
   const [filterSection, setFilterSection] = useState('');
+  const [studentGender, setStudentGender] = useState('');
+  const [facultyGender, setFacultyGender] = useState('');
   const [role, setRole] = useState('FACULTY'); 
   const [allUsers, setAllUsers] = useState<any[]>([]);
   // const [selectedQr, setSelectedQr] = useState({ hash: '', name: '' }); 
@@ -84,6 +145,7 @@ export default function AdminDashboard() {
   const borderColor = palette.border;
   const textColor = palette.text;
   const mutedText = palette.textMid;
+  const hoverBg = useColorModeValue('blue.50', 'whiteAlpha.100');
 
   const fetchAllData = () => {
     authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status`).then(res => res.json()).then(data => setFacultyList(data));
@@ -114,22 +176,26 @@ export default function AdminDashboard() {
   const [recordsSearch, setRecordsSearch] = useState('');
   const [recordsFaculty, setRecordsFaculty] = useState('');
   const [recordsCase, setRecordsCase] = useState('');
+  const [recordsSort, setRecordsSort] = useState<'desc' | 'asc'>('desc'); // by date signed off
   const [detailsId, setDetailsId] = useState<string | null>(null); // the appointment whose View Details panel is open
   const [facultyPositionFilter, setFacultyPositionFilter] = useState('');
   const [facultyStatusFilter, setFacultyStatusFilter] = useState('');
   const filteredRecords = React.useMemo(() => {
     const q = recordsSearch.trim().toLowerCase();
-    return consultationRecords.filter(r =>
+    const list = consultationRecords.filter(r =>
       (!q || r.studentName?.toLowerCase().includes(q) || r.facultyId?.name?.toLowerCase().includes(q) || r.reason?.toLowerCase().includes(q)) &&
       (!recordsFaculty || r.facultyId?._id === recordsFaculty) &&
       (!recordsCase || r.casePresented === recordsCase)
     );
-  }, [consultationRecords, recordsSearch, recordsFaculty, recordsCase]);
+    const time = (r: any) => new Date(r.completedAt || 0).getTime();
+    return [...list].sort((a, b) => recordsSort === 'asc' ? time(a) - time(b) : time(b) - time(a));
+  }, [consultationRecords, recordsSearch, recordsFaculty, recordsCase, recordsSort]);
 
   const filteredFacultyList = React.useMemo(() => facultyList.filter(f =>
     (!facultyPositionFilter || f.programPosition === facultyPositionFilter) &&
-    (!facultyStatusFilter || f.currentStatus === facultyStatusFilter)
-  ), [facultyList, facultyPositionFilter, facultyStatusFilter]);
+    (!facultyStatusFilter || f.currentStatus === facultyStatusFilter) &&
+    matchesGender(f.gender, facultyGender)
+  ), [facultyList, facultyPositionFilter, facultyStatusFilter, facultyGender]);
 
   const handleAddFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,6 +221,26 @@ export default function AdminDashboard() {
   // Quick lookup so the faculty table (which comes from the live-status list) can show IDs.
   const userById: Record<string, any> = {};
   allUsers.forEach(u => { userById[u._id] = u; });
+
+  const facultyQ = facultySearch.trim().toLowerCase();
+  const visibleFaculty = filteredFacultyList.filter(p =>
+    !facultyQ ||
+    p.name.toLowerCase().includes(facultyQ) ||
+    (p.programPosition || '').toLowerCase().includes(facultyQ) ||
+    (userById[p._id]?.email || '').toLowerCase().includes(facultyQ)
+  );
+
+  const studentQ = studentSearch.trim().toLowerCase();
+  const allStudents = allUsers.filter(u => u.role === 'STUDENT');
+  const visibleStudents = allStudents.filter(u => {
+    const pp = u.programPosition || '';
+    const c = parseCohort(pp);
+    return (!filterProgram || c.program === filterProgram || pp.startsWith(filterProgram)) &&
+      (!filterYear || c.year === filterYear) &&
+      (!filterSection || c.section === filterSection) &&
+      matchesGender(u.gender, studentGender) &&
+      (!studentQ || u.name.toLowerCase().includes(studentQ) || (u.email || '').toLowerCase().includes(studentQ) || (u.schoolId || '').toLowerCase().includes(studentQ));
+  });
 
   const openNameEdit = (u: any) => { setNameEdit(u); setNameEditValue(u?.name || ''); };
   const saveName = async () => {
@@ -331,110 +417,126 @@ export default function AdminDashboard() {
 
         {activePage === 'users' && userTab === 'faculty' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <Flex gap={3} mb={4} flexWrap="wrap" align="center">
-              <SearchableSelect placeholder="All positions" value={facultyPositionFilter} onChange={setFacultyPositionFilter} maxW="220px" options={[...new Set(facultyList.map(f => f.programPosition).filter(Boolean))].sort().map(position => ({ value: position, label: position }))} />
-              <SearchableSelect placeholder="All live statuses" value={facultyStatusFilter} onChange={setFacultyStatusFilter} maxW="190px" options={[...new Set(facultyList.map(f => f.currentStatus).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
-              <Input
-                placeholder="Search by name, position or email..."
-                value={facultySearch}
-                onChange={(e) => setFacultySearch(e.target.value)}
-                flex="1"
-                minW="240px"
-                maxW="400px"
-                color={textColor}
-                borderColor={borderColor}
-              />
-            </Flex>
-            <ScrollTable><Table variant="simple" size="sm">
-              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+            <FilterPanel
+              shown={visibleFaculty.length} total={facultyList.length} noun="faculty"
+              canClear={!!(facultyGender || facultyPositionFilter || facultyStatusFilter || facultySearch)}
+              onClear={() => { setFacultyGender(''); setFacultyPositionFilter(''); setFacultyStatusFilter(''); setFacultySearch(''); }}
+            >
+              <FilterField label="Gender">
+                <SearchableSelect placeholder="All genders" value={facultyGender} onChange={setFacultyGender} maxW="100%" options={GENDER_OPTIONS} />
+              </FilterField>
+              <FilterField label="Position">
+                <SearchableSelect placeholder="All positions" value={facultyPositionFilter} onChange={setFacultyPositionFilter} maxW="100%"
+                  options={[...new Set(facultyList.map(f => f.programPosition).filter(Boolean))].sort().map(position => ({ value: position, label: position }))} />
+              </FilterField>
+              <FilterField label="Live status">
+                <SearchableSelect placeholder="All live statuses" value={facultyStatusFilter} onChange={setFacultyStatusFilter} maxW="100%"
+                  options={[...new Set(facultyList.map(f => f.currentStatus).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
+              </FilterField>
+              <FilterField label="Search">
+                <Input
+                  placeholder="Name, position or email..."
+                  value={facultySearch}
+                  onChange={(e) => setFacultySearch(e.target.value)}
+                  color={textColor} borderColor={borderColor} bg={cardBg}
+                />
+              </FilterField>
+            </FilterPanel>
+
+            <ScrollTable><Table variant="simple" size="md">
+              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
-                {filteredFacultyList
-                  .filter(prof =>
-                    prof.name.toLowerCase().includes(facultySearch.toLowerCase()) ||
-                    prof.programPosition.toLowerCase().includes(facultySearch.toLowerCase()) ||
-                    (userById[prof._id]?.email || '').toLowerCase().includes(facultySearch.toLowerCase())
-                  )
-                  .map(prof => (
-                    <Tr key={prof._id}>
-                      <Td fontWeight="bold" color={textColor}>{prof.name}</Td>
-                      <Td color={textColor}>{prof.programPosition}</Td>
-                      <Td color={textColor}>{userById[prof._id]?.facultyId || (userById[prof._id]?.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
-                      <Td>
-                        <Badge colorScheme={facultyStatusColor(prof.currentStatus)}>
-                          {facultyStatusLabel(prof.currentStatus)}
-                        </Badge>
-                      </Td>
-                      <Td>
-                        {userById[prof._id]?.role === 'FACULTY' && (
-                          <HStack spacing={2}>
-                            <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(userById[prof._id])}>
-                              {userById[prof._id]?.facultyId ? 'Edit ID' : 'Add ID'}
-                            </ChakraButton>
-                            <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(userById[prof._id])}>Change email</ChakraButton>
-                            <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(userById[prof._id])}>Edit name</ChakraButton>
-                          </HStack>
-                        )}
-                      </Td>
-                    </Tr>
-                  ))}
-                  
+                {visibleFaculty.length === 0 && (
+                  <Tr><Td colSpan={6}><Text color={mutedText} py={6} textAlign="center">No faculty match these filters.</Text></Td></Tr>
+                )}
+                {visibleFaculty.map(prof => (
+                  <Tr key={prof._id} _hover={{ bg: hoverBg }}>
+                    <Td color={textColor}><PersonCell name={prof.name} sub={userById[prof._id]?.email} /></Td>
+                    <Td color={textColor}>{prof.programPosition}</Td>
+                    <Td><GenderBadge gender={prof.gender} /></Td>
+                    <Td color={textColor}>{userById[prof._id]?.facultyId || (userById[prof._id]?.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
+                    <Td>
+                      <Badge colorScheme={facultyStatusColor(prof.currentStatus)} borderRadius="full" px={2}>
+                        {facultyStatusLabel(prof.currentStatus)}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      {userById[prof._id]?.role === 'FACULTY' && (
+                        <HStack spacing={2}>
+                          <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(userById[prof._id])}>
+                            {userById[prof._id]?.facultyId ? 'Edit ID' : 'Add ID'}
+                          </ChakraButton>
+                          <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(userById[prof._id])}>Change email</ChakraButton>
+                          <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(userById[prof._id])}>Edit name</ChakraButton>
+                        </HStack>
+                      )}
+                    </Td>
+                  </Tr>
+                ))}
               </Tbody>
             </Table></ScrollTable>
           </Box>
         )}
-        
+
         {activePage === 'users' && userTab === 'students' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <Flex gap={3} mb={4} flexWrap="wrap" align="center">
-              <SearchableSelect placeholder="Program" value={filterProgram}
-                onChange={value => { setFilterProgram(value); setFilterYear(''); setFilterSection(''); }}
-                maxW="180px" options={Object.keys(cohortConfig).map(prog => ({ value: prog, label: prog }))} />
+            <FilterPanel
+              shown={visibleStudents.length} total={allStudents.length} noun="students"
+              canClear={!!(studentGender || filterProgram || filterYear || filterSection || studentSearch)}
+              onClear={() => { setStudentGender(''); setFilterProgram(''); setFilterYear(''); setFilterSection(''); setStudentSearch(''); }}
+            >
+              <FilterField label="Gender">
+                <SearchableSelect placeholder="All genders" value={studentGender} onChange={setStudentGender} maxW="100%" options={GENDER_OPTIONS} />
+              </FilterField>
+              <FilterField label="Program">
+                <SearchableSelect placeholder="All programs" value={filterProgram}
+                  onChange={setFilterProgram}
+                  maxW="100%" options={Object.keys(cohortConfig).map(prog => ({ value: prog, label: prog }))} />
+              </FilterField>
+              <FilterField label="Year">
+                <SearchableSelect placeholder="All years" value={filterYear}
+                  onChange={setFilterYear} maxW="100%"
+                  options={[...new Set(Object.values(cohortConfig).flatMap(p => Object.keys(p)))].sort().map(y => ({ value: y, label: `Year ${y}` }))} />
+              </FilterField>
+              <FilterField label="Section">
+                <SearchableSelect placeholder="All sections" value={filterSection} onChange={setFilterSection} maxW="100%"
+                  options={[...new Set(Object.values(cohortConfig).flatMap(p => Object.values(p).flat()))].sort().map(sec => ({ value: sec, label: `Section ${sec}` }))} />
+              </FilterField>
+              <Box gridColumn={{ base: 'auto', lg: '1 / -1' }}>
+                <FilterField label="Search">
+                  <Input
+                    placeholder="Name, email or school ID..."
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    color={textColor} borderColor={borderColor} bg={cardBg}
+                  />
+                </FilterField>
+              </Box>
+            </FilterPanel>
 
-              <SearchableSelect placeholder="Year" value={filterYear}
-                onChange={value => { setFilterYear(value); setFilterSection(''); }}
-                isDisabled={!filterProgram} maxW="120px"
-                options={filterProgram ? Object.keys(cohortConfig[filterProgram]).map(y => ({ value: y, label: y })) : []} />
-
-              <SearchableSelect placeholder="Section" value={filterSection} onChange={setFilterSection}
-                isDisabled={!filterYear} maxW="120px"
-                options={filterProgram && filterYear ? cohortConfig[filterProgram][filterYear].map(sec => ({ value: sec, label: sec })) : []} />
-
-              <Input
-                placeholder="Search by name or email..."
-                value={studentSearch}
-                onChange={(e) => setStudentSearch(e.target.value)}
-                flex="1"
-                minW="220px"
-                color={textColor} borderColor={borderColor}
-              />
-            </Flex>
-
-            <ScrollTable><Table variant="simple" size="sm">
-              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>School ID</Th><Th color={mutedText}>Program / Section</Th><Th color={mutedText}>Email</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+            <ScrollTable><Table variant="simple" size="md">
+              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>School ID</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Program / Section</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
-                {allUsers
-                  .filter(u => u.role === 'STUDENT')
-                  .filter(u => !filterProgram || u.programPosition?.startsWith(filterProgram))
-                  .filter(u => !filterYear || u.programPosition?.includes(` ${filterYear}`))
-                  .filter(u => !filterSection || u.programPosition?.endsWith(filterSection))
-                  .filter(u => u.name.toLowerCase().includes(studentSearch.toLowerCase()) || (u.email || '').toLowerCase().includes(studentSearch.toLowerCase()))
-                  .map(student => (
-                    <Tr key={student._id}>
-                      <Td fontWeight="bold" color={textColor}>{student.name}</Td>
-                      <Td color={textColor}>{student.schoolId || (student.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
-                      <Td color={textColor}>{student.programPosition}</Td>
-                      <Td color={textColor}>{student.email}</Td>
-                      <Td>
-                        <HStack spacing={2}>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(student)}>
-                            {student.schoolId ? 'Edit ID' : 'Add ID'}
-                          </ChakraButton>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(student)}>Change email</ChakraButton>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(student)}>Edit name</ChakraButton>
-                        </HStack>
-                      </Td>
-                    </Tr>
-                  ))}
+                {visibleStudents.length === 0 && (
+                  <Tr><Td colSpan={5}><Text color={mutedText} py={6} textAlign="center">No students match these filters.</Text></Td></Tr>
+                )}
+                {visibleStudents.map(student => (
+                  <Tr key={student._id} _hover={{ bg: hoverBg }}>
+                    <Td color={textColor}><PersonCell name={student.name} sub={student.email} /></Td>
+                    <Td color={textColor}>{student.schoolId || (student.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
+                    <Td><GenderBadge gender={student.gender} /></Td>
+                    <Td>{student.programPosition ? <Badge colorScheme="purple" variant="subtle" borderRadius="full" px={2}>{student.programPosition}</Badge> : '—'}</Td>
+                    <Td>
+                      <HStack spacing={2}>
+                        <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(student)}>
+                          {student.schoolId ? 'Edit ID' : 'Add ID'}
+                        </ChakraButton>
+                        <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(student)}>Change email</ChakraButton>
+                        <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(student)}>Edit name</ChakraButton>
+                      </HStack>
+                    </Td>
+                  </Tr>
+                ))}
               </Tbody>
             </Table></ScrollTable>
           </Box>
@@ -469,26 +571,53 @@ export default function AdminDashboard() {
 
         {activePage === 'records' && (
           <Box id="print-area" bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <Flex gap={3} mb={4} flexWrap="wrap" align="center" className="no-print">
-              <SearchableSelect placeholder="All faculty" value={recordsFaculty} onChange={setRecordsFaculty} maxW="190px" options={[...new Map(consultationRecords.filter(r => r.facultyId?._id).map(r => [r.facultyId._id, { value: r.facultyId._id, label: r.facultyId.name || 'Unknown' }])).values()]} />
-              <SearchableSelect placeholder="All cases" value={recordsCase} onChange={setRecordsCase} maxW="190px" options={[...new Set(consultationRecords.map(r => r.casePresented).filter(Boolean))].sort().map(value => ({ value, label: value }))} />
-              <Input
-                placeholder="Search by student, faculty, or reason..."
-                value={recordsSearch}
-                onChange={(e) => setRecordsSearch(e.target.value)}
-                flex="1" minW="220px" maxW="320px" color={textColor} borderColor={borderColor}
-              />
-              <ChakraButton colorScheme="blue" ml="auto" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
+            <Flex mb={4} align="center" justify="space-between" gap={3} flexWrap="wrap" className="no-print">
+              <Text color={mutedText} fontSize="sm">Completed consultations signed off by faculty.</Text>
+              <ChakraButton colorScheme="blue" size="sm" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
             </Flex>
+
+            <FilterPanel
+              shown={filteredRecords.length} total={consultationRecords.length} noun="records"
+              canClear={!!(recordsFaculty || recordsCase || recordsSearch || recordsSort !== 'desc')}
+              onClear={() => { setRecordsFaculty(''); setRecordsCase(''); setRecordsSearch(''); setRecordsSort('desc'); }}
+            >
+              <FilterField label="Faculty">
+                <SearchableSelect placeholder="All faculty" value={recordsFaculty} onChange={setRecordsFaculty} maxW="100%"
+                  options={[...new Map(consultationRecords.filter(r => r.facultyId?._id).map(r => [r.facultyId._id, { value: r.facultyId._id, label: r.facultyId.name || 'Unknown' }])).values()]} />
+              </FilterField>
+              <FilterField label="Case presented">
+                <SearchableSelect placeholder="All cases" value={recordsCase} onChange={setRecordsCase} maxW="100%"
+                  options={[...new Set(consultationRecords.map(r => r.casePresented).filter(Boolean))].sort().map(value => ({ value, label: value }))} />
+              </FilterField>
+              <FilterField label="Sort by date">
+                <SearchableSelect placeholder="Newest first" value={recordsSort} onChange={(v) => setRecordsSort(v === 'asc' ? 'asc' : 'desc')} maxW="100%"
+                  options={[{ value: 'desc', label: 'Newest first' }, { value: 'asc', label: 'Oldest first' }]} />
+              </FilterField>
+              <FilterField label="Search">
+                <Input
+                  placeholder="Student, faculty or reason..."
+                  value={recordsSearch}
+                  onChange={(e) => setRecordsSearch(e.target.value)}
+                  color={textColor} borderColor={borderColor} bg={cardBg}
+                />
+              </FilterField>
+            </FilterPanel>
+
             <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
               <Heading size="md" color={textColor}>Consultation Records</Heading>
               <Text fontSize="sm" color={mutedText}>Generated {formatDateTime(new Date())}</Text>
             </Box>
 
-            <ScrollTable><Table variant="simple" size="sm">
+            <ScrollTable><Table variant="simple" size="md">
               <Thead>
                 <Tr>
-                  <Th color={mutedText}>Date Signed Off</Th>
+                  <Th
+                    color={mutedText} cursor="pointer" userSelect="none" whiteSpace="nowrap"
+                    onClick={() => setRecordsSort(s => s === 'desc' ? 'asc' : 'desc')}
+                    title="Click to change the sort order"
+                  >
+                    Date Signed Off {recordsSort === 'desc' ? '↓' : '↑'}
+                  </Th>
                   <Th color={mutedText}>Student</Th>
                   <Th color={mutedText}>Faculty</Th>
                   <Th color={mutedText}>Case Presented</Th>
@@ -497,15 +626,15 @@ export default function AdminDashboard() {
               </Thead>
               <Tbody>
                 {filteredRecords.length === 0 && (
-                  <Tr><Td colSpan={5}><Text color={mutedText} py={4} textAlign="center">No completed consultations found.</Text></Td></Tr>
+                  <Tr><Td colSpan={5}><Text color={mutedText} py={6} textAlign="center">No completed consultations found.</Text></Td></Tr>
                 )}
                 {filteredRecords.map(r => (
-                  <Tr key={r._id}>
-                    <Td color={textColor}>{r.completedAt ? formatDate(r.completedAt) : ''}</Td>
-                    <Td fontWeight="bold" color={textColor}>{r.studentName} ({r.studentSection})</Td>
+                  <Tr key={r._id} _hover={{ bg: hoverBg }}>
+                    <Td color={textColor} whiteSpace="nowrap">{r.completedAt ? formatDate(r.completedAt) : ''}</Td>
+                    <Td color={textColor}><PersonCell name={r.studentName || 'Unknown'} sub={r.studentSection} /></Td>
                     <Td color={textColor}>{r.facultyId?.name || 'Unknown'}</Td>
-                    <Td maxW="200px" color={textColor}>{r.casePresented}</Td>
-                    <Td maxW="200px" color={textColor}>{r.interventionTaken}</Td>
+                    <Td maxW="220px" color={textColor} whiteSpace="normal">{r.casePresented ? <Badge colorScheme="orange" variant="subtle" whiteSpace="normal" borderRadius="md" px={2}>{r.casePresented}</Badge> : '—'}</Td>
+                    <Td maxW="260px" color={textColor} whiteSpace="normal">{r.interventionTaken}</Td>
                   </Tr>
                 ))}
               </Tbody>

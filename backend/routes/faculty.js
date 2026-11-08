@@ -1016,13 +1016,15 @@ router.get('/faculty/:id/public-schedule', async (req, res) => {
 // Complete a consultation and record the log entry (digital sign-off)
 router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, res) => {
   try {
-    const caseValue = String(req.body.casePresented ?? '').trim();
     const interventionValue = String(req.body.interventionTaken ?? '').trim();
-    if (!caseValue || !interventionValue) {
-      return res.status(400).json({ error: 'Enter both case presented and intervention / action taken.' });
+    if (!interventionValue) {
+      return res.status(400).json({ error: 'Select or enter the intervention / action taken.' });
     }
     const apt = await Appointment.findOne({ _id: req.params.id, facultyId: req.user.userId });
     if (!apt) return res.status(404).json({ error: 'Appointment not found.' });
+    // The case presented is the student's Purpose of Meeting and is not editable: the body value is ignored.
+    const caseValue = String(apt.reason ?? '').trim();
+    if (!caseValue) return res.status(400).json({ error: 'This appointment has no purpose of meeting to record.' });
     // MISSED (FACULTY) is what the system sets automatically when an approved consultation was
     // never signed off; the faculty can still log it late if the consultation did take place.
     if (apt.status !== 'APPROVED' && apt.status !== 'MISSED (FACULTY)') {
@@ -1061,12 +1063,12 @@ router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), asyn
     }).populate('studentId', 'gender');
     if (!apt) return res.status(404).json({ error: 'Completed consultation not found.' });
 
-    const casePresented = String(req.body.casePresented ?? '').trim();
+    // Only the intervention can be changed afterwards. The case presented stays as signed off (the Purpose of Meeting).
     const interventionTaken = String(req.body.interventionTaken ?? '').trim();
-    if (!casePresented || !interventionTaken) {
-      return res.status(400).json({ error: 'Enter both case presented and intervention / action taken.' });
+    if (!interventionTaken) {
+      return res.status(400).json({ error: 'Select or enter the intervention / action taken.' });
     }
-    apt.casePresented = casePresented;
+    apt.casePresented = apt.casePresented || apt.reason;
     apt.interventionTaken = interventionTaken;
     await apt.save();
 
