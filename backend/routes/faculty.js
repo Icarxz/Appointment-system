@@ -828,7 +828,7 @@ router.post('/appointment/:id/appeal', requireAuth(['STUDENT', 'FACULTY']), asyn
       await notify(apt.facultyId, { type: 'APPEAL', title: 'Student reason', message: `${apt.studentName} added a reason for the missed or cancelled consultation on ${when}. Reason: ${reason}`, appointmentId: apt._id });
     } else {
       const me = await User.findById(req.user.userId).select('name');
-      await notifyRole('DEAN', { type: 'APPEAL', title: 'Faculty appeal', message: `${me ? me.name : 'A faculty member'} appealed the consultation with ${apt.studentName} on ${when}. Reason: ${reason}`, appointmentId: apt._id });
+      await notifyRole('DEAN', { type: 'APPEAL', title: 'Faculty reason', message: `${me ? me.name : 'A faculty member'} added a reason for the missed or cancelled consultation with ${apt.studentName} on ${when}. Reason: ${reason}`, appointmentId: apt._id });
     }
     res.json({ message: 'Reason submitted.', appointment: apt });
   } catch (error) {

@@ -12,7 +12,7 @@ const fmtTime = (t: string) => {
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 };
 
-// The Dean's list of faculty appeals for missed or cancelled consultations.
+// The Dean's list of the reasons faculty gave for missed or cancelled consultations (the code still calls them appeals).
 export default function DeanAppeals() {
   const [appeals, setAppeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,10 +32,10 @@ export default function DeanAppeals() {
 
   return (
     <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-      <Heading size="md" color={textColor} mb={1}>Faculty Appeals</Heading>
-      <Text fontSize="sm" color={mutedText} mb={4}>Reasons faculty gave for a consultation they missed or cancelled. Appeals are a record only; nothing needs to be approved.</Text>
+      <Heading size="md" color={textColor} mb={1}>Faculty Reasons</Heading>
+      <Text fontSize="sm" color={mutedText} mb={4}>Reasons faculty gave for a consultation they missed or cancelled. They are a record only; nothing needs to be approved.</Text>
       {loading ? <Text color={mutedText}>Loading...</Text> : appeals.length === 0 ? (
-        <Text color={mutedText}>No appeals yet.</Text>
+        <Text color={mutedText}>No reasons yet.</Text>
       ) : (
         <TableContainer>
           <Table size="sm" variant="simple">
