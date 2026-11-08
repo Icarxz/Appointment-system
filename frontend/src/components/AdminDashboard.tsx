@@ -15,9 +15,11 @@ import PageTitle from './PageTitle';
 import ExportBar from './ExportBar';
 import ScrollTable from './ScrollTable';
 import SearchableSelect from './SearchableSelect';
+import RequestList from './RequestList';
+import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import WelcomeHeader from './WelcomeHeader';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
-import { facultyStatusColor, facultyStatusLabel, statusColor, statusLabel } from './appointmentStatus';
+import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
 // import { QRCodeSVG } from 'qrcode.react';
 
@@ -112,8 +114,7 @@ export default function AdminDashboard() {
   const [recordsSearch, setRecordsSearch] = useState('');
   const [recordsFaculty, setRecordsFaculty] = useState('');
   const [recordsCase, setRecordsCase] = useState('');
-  const [appointmentStatus, setAppointmentStatus] = useState('');
-  const [appointmentFaculty, setAppointmentFaculty] = useState('');
+  const [detailsId, setDetailsId] = useState<string | null>(null); // the appointment whose View Details panel is open
   const [facultyPositionFilter, setFacultyPositionFilter] = useState('');
   const [facultyStatusFilter, setFacultyStatusFilter] = useState('');
   const filteredRecords = React.useMemo(() => {
@@ -125,10 +126,6 @@ export default function AdminDashboard() {
     );
   }, [consultationRecords, recordsSearch, recordsFaculty, recordsCase]);
 
-  const filteredAppointments = React.useMemo(() => appointments.filter(a =>
-    (!appointmentStatus || a.status === appointmentStatus) &&
-    (!appointmentFaculty || a.facultyId?._id === appointmentFaculty)
-  ), [appointments, appointmentStatus, appointmentFaculty]);
   const filteredFacultyList = React.useMemo(() => facultyList.filter(f =>
     (!facultyPositionFilter || f.programPosition === facultyPositionFilter) &&
     (!facultyStatusFilter || f.currentStatus === facultyStatusFilter)
@@ -221,40 +218,6 @@ export default function AdminDashboard() {
       toast({ title: 'Could not save ID', description: error.message, status: 'error' });
     }
     setIdSaving(false);
-  };
-
-  const updateAppointmentStatus = async (targetApt: any, newStatus: string) => {
-    if (newStatus === 'APPROVED') {
-      const approvedThatDay = appointments.filter(a => a.status === 'APPROVED' && a.date === targetApt.date && a.facultyId?._id === targetApt.facultyId?._id);
-      const timeToMinutes = (timeStr: string) => {
-        const [hours, minutes] = timeStr.split(':').map(Number);
-        return (hours * 60) + minutes;
-      };
-      const targetMinutes = timeToMinutes(targetApt.time);
-
-      for (let existingApt of approvedThatDay) {
-        const existingMinutes = timeToMinutes(existingApt.time);
-        const timeDifference = Math.abs(targetMinutes - existingMinutes);
-        if (timeDifference === 0) {
-          toast({ title: "Overlap Blocked", description: `This faculty already has an appointment at this exact time!`, status: "error", duration: 5000 });
-          return; 
-        }
-        if (timeDifference <= 60) {
-          const isConfirmed = window.confirm(`WARNING: This is only ${timeDifference} minutes away from another approved meeting for this faculty. Proceed?`);
-          if (!isConfirmed) return; 
-        }
-      }
-    }
-    try {
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${targetApt._id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
-      if (response.ok) {
-        toast({ title: `Appointment ${newStatus}`, status: 'success' });
-        fetchAllData();
-      }
-    } catch (error) {}
   };
 
   return (
@@ -547,38 +510,9 @@ export default function AdminDashboard() {
         )}
 
         {activePage === 'appointments' && (
-          <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-            <HStack spacing={3} mb={4} flexWrap="wrap">
-              <SearchableSelect placeholder="All statuses" value={appointmentStatus} onChange={setAppointmentStatus} maxW="180px" options={[...new Set(appointments.map(a => a.status).filter(Boolean))].sort().map(status => ({ value: status, label: statusLabel(status) }))} />
-              <SearchableSelect placeholder="All faculty" value={appointmentFaculty} onChange={setAppointmentFaculty} maxW="220px" options={[...new Map(appointments.filter(a => a.facultyId?._id).map(a => [a.facultyId._id, { value: a.facultyId._id, label: a.facultyId.name || 'Unknown' }])).values()]} />
-            </HStack>
-            <ScrollTable><Table variant="simple" size="sm">
-              <Thead><Tr><Th color={mutedText}>Student</Th><Th color={mutedText}>Target Faculty</Th><Th color={mutedText}>Date/Time</Th><Th color={mutedText}>Reason</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
-              <Tbody>
-                {filteredAppointments.map(apt => (
-                  <Tr key={apt._id}>
-                    <Td fontWeight="bold" color={textColor}>
-                      {apt.studentName} ({apt.studentSection})
-                      {apt.status === 'COMPLETED' && (
-                        <Text fontSize="xs" fontWeight="normal" color="green.500">(Completed)</Text>
-                      )}
-                    </Td>
-                    <Td color={textColor}>{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Td>
-                    <Td color={textColor}>{formatDate(apt.date)} at {formatTime(apt.time)}</Td>
-                    <Td maxW="200px" isTruncated color={textColor}>{apt.reason}</Td>
-                    <Td><Badge colorScheme={statusColor(apt.status)}>{statusLabel(apt.status)}</Badge></Td>
-                    <Td>
-                      {apt.status === 'PENDING' && (
-                        <HStack spacing={2}>
-                          <ChakraButton size="xs" colorScheme="green" onClick={() => updateAppointmentStatus(apt, 'APPROVED')}>Approve</ChakraButton>
-                          <ChakraButton size="xs" colorScheme="red" onClick={() => updateAppointmentStatus(apt, 'REJECTED')}>Reject</ChakraButton>
-                        </HStack>
-                      )}
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table></ScrollTable>
+          <Box bg={cardBg} p={{ base: 3, md: 6 }} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+            {/* Same list as the Student and Faculty pages (filters, grouped by the day requested, View Details), but read-only for the Admin. */}
+            <RequestList role="ADMIN" requests={appointments} onViewDetails={setDetailsId} onChanged={fetchAllData} />
           </Box>
         )}
 
@@ -637,6 +571,7 @@ export default function AdminDashboard() {
           </ModalContent>
         </Modal>
       </Box>
+      <AppointmentDetailsDrawer aptId={detailsId} onClose={() => setDetailsId(null)} />
     </DashboardShell>
   );
 }
