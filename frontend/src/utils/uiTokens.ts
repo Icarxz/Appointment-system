@@ -26,3 +26,17 @@ export const SIDEBAR_WIDTH = '220px';
 // Page padding and card padding, so every portal spaces its content the same way.
 export const PAGE_PAD = { base: 4, md: 8 } as const;
 export const CARD_PAD = { base: 4, md: 6 } as const;
+
+// One look for every text field and dropdown. theme.ts styles Chakra's Input / Select / Textarea with these
+// values and SearchableSelect reads them through useFieldStyle(), so a field never changes colour or border
+// depending on which component drew it. The border matches the card border, so fields that still pass
+// borderColor={...} by hand look identical to the ones that do not.
+export const FIELD = {
+  light: { bg: '#ffffff', border: '#dde3ec', hover: '#b6c3d6', text: '#0f2240', placeholder: '#8a9bb5', disabledBg: '#f1f5f9' },
+  dark:  { bg: '#111d30', border: '#1e3048', hover: '#34507a', text: '#e8f0fe', placeholder: '#6b86a6', disabledBg: '#0c1421' },
+} as const;
+
+export function useFieldStyle() {
+  const { colorMode } = useColorMode();
+  return FIELD[colorMode === 'dark' ? 'dark' : 'light'];
+}

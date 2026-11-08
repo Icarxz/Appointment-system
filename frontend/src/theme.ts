@@ -1,4 +1,5 @@
 import { extendTheme } from '@chakra-ui/react';
+import { FIELD } from './utils/uiTokens';
 
 // One theme for every portal, so buttons, tabs and fields behave the same everywhere.
 //
@@ -15,6 +16,21 @@ const font = "'Segoe UI', system-ui, -apple-system, Roboto, sans-serif";
 const blue = {
   50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa',
   500: '#2563eb', 600: '#1d4ed8', 700: '#1e40af', 800: '#1e3a8a', 900: '#172554',
+};
+
+// Same background, border, text, placeholder, hover and focus ring for every text field and dropdown, in both
+// colour modes. (Chakra's own "outline" variant would draw them transparent with a grey border, which is why a
+// plain field looked different from one that had colours passed by hand.)
+const fieldLook = (props: { colorMode: string }) => {
+  const f = FIELD[props.colorMode === 'dark' ? 'dark' : 'light'];
+  return {
+    bg: f.bg, borderColor: f.border, color: f.text,
+    boxShadow: '0 1px 1px rgba(15, 34, 64, 0.04)',
+    _placeholder: { color: f.placeholder },
+    _hover: { borderColor: f.hover },
+    _focusVisible: { outline: 'none', borderColor: '#2563eb', boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.25)' },
+    _disabled: { bg: f.disabledBg, opacity: 0.7, cursor: 'not-allowed' },
+  };
 };
 
 export default extendTheme({
@@ -47,9 +63,9 @@ export default extendTheme({
     },
     IconButton: { baseStyle: touchTarget },
     CloseButton: { baseStyle: touchTarget },
-    Input: { baseStyle: { field: touchHeight }, defaultProps: { focusBorderColor: 'blue.500' } },
-    Select: { baseStyle: { field: touchHeight }, defaultProps: { focusBorderColor: 'blue.500' } },
-    Textarea: { baseStyle: touchHeight, defaultProps: { focusBorderColor: 'blue.500' } },
+    Input: { baseStyle: { field: touchHeight }, variants: { outline: (props: { colorMode: string }) => ({ field: fieldLook(props) }) }, defaultProps: { focusBorderColor: 'blue.500' } },
+    Select: { baseStyle: { field: touchHeight }, variants: { outline: (props: { colorMode: string }) => ({ field: fieldLook(props) }) }, defaultProps: { focusBorderColor: 'blue.500' } },
+    Textarea: { baseStyle: touchHeight, variants: { outline: (props: { colorMode: string }) => fieldLook(props) }, defaultProps: { focusBorderColor: 'blue.500' } },
     // Dialogs and drawers: rounder corners, a stronger title, and a dimmer backdrop that keeps the page readable behind it.
     Modal: {
       baseStyle: {
