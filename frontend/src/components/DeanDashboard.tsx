@@ -9,7 +9,6 @@ import ProfileGate from './ProfileGate';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import AnalyticsReport from './AnalyticsReport';
-import DeanBroadcastPanel from './DeanBroadcastPanel';
 import DeanAppeals from './DeanAppeals';
 import ProfilePage from './ProfilePage';
 import DashboardShell from './DashboardShell';
@@ -24,7 +23,7 @@ import { GENDER_OPTIONS, matchesGender, GenderBadge, PersonCell, FilterField, Fi
 
 const PAGE_TITLES = {
   reports: 'Reports & Analytics', roster: 'Faculty Roster', records: 'Consultation Records',
-  appeals: 'Faculty Reasons', broadcast: 'Executive Broadcast', profile: 'My Profile',
+  appeals: 'Faculty Reasons', profile: 'My Profile',
 } as const;
 
 // === Helper function for time formatting ===
@@ -41,9 +40,10 @@ export default function DeanDashboard() {
   const userName = localStorage.getItem('userName');
 
   // Unified Page State
-  const [activePage, setActivePage] = useState<'broadcast' | 'roster' | 'reports' | 'records' | 'appeals' | 'profile'>('reports');
+  const [activePage, setActivePage] = useState<'roster' | 'reports' | 'records' | 'appeals' | 'profile'>('reports');
+  // Executive Broadcast is hidden for now (Nov 9): its page and menu item are removed here; DeanBroadcastPanel.tsx is kept.
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink(['broadcast', 'roster', 'reports', 'records', 'appeals'] as const, setActivePage);
+  const { aptId, closeApt } = useDeepLink(['roster', 'reports', 'records', 'appeals'] as const, setActivePage);
   
   // Shared navy palette (same colours in every portal)
   const C = useNavPalette();
@@ -137,7 +137,6 @@ export default function DeanDashboard() {
         { key: 'appeals', section: 'Oversight', icon: 'flag', label: 'Faculty Reasons', active: activePage === 'appeals', onClick: () => setActivePage('appeals') },
         { key: 'roster', section: 'Oversight', icon: 'users', label: 'Faculty Roster', active: activePage === 'roster', onClick: () => setActivePage('roster') },
         { key: 'records', section: 'Oversight', icon: 'file', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
-        { key: 'broadcast', section: 'Communicate', icon: 'megaphone', label: 'Executive Broadcast', active: activePage === 'broadcast', onClick: () => setActivePage('broadcast') },
         { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
       ]}
     >
@@ -305,9 +304,6 @@ export default function DeanDashboard() {
 
         {activePage === 'appeals' && <DeanAppeals />}
 
-        {activePage === 'broadcast' && (
-          <DeanBroadcastPanel C={C} />
-        )}
       </Box>
     </DashboardShell>
     <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
