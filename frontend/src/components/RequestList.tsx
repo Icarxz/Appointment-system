@@ -9,6 +9,7 @@ import AppealControls from './AppealControls';
 import { statusColor, statusLabel, isBeforeCutoff, hasStarted, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
 import { useNavPalette } from '../utils/uiTokens';
 import SearchableSelect from './SearchableSelect';
+import { GENDER_OPTIONS, matchesGender } from './PeopleUi';
 import {
   NEXT_ACTION_LABELS, NO_FILTERS, applyFilters, distinct, facultyNextActions, groupByRequestedDay, nextActions, paginate,
   professorKey, sortNewestFirst, studentKey,
@@ -51,7 +52,9 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
   const C = useNavPalette();
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [filters]);
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc'); // order of the list by date requested
+  const [gender, setGender] = useState('');                       // faculty list only: the student's gender
+  useEffect(() => { setPage(1); }, [filters, sortDir, gender]);
 
   const isStudent = role === 'STUDENT';
   const isAdmin = role === 'ADMIN';
@@ -63,10 +66,13 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
   const reasons = distinct(requests.map(a => a.reason));
   const statuses = distinct(requests.map(a => a.status));
 
-  const shown = sortNewestFirst(applyFilters(requests as ListItem[], filters, actionsOf, personKey)) as any[];
+  const newestFirst = sortNewestFirst(applyFilters(requests as ListItem[], filters, actionsOf, personKey)) as any[];
+  const byGender = role === 'FACULTY' && gender ? newestFirst.filter(a => matchesGender(a.studentId?.gender, gender)) : newestFirst;
+  const shown = sortDir === 'asc' ? [...byGender].reverse() : byGender;
   const paged = paginate(shown, page, PAGE_SIZE);
   const groups = groupByRequestedDay(paged.rows as ListItem[]) as { day: string; items: any[] }[];
-  const filtering = JSON.stringify(filters) !== JSON.stringify(NO_FILTERS);
+  const filtering = JSON.stringify(filters) !== JSON.stringify(NO_FILTERS) || !!gender || sortDir !== 'desc';
+  const filterCount = (isAdmin ? 3 : 4) + 1 + (role === 'FACULTY' ? 1 : 0); // + Sort by date, + Gender (faculty)
   const set = (patch: Partial<Filters>) => setFilters(f => ({ ...f, ...patch }));
 
   const filterBox = (label: string, control: ReactNode) => (
@@ -151,7 +157,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
   return (
     <Box>
       <Flex gap={3} wrap="wrap" align="flex-end" mb={5}>
-        <Grid flex="1" minW="240px" gap={3} templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', lg: `repeat(${isAdmin ? 3 : 4}, minmax(0, 1fr))` }}>
+        <Grid flex="1" minW="240px" gap={3} templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', lg: `repeat(${Math.min(filterCount, 4)}, minmax(0, 1fr))`, '2xl': `repeat(${filterCount}, minmax(0, 1fr))` }}>
           {filterBox(isStudent || isAdmin ? 'Professor' : 'Student', (
             <SearchableSelect value={filters.professor} onChange={value => set({ professor: value })}
               placeholder={isStudent || isAdmin ? 'All Professors' : 'All Students'}
@@ -169,9 +175,16 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
             <SearchableSelect value={filters.action} onChange={value => set({ action: value as Filters['action'] })} placeholder="All Actions"
               options={ACTION_OPTIONS[role as 'STUDENT' | 'FACULTY'].map(action => ({ value: action, label: NEXT_ACTION_LABELS[action] }))} />
           ))}
+          {role === 'FACULTY' && filterBox('Gender', (
+            <SearchableSelect value={gender} onChange={setGender} placeholder="All Genders" options={GENDER_OPTIONS} />
+          ))}
+          {filterBox('Sort by date', (
+            <SearchableSelect value={sortDir} onChange={value => setSortDir(value === 'asc' ? 'asc' : 'desc')} placeholder="Newest first"
+              options={[{ value: 'desc', label: 'Newest first' }, { value: 'asc', label: 'Oldest first' }]} />
+          ))}
         </Grid>
         <IconButton aria-label="Clear filters" title="Clear filters" icon={<RepeatIcon />} variant="outline" bg={C.surface} borderColor={C.border}
-          isDisabled={!filtering} onClick={() => setFilters(NO_FILTERS)} />
+          isDisabled={!filtering} onClick={() => { setFilters(NO_FILTERS); setGender(''); setSortDir('desc'); }} />
       </Flex>
 
       {requests.length === 0 && <Text textAlign="center" py={10} color={C.textMid}>{isStudent ? 'You have no appointment requests.' : isAdmin ? 'No appointments yet.' : 'No appointments requested.'}</Text>}

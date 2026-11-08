@@ -24,6 +24,7 @@ import RequestList from './RequestList';
 import SearchableSelect from './SearchableSelect';
 import WelcomeHeader from './WelcomeHeader';
 import ProfilePage from './ProfilePage';
+import { GENDER_OPTIONS, matchesGender, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 import { manilaToday, addDaysIso, mondayOf, weeksBetween, weekLabel } from '../utils/weekUtils';
 import WeeklyBookingCalendar from './WeeklyBookingCalendar';
 import BookingConfirmModal from './BookingConfirmModal';
@@ -248,7 +249,7 @@ export default function StudentDashboard() {
   const matchesStatus = (st: string) => fStatus === 'OTHER' ? !namedStatuses.includes(st) : statusGroups[fStatus].includes(st);
   const statusFiltered = faculty.filter(f =>
     f.name.toLowerCase().includes(statusSearch.toLowerCase()) &&
-    (!fGender || f.gender === fGender) &&
+    matchesGender(f.gender, fGender) &&
     (!fPosition || normalizeFacultyPosition(f.programPosition || '') === fPosition) &&
     (!fStatus || matchesStatus(f.currentStatus))
   );
@@ -405,37 +406,48 @@ export default function StudentDashboard() {
 
           {activePage === 'home' && (
             <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-              <Flex gap={3} mb={4} wrap="wrap">
-                <Input placeholder="Search faculty by name..." value={statusSearch} onChange={(e) => setStatusSearch(e.target.value)} maxW="280px" color={textColor} borderColor={borderColor} />
-                <SearchableSelect placeholder="Gender" value={fGender} onChange={setFGender} maxW="150px"
-                  options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
-                <SearchableSelect placeholder="Position" value={fPosition} onChange={setFPosition} maxW="220px"
-                  options={positionOptions.map(p => ({ value: p, label: p }))} />
-                <SearchableSelect placeholder="Status" value={fStatus} onChange={setFStatus} maxW="240px"
-                  options={[
-                    { value: 'IN_CLASS', label: 'In Class' },
-                    { value: 'IN_CONSULTATION', label: 'In Consultation' },
-                    { value: 'LEAVE_ABSENT', label: 'On Leave / Absent' },
-                    { value: 'OTHER', label: 'Other (Available, Meeting, Break, Out of Office...)' },
-                  ]} />
-              </Flex>
+              <FilterPanel
+                shown={statusFiltered.length} total={faculty.length} noun="faculty"
+                canClear={!!(statusSearch || fGender || fPosition || fStatus)}
+                onClear={() => { setStatusSearch(''); setFGender(''); setFPosition(''); setFStatus(''); }}
+              >
+                <FilterField label="Search">
+                  <Input placeholder="Faculty name..." value={statusSearch} onChange={(e) => setStatusSearch(e.target.value)} color={textColor} borderColor={borderColor} bg={cardBg} />
+                </FilterField>
+                <FilterField label="Gender">
+                  <SearchableSelect placeholder="All genders" value={fGender} onChange={setFGender} maxW="100%" options={GENDER_OPTIONS} />
+                </FilterField>
+                <FilterField label="Position">
+                  <SearchableSelect placeholder="All positions" value={fPosition} onChange={setFPosition} maxW="100%"
+                    options={positionOptions.map(p => ({ value: p, label: p }))} />
+                </FilterField>
+                <FilterField label="Status">
+                  <SearchableSelect placeholder="All statuses" value={fStatus} onChange={setFStatus} maxW="100%"
+                    options={[
+                      { value: 'IN_CLASS', label: 'In Class' },
+                      { value: 'IN_CONSULTATION', label: 'In Consultation' },
+                      { value: 'LEAVE_ABSENT', label: 'On Leave / Absent' },
+                      { value: 'OTHER', label: 'Other (Available, Meeting, Break, Out of Office...)' },
+                    ]} />
+                </FilterField>
+              </FilterPanel>
               <Text fontSize="xs" color={mutedText} mb={2}>
                 Not Published means the faculty member has not yet shared their current availability.
               </Text>
               <TableContainer>
                 <Table variant="simple" size="md">
-                  <Thead><Tr><Th color={mutedText}>Faculty Name</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Announcements / Notices</Th></Tr></Thead>
+                  <Thead><Tr><Th color={mutedText}>Faculty Name</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Announcements / Notices</Th></Tr></Thead>
                   <Tbody>
                     {statusFiltered.length === 0 && (
-                      <Tr><Td colSpan={3}><Text color={mutedText} fontSize="sm">No faculty match your search or filters.</Text></Td></Tr>
+                      <Tr><Td colSpan={4}><Text color={mutedText} fontSize="sm">No faculty match your search or filters.</Text></Td></Tr>
                     )}
                     {statusFiltered.map((prof) => {
                       return (
                         <Tr key={prof._id}>
-                          <Td fontWeight="bold" color={textColor}>
-                            <Text cursor="pointer" color="blue.500" _hover={{ textDecoration: 'underline' }} onClick={() => openMaster(prof)} title="View master schedule">{prof.name}</Text>
-                            <Text fontSize="xs" color={mutedText} fontWeight="normal">{prof.programPosition}</Text>
+                          <Td color={textColor}>
+                            <PersonCell name={prof.name} sub={prof.programPosition} onClick={() => openMaster(prof)} title="View master schedule" />
                           </Td>
+                          <Td><GenderBadge gender={prof.gender} /></Td>
                           <Td>
                             <HStack>
                               <Badge colorScheme={facultyStatusColor(prof.currentStatus)} px={3} py={1} borderRadius="full">
