@@ -81,6 +81,7 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
               </Field>
               <Field label="Faculty"><Text>{apt.facultyId?.name || 'Unknown'}</Text></Field>
               <Field label="Student"><Text>{apt.studentName}{apt.studentSection ? ` (${apt.studentSection})` : ''}</Text></Field>
+              {apt.createdAt && <Field label="Requested on"><Text>{formatDateTime(apt.createdAt)}</Text></Field>}
               <Field label="When">
                 <Text>{formatDate(apt.date)} at {fmtTime(apt.time)}</Text>
                 {apt.requestedTime && apt.requestedTime !== apt.time && <Text fontSize="xs" color={muted}>Requested for {fmtTime(apt.requestedTime)}; the professor approved this time instead.</Text>}

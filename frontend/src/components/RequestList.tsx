@@ -25,16 +25,18 @@ const PAGE_SIZE = 10;
 const dayHeading = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const canCancelNow = (a: ListItem) => isBeforeCutoff(a.date, a.time);
 
-const ACTION_OPTIONS: Record<'STUDENT' | 'FACULTY', NextAction[]> = {
+const ACTION_OPTIONS: Record<'STUDENT' | 'FACULTY', NextAction[]> = { // the Admin list has no actions, so no Action filter
   STUDENT: ['CAN_CANCEL', 'CAN_APPEAL', 'HAS_ACCOMPLISHMENT'],
   FACULTY: ['NEEDS_ANSWER', 'CAN_CANCEL', 'CAN_MARK_NO_SHOW', 'CAN_APPEAL'],
 };
 
 interface Props {
-  role: 'STUDENT' | 'FACULTY';
+  /** ADMIN is a read-only view: both people in every row, View Details only, no actions. */
+  role: 'STUDENT' | 'FACULTY' | 'ADMIN';
   requests: any[];
   onViewDetails: (id: string) => void;
-  onCancel: (apt: any) => void;
+  /** Student and faculty only. */
+  onCancel?: (apt: any) => void;
   /** Student only. */
   onViewAccomplishment?: (apt: any) => void;
   /** Faculty only: the student did not turn up. */
@@ -52,11 +54,12 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
   useEffect(() => { setPage(1); }, [filters]);
 
   const isStudent = role === 'STUDENT';
-  const personKey = isStudent ? professorKey : studentKey;
-  const actionsOf = (a: ListItem): NextAction[] => (isStudent ? nextActions(a, canCancelNow) : facultyNextActions(a, { canCancel: canCancelNow(a), started: hasStarted(a.date, a.time) }));
+  const isAdmin = role === 'ADMIN';
+  const personKey = isStudent || isAdmin ? professorKey : studentKey; // the one person filter: a student filters by professor, the Admin too
+  const actionsOf = (a: ListItem): NextAction[] => (isAdmin ? [] : isStudent ? nextActions(a, canCancelNow) : facultyNextActions(a, { canCancel: canCancelNow(a), started: hasStarted(a.date, a.time) }));
 
   const people = new Map<string, string>();
-  requests.forEach(a => people.set(personKey(a), isStudent ? (a.facultyId ? a.facultyId.name : 'Unknown') : `${a.studentName || 'Unknown'} (${a.studentSection || ''})`));
+  requests.forEach(a => people.set(personKey(a), isStudent || isAdmin ? (a.facultyId ? a.facultyId.name : 'Unknown') : `${a.studentName || 'Unknown'} (${a.studentSection || ''})`));
   const reasons = distinct(requests.map(a => a.reason));
   const statuses = distinct(requests.map(a => a.status));
 
@@ -82,9 +85,9 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
 
   const row = (apt: any) => {
     const actions = actionsOf(apt);
-    const cancelClosed = (apt.status === 'PENDING' || apt.status === 'APPROVED') && !actions.includes('CAN_CANCEL') && !hasStarted(apt.date, apt.time) && !(apt.status === 'PENDING' && !isStudent);
+    const cancelClosed = !isAdmin && (apt.status === 'PENDING' || apt.status === 'APPROVED') && !actions.includes('CAN_CANCEL') && !hasStarted(apt.date, apt.time) && !(apt.status === 'PENDING' && !isStudent);
     const menuItems: { key: string; label: string; danger?: boolean; run: () => void }[] = [];
-    if (actions.includes('CAN_CANCEL')) menuItems.push({ key: 'cancel', label: apt.status === 'PENDING' ? 'Cancel Request' : 'Cancel Appointment', danger: true, run: () => onCancel(apt) });
+    if (actions.includes('CAN_CANCEL') && onCancel) menuItems.push({ key: 'cancel', label: apt.status === 'PENDING' ? 'Cancel Request' : 'Cancel Appointment', danger: true, run: () => onCancel(apt) });
     if (actions.includes('HAS_ACCOMPLISHMENT') && onViewAccomplishment) menuItems.push({ key: 'acc', label: 'View Accomplishment', run: () => onViewAccomplishment(apt) });
     if (actions.includes('CAN_MARK_NO_SHOW') && onNoShow) menuItems.push({ key: 'noshow', label: "Student didn't show", run: () => onNoShow(apt) });
     const bar = answerBar ? answerBar(apt) : null;
@@ -92,7 +95,9 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
       <Box key={apt._id} bg={C.surface} borderWidth="1px" borderColor={C.border} borderRadius="lg" px={4} py={3}>
         <Grid
           gap={3} alignItems="center"
-          templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: '100px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(150px, 1.3fr) max-content' }}
+          templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: isAdmin
+            ? '100px minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(150px, 1.2fr) max-content'
+            : '100px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(150px, 1.3fr) max-content' }}
         >
           {field('Time', (
             <>
@@ -100,8 +105,14 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
               <Text fontSize="xs" color={C.textMid}>{dayHeading(apt.date)}</Text>
             </>
           ))}
-          {isStudent
-            ? field('Professor Name', <Text fontSize="sm" color={C.text} overflowWrap="anywhere">{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Text>)
+          {isAdmin && field('Student', (
+            <>
+              <Text fontSize="sm" color={C.text} overflowWrap="anywhere">{apt.studentName}</Text>
+              {apt.studentSection && <Text fontSize="xs" color={C.textMid}>{apt.studentSection}</Text>}
+            </>
+          ))}
+          {isStudent || isAdmin
+            ? field(isAdmin ? 'Professor' : 'Professor Name', <Text fontSize="sm" color={C.text} overflowWrap="anywhere">{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Text>)
             : field('Student', (
               <>
                 <Text fontSize="sm" color={C.text} overflowWrap="anywhere">{apt.studentName}</Text>
@@ -113,13 +124,13 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
             <Box>
               <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
               {cancelClosed && <Text fontSize="xs" color={C.textMid} mt={1}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before).</Text>}
-              {!isStudent && apt.status === 'MISSED (FACULTY)' && <Text fontSize="xs" color={C.textMid} mt={1}>Not signed off. Open Consultation Log if it took place.</Text>}
-              <AppealControls apt={apt} role={role} onChanged={onChanged} />
+              {role === 'FACULTY' && apt.status === 'MISSED (FACULTY)' && <Text fontSize="xs" color={C.textMid} mt={1}>Not signed off. Open Consultation Log if it took place.</Text>}
+              {!isAdmin && <AppealControls apt={apt} role={role as 'STUDENT' | 'FACULTY'} onChanged={onChanged} />}
             </Box>
           ), true)}
           <HStack spacing={2} justify={{ base: 'flex-start', md: 'flex-end' }} gridColumn={{ base: '1 / -1', md: 'auto' }}>
             <Button size="sm" variant="outline" onClick={() => onViewDetails(apt._id)}>View Details</Button>
-            {menuItems.length > 0 ? (
+            {isAdmin ? null : menuItems.length > 0 ? (
               <Menu placement="bottom-end">
                 <MenuButton as={IconButton} size="sm" variant="outline" aria-label="More actions" icon={<span aria-hidden>⋯</span>} />
                 <MenuList>
@@ -140,10 +151,10 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
   return (
     <Box>
       <Flex gap={3} wrap="wrap" align="flex-end" mb={5}>
-        <Grid flex="1" minW="240px" gap={3} templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }}>
-          {filterBox(isStudent ? 'Professor' : 'Student', (
+        <Grid flex="1" minW="240px" gap={3} templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', lg: `repeat(${isAdmin ? 3 : 4}, minmax(0, 1fr))` }}>
+          {filterBox(isStudent || isAdmin ? 'Professor' : 'Student', (
             <SearchableSelect value={filters.professor} onChange={value => set({ professor: value })}
-              placeholder={isStudent ? 'All Professors' : 'All Students'}
+              placeholder={isStudent || isAdmin ? 'All Professors' : 'All Students'}
               options={Array.from(people.entries()).sort((a, b) => a[1].localeCompare(b[1])).map(([key, name]) => ({ value: key, label: name }))} />
           ))}
           {filterBox('Reason', (
@@ -154,16 +165,16 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
             <SearchableSelect value={filters.status} onChange={value => set({ status: value })} placeholder="All Statuses"
               options={statuses.map(status => ({ value: status, label: statusLabel(status) }))} />
           ))}
-          {filterBox('Action', (
+          {!isAdmin && filterBox('Action', (
             <SearchableSelect value={filters.action} onChange={value => set({ action: value as Filters['action'] })} placeholder="All Actions"
-              options={ACTION_OPTIONS[role].map(action => ({ value: action, label: NEXT_ACTION_LABELS[action] }))} />
+              options={ACTION_OPTIONS[role as 'STUDENT' | 'FACULTY'].map(action => ({ value: action, label: NEXT_ACTION_LABELS[action] }))} />
           ))}
         </Grid>
         <IconButton aria-label="Clear filters" title="Clear filters" icon={<RepeatIcon />} variant="outline" bg={C.surface} borderColor={C.border}
           isDisabled={!filtering} onClick={() => setFilters(NO_FILTERS)} />
       </Flex>
 
-      {requests.length === 0 && <Text textAlign="center" py={10} color={C.textMid}>{isStudent ? 'You have no appointment requests.' : 'No appointments requested.'}</Text>}
+      {requests.length === 0 && <Text textAlign="center" py={10} color={C.textMid}>{isStudent ? 'You have no appointment requests.' : isAdmin ? 'No appointments yet.' : 'No appointments requested.'}</Text>}
       {requests.length > 0 && shown.length === 0 && (
         <Text textAlign="center" py={10} color={C.textMid}>No requests match these filters.</Text>
       )}
