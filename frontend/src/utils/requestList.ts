@@ -66,20 +66,19 @@ export function applyFilters<T extends ListItem>(
 }
 
 /** The day a request was submitted, in Manila time ("YYYY-MM-DD"). '' for old records without createdAt. */
-const requestedDay = (a: ListItem): string =>
+export const requestedDay = (a: ListItem): string =>
   a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) : '';
 
 /**
- * Newest date first. Inside a date, the most recently submitted day comes first, but requests submitted on the
- * SAME day stay in submission order (first requested on top), never sorted by time.
+ * Newest REQUEST day first (the day the student pressed Request, not the day of the consultation).
+ * Requests submitted on the SAME day stay in submission order (first requested on top), never sorted by time.
  */
 export function sortNewestFirst<T extends ListItem>(items: T[]): T[] {
   return [...items].sort((a, b) => {
-    if (a.date !== b.date) return b.date.localeCompare(a.date);
     const dayA = requestedDay(a), dayB = requestedDay(b);
-    if (dayA !== dayB) return dayB.localeCompare(dayA);   // different submission days: newer day first
+    if (dayA !== dayB) return dayB.localeCompare(dayA);
     const byCreated = (a.createdAt || '').localeCompare(b.createdAt || '');
-    // Same day: first submitted on top. _id (Mongo ObjectId) also sorts by creation time, so it is the fallback.
+    // _id (Mongo ObjectId) also sorts by creation time, so it is the fallback.
     return byCreated !== 0 ? byCreated : a._id.localeCompare(b._id);
   });
 }
@@ -96,6 +95,17 @@ export function groupByDate<T extends ListItem>(items: T[]): { date: string; ite
   for (const it of items) {
     const last = groups[groups.length - 1];
     if (last && last.date === it.date) last.items.push(it); else groups.push({ date: it.date, items: [it] });
+  }
+  return groups;
+}
+
+/** Consecutive items submitted on the same day become one group (the input must already be sorted). day is '' for old records. */
+export function groupByRequestedDay<T extends ListItem>(items: T[]): { day: string; items: T[] }[] {
+  const groups: { day: string; items: T[] }[] = [];
+  for (const it of items) {
+    const day = requestedDay(it);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.items.push(it); else groups.push({ day, items: [it] });
   }
   return groups;
 }
