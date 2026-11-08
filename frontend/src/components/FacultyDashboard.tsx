@@ -246,7 +246,7 @@ const submitLogEntry = async (aptId: string) => {
   const apt = myAppointments.find(a => a._id === aptId);
   const draft = logForm[aptId] || { casePresented: '', interventionTaken: '' };
   const entry = {
-    casePresented: (draft.casePresented ?? apt?.reason ?? '').trim(),
+    casePresented: String(apt?.reason ?? '').trim(), // not editable: always the Purpose of Meeting
     interventionTaken: draft.interventionTaken === 'Others' ? '' : draft.interventionTaken.trim(),
   };
   if (!entry.casePresented || !entry.interventionTaken) {
@@ -274,7 +274,7 @@ const submitLogEntry = async (aptId: string) => {
   }
 };
 
-const updateSavedLogField = (aptId: string, field: 'casePresented' | 'interventionTaken', value: string) => {
+const updateSavedLogField = (aptId: string, field: 'interventionTaken', value: string) => { // the case presented is read-only
   setConsultLog(prev => prev.map(apt => apt._id === aptId ? { ...apt, [field]: value } : apt));
 };
 
@@ -1219,18 +1219,8 @@ const saveConsultationHours = async () => {
                           <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>
                           <Td color={textColor} minW="110px">{formatDate(apt.date)}</Td>
                           <Td minW="210px">
-                            <Textarea
-                              size="sm"
-                              rows={2}
-                              resize="vertical"
-                              aria-label={`Case presented for ${apt.studentName}`}
-                              placeholder="Enter case presented"
-                              value={logForm[apt._id]?.casePresented ?? apt.reason ?? ''}
-                              onChange={e => setLogForm(prev => ({
-                                ...prev,
-                                [apt._id]: { ...(prev[apt._id] || { casePresented: '', interventionTaken: '' }), casePresented: e.target.value },
-                              }))}
-                            />
+                            {/* Read-only: it is the student's Purpose of Meeting, so choosing an intervention never touches it. */}
+                            <Text fontSize="sm" color={textColor} whiteSpace="pre-wrap" overflowWrap="anywhere">{apt.reason || '—'}</Text>
                           </Td>
                           <Td minW="240px">
                             <Select
@@ -1300,14 +1290,7 @@ const saveConsultationHours = async () => {
                         <Td minW="130px" color={textColor}>{apt.studentSection || '—'}</Td>
                         <Td minW="110px" color={textColor}>{formatDate(apt.date)}</Td>
                         <Td minW="210px">
-                          <Textarea
-                            size="sm"
-                            rows={2}
-                            resize="vertical"
-                            aria-label={`Edit case presented for ${apt.studentName}`}
-                            value={apt.casePresented || apt.reason || ''}
-                            onChange={e => updateSavedLogField(apt._id, 'casePresented', e.target.value)}
-                          />
+                          <Text fontSize="sm" color={textColor} whiteSpace="pre-wrap" overflowWrap="anywhere">{apt.casePresented || apt.reason || '—'}</Text>
                         </Td>
                         <Td minW="240px">
                           <Select
