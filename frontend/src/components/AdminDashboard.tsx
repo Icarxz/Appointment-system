@@ -490,19 +490,17 @@ export default function AdminDashboard() {
               </FilterField>
               <FilterField label="Program">
                 <SearchableSelect placeholder="All programs" value={filterProgram}
-                  onChange={value => { setFilterProgram(value); setFilterYear(''); setFilterSection(''); }}
+                  onChange={setFilterProgram}
                   maxW="100%" options={Object.keys(cohortConfig).map(prog => ({ value: prog, label: prog }))} />
               </FilterField>
               <FilterField label="Year">
                 <SearchableSelect placeholder="All years" value={filterYear}
-                  onChange={value => { setFilterYear(value); setFilterSection(''); }}
-                  isDisabled={!filterProgram} maxW="100%"
-                  options={filterProgram && cohortConfig[filterProgram] ? Object.keys(cohortConfig[filterProgram]).map(y => ({ value: y, label: `Year ${y}` })) : []} />
+                  onChange={setFilterYear} maxW="100%"
+                  options={[...new Set(Object.values(cohortConfig).flatMap(p => Object.keys(p)))].sort().map(y => ({ value: y, label: `Year ${y}` }))} />
               </FilterField>
               <FilterField label="Section">
-                <SearchableSelect placeholder="All sections" value={filterSection} onChange={setFilterSection}
-                  isDisabled={!filterYear} maxW="100%"
-                  options={filterProgram && filterYear && cohortConfig[filterProgram]?.[filterYear] ? cohortConfig[filterProgram][filterYear].map(sec => ({ value: sec, label: `Section ${sec}` })) : []} />
+                <SearchableSelect placeholder="All sections" value={filterSection} onChange={setFilterSection} maxW="100%"
+                  options={[...new Set(Object.values(cohortConfig).flatMap(p => Object.values(p).flat()))].sort().map(sec => ({ value: sec, label: `Section ${sec}` }))} />
               </FilterField>
               <Box gridColumn={{ base: 'auto', lg: '1 / -1' }}>
                 <FilterField label="Search">
