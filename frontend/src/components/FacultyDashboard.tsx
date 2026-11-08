@@ -8,6 +8,9 @@ import {
   Button as ChakraButton, Select, Input, HStack, useToast, FormControl, 
   FormLabel, Flex, VStack, Textarea
 } from '@chakra-ui/react';
+import ConfirmEndModal from './ConfirmEndModal';
+import type { EndTarget } from './ConfirmEndModal';
+import { endHint, hasEnded, canMarkMissed, missedHint } from '../utils/consultationEnd';
 import { authFetch } from './authFetch';
 import ProfileGate from './ProfileGate';
 import { hasStarted } from './appointmentStatus';
@@ -245,7 +248,23 @@ const fetchLog = () => {
 };
 useEffect(() => { fetchLog(); }, []);
 
-const submitLogEntry = async (aptId: string) => {
+const [endTarget, setEndTarget] = useState<EndTarget | null>(null);
+const [endBusy, setEndBusy] = useState(false);
+const runEnd = async () => {
+  if (!endTarget) return;
+  setEndBusy(true);
+  try { await endTarget.run(); } finally { setEndBusy(false); setEndTarget(null); }
+};
+
+// Sign-off is only possible once the consultation has ended, and only after the faculty member confirms it.
+const submitLogEntry = (aptId: string) => {
+  const apt = myAppointments.find(a => a._id === aptId);
+  if (!apt) return;
+  if (!hasEnded(apt)) { toast({ title: 'Not ended yet', description: endHint(apt), status: 'info' }); return; }
+  setEndTarget({ kind: 'COMPLETE', person: apt.studentName, personLabel: 'Student', date: apt.date, time: apt.time, run: () => doSubmitLog(aptId) });
+};
+
+const doSubmitLog = async (aptId: string) => {
   const apt = myAppointments.find(a => a._id === aptId);
   const draft = logForm[aptId] || { casePresented: '', interventionTaken: '' };
   const entry = {
@@ -270,6 +289,7 @@ const submitLogEntry = async (aptId: string) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
     fetchLog();
+    if (data.alreadyDone) { toast({ title: 'Already confirmed', description: data.message, status: 'info' }); fetchData(); return; }
     setCompletionModal({ studentName: apt?.studentName || 'Student', studentSection: apt?.studentSection || '' });
     fetchData();
   } catch (error: any) {
@@ -667,13 +687,16 @@ const saveConsultationHours = async () => {
   };
 
   // The student did not turn up to an approved consultation
-  const markNoShow = async (apt: any) => {
-    if (!window.confirm(`Mark ${apt.studentName} as a no-show for this consultation?`)) return;
+  const markNoShow = (apt: any) => {
+    if (!canMarkMissed(apt)) { toast({ title: 'Too early', description: missedHint(apt), status: 'info' }); return; }
+    setEndTarget({ kind: 'MISSED', person: apt.studentName, personLabel: 'Student', date: apt.date, time: apt.time, run: () => doNoShow(apt) });
+  };
+  const doNoShow = async (apt: any) => {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${apt._id}/no-show`, { method: 'PATCH' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not mark the no-show.');
-      toast({ title: 'Marked as student no-show', status: 'info' });
+      toast({ title: data.alreadyDone ? 'Already resolved' : 'Marked as student no-show', description: data.alreadyDone ? data.message : undefined, status: 'info' });
       fetchData();
     } catch (error: any) {
       toast({ title: 'Could not update', description: error.message, status: 'error' });
@@ -812,6 +835,7 @@ const saveConsultationHours = async () => {
         key: page, ...item, active: activePage === page, onClick: () => setActivePage(page),
       }))}
     >
+        <ConfirmEndModal target={endTarget} busy={endBusy} onClose={() => setEndTarget(null)} onConfirm={runEnd} />
         <WelcomeHeader name={userName || ''} actions={activePage === 'analytics' ? <ExportBar solid csvPath="/api/analytics/me.csv" fileBase="my-analytics" /> : undefined} />
         <BroadcastBanner userRole="FACULTY" />
 
@@ -1181,6 +1205,7 @@ const saveConsultationHours = async () => {
               onViewDetails={setDetailsId}
               onCancel={(apt) => { setCancelReason(''); setCancelMode('cancel'); setCancelTarget(apt); }}
               onNoShow={markNoShow}
+              onComplete={() => { toast({ title: 'Sign off in the Consultation Log', description: 'Choose the intervention and press Complete & Save.', status: 'info' }); setActivePage('log'); }}
               answerBar={answerBar}
               onChanged={fetchData}
             />

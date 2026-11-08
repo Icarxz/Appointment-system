@@ -54,6 +54,7 @@ const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
+const { decideFinish } = require('../utils/consultationEnd');
 
 // Booking / cancellation time limits (appointment date + time are Manila time)
 const { findConflict, conflictMessage } = require('../utils/duplicateRequest');
@@ -1013,41 +1014,62 @@ router.get('/faculty/:id/public-schedule', async (req, res) => {
   }
 });
 
-// Complete a consultation and record the log entry (digital sign-off)
-router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, res) => {
+// Does this student own the appointment? New records carry studentId; older ones are matched by name.
+async function studentOwns(apt, userId) {
+  if (apt.studentId) return String(apt.studentId) === String(userId);
+  const me = await User.findById(userId).select('name');
+  return !!me && me.name === apt.studentName;
+}
+
+// Confirm that a consultation has ENDED. The faculty member signs it off with the log entry (digital sign-off); the
+// student can confirm it too. Rules live in utils/consultationEnd.js: not before the end time, first confirmation
+// wins, repeating it changes nothing. The button state in the browser is only a hint; this is the real check.
+router.patch('/appointment/:id/complete', requireAuth(['FACULTY', 'STUDENT']), async (req, res) => {
   try {
-    const interventionValue = String(req.body.interventionTaken ?? '').trim();
-    if (!interventionValue) {
-      return res.status(400).json({ error: 'Select or enter the intervention / action taken.' });
-    }
-    const apt = await Appointment.findOne({ _id: req.params.id, facultyId: req.user.userId });
+    const role = req.user.role;
+    const apt = await Appointment.findById(req.params.id);
     if (!apt) return res.status(404).json({ error: 'Appointment not found.' });
+    if (role === 'FACULTY' && String(apt.facultyId) !== String(req.user.userId)) return res.status(404).json({ error: 'Appointment not found.' });
+    if (role === 'STUDENT' && !(await studentOwns(apt, req.user.userId))) return res.status(404).json({ error: 'Appointment not found.' });
+
+    const decision = decideFinish(apt, 'COMPLETE', role);
+    if (!decision.ok) return res.status(decision.status).json({ error: decision.error });
+    if (!decision.change) return res.json({ message: decision.reason, alreadyDone: true, appointment: apt });
+
     // The case presented is the student's Purpose of Meeting and is not editable: the body value is ignored.
     const caseValue = String(apt.reason ?? '').trim();
     if (!caseValue) return res.status(400).json({ error: 'This appointment has no purpose of meeting to record.' });
-    // MISSED (FACULTY) is what the system sets automatically when an approved consultation was
-    // never signed off; the faculty can still log it late if the consultation did take place.
-    if (apt.status !== 'APPROVED' && apt.status !== 'MISSED (FACULTY)') {
-      return res.status(400).json({ error: 'Only approved consultations can be completed.' });
+    if (role === 'FACULTY') {
+      const interventionValue = String(req.body.interventionTaken ?? '').trim();
+      if (!interventionValue) return res.status(400).json({ error: 'Select or enter the intervention / action taken.' });
+      apt.interventionTaken = interventionValue;
     }
-    if (apt.completedAt) {
-      return res.status(400).json({ error: 'This consultation has already been signed off and cannot be edited.' });
-    }
-
-    apt.casePresented     = caseValue;
-    apt.interventionTaken = interventionValue;
-    apt.status            = 'COMPLETED';
-    apt.completedAt       = new Date();
+    // A student's confirmation leaves the intervention empty: the faculty member adds it later in the Consultation Log.
+    apt.casePresented = caseValue;
+    apt.status        = 'COMPLETED';
+    apt.completedAt   = new Date();
+    apt.completedBy   = role;
+    apt.missedAt      = undefined; // a late sign-off after the system's Missed (faculty) clears it
     await apt.save();
 
-    await notify(await resolveStudentId(apt), {
-      type: 'CONSULTATION_LOGGED',
-      title: 'Consultation completed',
-      message: `Your consultation on ${fmtDate(apt.date)} was logged and signed off by your instructor.`,
-      appointmentId: apt._id,
-    });
+    const when = fmtDate(apt.date);
+    if (role === 'FACULTY') {
+      await notify(await resolveStudentId(apt), {
+        type: 'CONSULTATION_LOGGED',
+        title: 'Consultation completed',
+        message: `Your consultation on ${when} was logged and signed off by your instructor.`,
+        appointmentId: apt._id,
+      });
+    } else {
+      await notify(apt.facultyId, {
+        type: 'CONSULTATION_LOGGED',
+        title: 'Consultation confirmed by the student',
+        message: `${apt.studentName} confirmed that the consultation on ${when} has ended. Add the intervention in your Consultation Log.`,
+        appointmentId: apt._id,
+      });
+    }
 
-    res.json({ message: 'Consultation logged and signed off.', appointment: apt });
+    res.json({ message: role === 'FACULTY' ? 'Consultation logged and signed off.' : 'Consultation confirmed as completed.', appointment: apt });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -1152,33 +1174,47 @@ router.post('/appointments/bulk-cancel', requireAuth(['STUDENT', 'FACULTY']), as
   }
 });
 
-// Faculty marks that the student did not show up (counted as "MISSED (STUDENT)")
-router.patch('/appointment/:id/no-show', requireAuth(['FACULTY']), async (req, res) => {
+// Mark a consultation as missed, from 2 hours after its start (utils/consultationEnd.js). The faculty member reports
+// that the student did not show up; the student reports that the faculty member did not. First confirmation wins.
+async function markMissed(req, res, role) {
   try {
-    const apt = await Appointment.findOne({ _id: req.params.id, facultyId: req.user.userId });
+    const apt = await Appointment.findById(req.params.id);
     if (!apt) return res.status(404).json({ error: 'Appointment not found.' });
-    if (apt.status !== 'APPROVED') {
-      return res.status(400).json({ error: 'Only approved consultations can be marked as a no-show.' });
-    }
-    // Not before the appointment has actually started (Philippine time)
-    if (Date.now() < manilaDate(apt.date, apt.time).getTime()) {
-      return res.status(400).json({ error: 'This consultation has not started yet.' });
-    }
-    apt.status = 'MISSED (STUDENT)';
+    if (role === 'FACULTY' && String(apt.facultyId) !== String(req.user.userId)) return res.status(404).json({ error: 'Appointment not found.' });
+    if (role === 'STUDENT' && !(await studentOwns(apt, req.user.userId))) return res.status(404).json({ error: 'Appointment not found.' });
+
+    const decision = decideFinish(apt, 'MISSED', role);
+    if (!decision.ok) return res.status(decision.status).json({ error: decision.error });
+    if (!decision.change) return res.json({ message: decision.reason, alreadyDone: true, appointment: apt });
+
+    apt.status   = role === 'FACULTY' ? 'MISSED (STUDENT)' : 'MISSED (FACULTY)';
     apt.missedAt = new Date();
+    apt.missedBy = role;
     await apt.save();
 
-    await notify(await resolveStudentId(apt), {
-      type: 'APPOINTMENT_UPDATE',
-      title: 'Consultation missed',
-      message: `You did not attend your consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)}.`,
-      appointmentId: apt._id,
-    });
-    res.json({ message: 'Marked as student no-show.', appointment: apt });
+    const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
+    if (role === 'FACULTY') {
+      await notify(await resolveStudentId(apt), {
+        type: 'APPOINTMENT_UPDATE',
+        title: 'Consultation missed',
+        message: `You did not attend your consultation on ${when}.`,
+        appointmentId: apt._id,
+      });
+    } else {
+      await notify(apt.facultyId, {
+        type: 'APPOINTMENT_UPDATE',
+        title: 'Student reported a missed consultation',
+        message: `${apt.studentName} reported that the consultation on ${when} did not take place. You can add your reason from your requests.`,
+        appointmentId: apt._id,
+      });
+    }
+    res.json({ message: role === 'FACULTY' ? 'Marked as student no-show.' : 'Reported as missed by the faculty member.', appointment: apt });
   } catch (error) {
-    res.status(500).json({ error: 'Server error marking no-show.' });
+    res.status(500).json({ error: 'Server error marking the consultation as missed.' });
   }
-});
+}
+router.patch('/appointment/:id/no-show', requireAuth(['FACULTY']), (req, res) => markMissed(req, res, 'FACULTY'));
+router.patch('/appointment/:id/faculty-no-show', requireAuth(['STUDENT']), (req, res) => markMissed(req, res, 'STUDENT'));
 
 // Fetch a faculty member's consultation log (completed entries, oldest first like the paper form)
 router.get('/consultation-log/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']), ownerOrStaff(r => r.params.facultyId), async (req, res) => {

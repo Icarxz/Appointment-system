@@ -7,6 +7,7 @@ import { RepeatIcon } from '@chakra-ui/icons';
 import { formatTime } from './dateUtils';
 import AppealControls from './AppealControls';
 import { statusColor, statusLabel, isBeforeCutoff, hasStarted, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
+import { endHint, hasEnded, canMarkMissed, missedHint } from '../utils/consultationEnd';
 import { useNavPalette } from '../utils/uiTokens';
 import SearchableSelect from './SearchableSelect';
 import { GENDER_OPTIONS, matchesGender } from './PeopleUi';
@@ -27,8 +28,8 @@ const dayHeading = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateStr
 const canCancelNow = (a: ListItem) => isBeforeCutoff(a.date, a.time);
 
 const ACTION_OPTIONS: Record<'STUDENT' | 'FACULTY', NextAction[]> = { // the Admin list has no actions, so no Action filter
-  STUDENT: ['CAN_CANCEL', 'CAN_APPEAL', 'HAS_ACCOMPLISHMENT'],
-  FACULTY: ['NEEDS_ANSWER', 'CAN_CANCEL', 'CAN_MARK_NO_SHOW', 'CAN_APPEAL'],
+  STUDENT: ['CAN_CANCEL', 'CAN_COMPLETE', 'CAN_MARK_NO_SHOW', 'CAN_APPEAL', 'HAS_ACCOMPLISHMENT'],
+  FACULTY: ['NEEDS_ANSWER', 'CAN_CANCEL', 'CAN_COMPLETE', 'CAN_MARK_NO_SHOW', 'CAN_APPEAL'],
 };
 
 interface Props {
@@ -42,13 +43,17 @@ interface Props {
   onViewAccomplishment?: (apt: any) => void;
   /** Faculty only: the student did not turn up. */
   onNoShow?: (apt: any) => void;
+  /** Student: report that the faculty member did not show. Faculty: the student did not show. From 2 hours after the start. */
+  onMissed?: (apt: any) => void;
+  /** Confirm that the consultation has ended (from its end time). */
+  onComplete?: (apt: any) => void;
   /** Faculty only: the Approve / Reject bar shown under a request that waits for an answer (null for other rows). */
   answerBar?: (apt: any) => ReactNode;
   /** Called after something changed on the server (an appeal) so the list reloads. */
   onChanged: () => void;
 }
 
-export default function RequestList({ role, requests, onViewDetails, onCancel, onViewAccomplishment, onNoShow, answerBar, onChanged }: Props) {
+export default function RequestList({ role, requests, onViewDetails, onCancel, onViewAccomplishment, onNoShow, onMissed, onComplete, answerBar, onChanged }: Props) {
   const C = useNavPalette();
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
@@ -92,10 +97,18 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
   const row = (apt: any) => {
     const actions = actionsOf(apt);
     const cancelClosed = !isAdmin && (apt.status === 'PENDING' || apt.status === 'APPROVED') && !actions.includes('CAN_CANCEL') && !hasStarted(apt.date, apt.time) && !(apt.status === 'PENDING' && !isStudent);
-    const menuItems: { key: string; label: string; danger?: boolean; run: () => void }[] = [];
+    const menuItems: { key: string; label: string; danger?: boolean; hint?: string; disabled?: boolean; run: () => void }[] = [];
     if (actions.includes('CAN_CANCEL') && onCancel) menuItems.push({ key: 'cancel', label: apt.status === 'PENDING' ? 'Cancel Request' : 'Cancel Appointment', danger: true, run: () => onCancel(apt) });
     if (actions.includes('HAS_ACCOMPLISHMENT') && onViewAccomplishment) menuItems.push({ key: 'acc', label: 'View Accomplishment', run: () => onViewAccomplishment(apt) });
-    if (actions.includes('CAN_MARK_NO_SHOW') && onNoShow) menuItems.push({ key: 'noshow', label: "Student didn't show", run: () => onNoShow(apt) });
+    if (actions.includes('CAN_COMPLETE') && onComplete) {
+      const ended = hasEnded(apt);
+      menuItems.push({ key: 'complete', label: 'Mark Completed', disabled: !ended, hint: ended ? undefined : endHint(apt), run: () => onComplete(apt) });
+    }
+    const onMiss = isStudent ? onMissed : (onMissed || onNoShow);
+    if (actions.includes('CAN_MARK_NO_SHOW') && onMiss) {
+      const ok = canMarkMissed(apt);
+      menuItems.push({ key: 'noshow', label: isStudent ? "Faculty didn't show" : "Student didn't show", danger: true, disabled: !ok, hint: ok ? undefined : missedHint(apt), run: () => onMiss(apt) });
+    }
     const bar = answerBar ? answerBar(apt) : null;
     return (
       <Box key={apt._id} bg={C.surface} borderWidth="1px" borderColor={C.border} borderRadius="lg" px={4} py={3}>
@@ -140,7 +153,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
               <Menu placement="bottom-end">
                 <MenuButton as={IconButton} size="sm" variant="outline" aria-label="More actions" icon={<span aria-hidden>⋯</span>} />
                 <MenuList>
-                  {menuItems.map(m => <MenuItem key={m.key} color={m.danger ? 'red.500' : undefined} onClick={m.run}>{m.label}</MenuItem>)}
+                  {menuItems.map(m => <MenuItem key={m.key} color={m.danger ? 'red.500' : undefined} isDisabled={m.disabled} onClick={m.run}><Box><Text>{m.label}</Text>{m.hint && <Text fontSize="xs" color={C.textMid} whiteSpace="normal">{m.hint}</Text>}</Box></MenuItem>)}
                 </MenuList>
               </Menu>
             ) : (

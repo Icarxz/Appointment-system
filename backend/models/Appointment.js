@@ -14,6 +14,7 @@ const AppointmentSchema = new mongoose.Schema({
   cancelReason: { type: String, default: '' }, // why the faculty cancelled an approved consultation
   autoRejected: { type: Boolean },             // true when the system rejected an unanswered request at its start time
   missedAt: { type: Date },                    // when it was marked MISSED (STUDENT) / MISSED (FACULTY)
+  missedBy: { type: String, enum: ['STUDENT', 'FACULTY'] }, // who reported the miss; empty when the system marked it (3 hours after the start)
   reminderSent: { type: Boolean, default: false }, // has the 1-hour-before reminder already been sent to faculty?
   studentReminderSent: { type: Boolean, default: false }, // ...and to the student (in-app + email)?
 
@@ -34,6 +35,7 @@ const AppointmentSchema = new mongoose.Schema({
   interventionTaken: { type: String },
   remarks:           { type: String },
   completedAt:       { type: Date },
+  completedBy:       { type: String, enum: ['STUDENT', 'FACULTY'] }, // who confirmed that the consultation ended (first confirmation wins)
   isDemo:            { type: Boolean } // set only on records made by scripts/demoData.js
 }, { timestamps: true });
 

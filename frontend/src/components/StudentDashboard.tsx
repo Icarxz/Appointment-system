@@ -11,6 +11,8 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
+import ConfirmEndModal from './ConfirmEndModal';
+import type { EndTarget } from './ConfirmEndModal';
 import { BOOKING_LEAD_HOURS, facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
@@ -111,6 +113,26 @@ export default function StudentDashboard() {
   const { isOpen: isSummaryOpen, onOpen: onSummaryOpen, onClose: onSummaryClose } = useDisclosure();
   const [summaryApt, setSummaryApt] = useState<any>(null);
   const viewAccomplishment = (apt: any) => { setSummaryApt(apt); onSummaryOpen(); };
+
+  // Confirm that a consultation ended, or report that the faculty member did not show. The server enforces the times.
+  const [endTarget, setEndTarget] = useState<EndTarget | null>(null);
+  const [endBusy, setEndBusy] = useState(false);
+  const callFinish = (apt: any, path: 'complete' | 'faculty-no-show') => async () => {
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${apt._id}/${path}`, { method: 'PATCH' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update the consultation.');
+      toast({ title: data.alreadyDone ? 'Already resolved' : path === 'complete' ? 'Marked as completed' : 'Reported as missed', description: data.alreadyDone ? data.message : undefined, status: 'success', position: 'top' });
+    } catch (error: any) {
+      toast({ title: 'Could not update', description: error.message, status: 'error', position: 'top' });
+    }
+    fetchData();
+  };
+  const askEnd = (apt: any, kind: 'COMPLETE' | 'MISSED') => setEndTarget({
+    kind, person: apt.facultyId?.name || 'Faculty', personLabel: 'Faculty', date: apt.date, time: apt.time,
+    run: callFinish(apt, kind === 'COMPLETE' ? 'complete' : 'faculty-no-show'),
+  });
+  const runEnd = async () => { if (!endTarget) return; setEndBusy(true); try { await endTarget.run(); } finally { setEndBusy(false); setEndTarget(null); } };
 
   const palette = useNavPalette();
   const cardBg = palette.surface;
@@ -566,6 +588,7 @@ export default function StudentDashboard() {
               <Flex justify="flex-end" mb={3}>
                 <ChakraButton size="sm" colorScheme="red" variant="outline" onClick={() => setBulkOpen(true)}>Cancel several…</ChakraButton>
               </Flex>
+              <ConfirmEndModal target={endTarget} busy={endBusy} onClose={() => setEndTarget(null)} onConfirm={runEnd} />
               <BulkCancelModal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} role="STUDENT" appointments={myRequests} onDone={fetchData} />
               <RequestList
                 role="STUDENT"
@@ -573,6 +596,8 @@ export default function StudentDashboard() {
                 onViewDetails={setDetailsId}
                 onCancel={(apt) => { setCancelReason(''); setCancelTarget(apt); }}
                 onViewAccomplishment={viewAccomplishment}
+                onComplete={(apt) => askEnd(apt, 'COMPLETE')}
+                onMissed={(apt) => askEnd(apt, 'MISSED')}
                 onChanged={fetchData}
               />
             </Box>

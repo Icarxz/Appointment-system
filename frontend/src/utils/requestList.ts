@@ -14,13 +14,14 @@ export interface ListItem {
 }
 
 /** What the student can do next with a request. */
-export type NextAction = 'CAN_CANCEL' | 'CAN_APPEAL' | 'HAS_ACCOMPLISHMENT' | 'NEEDS_ANSWER' | 'CAN_MARK_NO_SHOW';
+export type NextAction = 'CAN_CANCEL' | 'CAN_APPEAL' | 'HAS_ACCOMPLISHMENT' | 'NEEDS_ANSWER' | 'CAN_MARK_NO_SHOW' | 'CAN_COMPLETE';
 export const NEXT_ACTION_LABELS: Record<NextAction, string> = {
   CAN_CANCEL: 'Can cancel',
   CAN_APPEAL: 'Can add a reason',
   HAS_ACCOMPLISHMENT: 'Has accomplishment',
   NEEDS_ANSWER: 'Needs my answer',
-  CAN_MARK_NO_SHOW: 'Student did not show',
+  CAN_MARK_NO_SHOW: 'Can mark missed',
+  CAN_COMPLETE: 'Can mark completed',
 };
 
 // Statuses a student may appeal (the same list AppealControls and the server use).
@@ -30,6 +31,7 @@ export function nextActions(apt: ListItem, canCancelNow: (a: ListItem) => boolea
   const out: NextAction[] = [];
   if ((apt.status === 'PENDING' || apt.status === 'APPROVED') && canCancelNow(apt)) out.push('CAN_CANCEL');
   if (STUDENT_APPEALABLE.includes(apt.status) && !(apt.appeal && apt.appeal.status)) out.push('CAN_APPEAL');
+  if (apt.status === 'APPROVED') out.push('CAN_COMPLETE', 'CAN_MARK_NO_SHOW'); // enabled or disabled by the time rules in the menu
   if (apt.status === 'COMPLETED') out.push('HAS_ACCOMPLISHMENT');
   return out;
 }
@@ -42,7 +44,7 @@ export function facultyNextActions(apt: ListItem, o: { canCancel: boolean; start
   const out: NextAction[] = [];
   if (apt.status === 'PENDING' && !o.started) out.push('NEEDS_ANSWER');
   if (apt.status === 'APPROVED' && o.canCancel) out.push('CAN_CANCEL');
-  if (apt.status === 'APPROVED' && o.started) out.push('CAN_MARK_NO_SHOW');
+  if (apt.status === 'APPROVED' && o.started) out.push('CAN_COMPLETE', 'CAN_MARK_NO_SHOW'); // enabled or disabled by the time rules in the menu
   if (FACULTY_APPEALABLE.includes(apt.status) && !(apt.appeal && apt.appeal.status)) out.push('CAN_APPEAL');
   return out;
 }
