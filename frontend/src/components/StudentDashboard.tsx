@@ -6,7 +6,7 @@ import OnboardingModal from './OnboardingModal';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 import {
   Box, Grid, Heading, Text, Button as ChakraButton, Table, Thead, Tbody, Tr, Th, Td, TableContainer,
-  Badge, Input, Select, VStack, HStack, useToast, FormControl, FormLabel, Flex,
+  Badge, Input, VStack, HStack, useToast, FormControl, FormLabel, Flex,
   useColorModeValue,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure
 } from '@chakra-ui/react';

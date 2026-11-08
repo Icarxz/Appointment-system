@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Badge, Box, Button, Flex, Grid, Heading, HStack, IconButton, Menu, MenuButton, MenuItem, MenuList, Select, Text,
+  Badge, Box, Button, Flex, Grid, Heading, HStack, IconButton, Menu, MenuButton, MenuItem, MenuList, Text,
 } from '@chakra-ui/react';
 import { RepeatIcon } from '@chakra-ui/icons';
 import { formatTime } from './dateUtils';
@@ -10,7 +10,7 @@ import { statusColor, statusLabel, isBeforeCutoff, hasStarted, CANCEL_CUTOFF_HOU
 import { useNavPalette } from '../utils/uiTokens';
 import SearchableSelect from './SearchableSelect';
 import {
-  NEXT_ACTION_LABELS, NO_FILTERS, applyFilters, distinct, facultyNextActions, groupByDate, nextActions, paginate,
+  NEXT_ACTION_LABELS, NO_FILTERS, applyFilters, distinct, facultyNextActions, groupByRequestedDay, nextActions, paginate,
   professorKey, sortNewestFirst, studentKey,
 } from '../utils/requestList';
 import type { Filters, ListItem, NextAction } from '../utils/requestList';
@@ -62,7 +62,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
 
   const shown = sortNewestFirst(applyFilters(requests as ListItem[], filters, actionsOf, personKey)) as any[];
   const paged = paginate(shown, page, PAGE_SIZE);
-  const groups = groupByDate(paged.rows as ListItem[]) as { date: string; items: any[] }[];
+  const groups = groupByRequestedDay(paged.rows as ListItem[]) as { day: string; items: any[] }[];
   const filtering = JSON.stringify(filters) !== JSON.stringify(NO_FILTERS);
   const set = (patch: Partial<Filters>) => setFilters(f => ({ ...f, ...patch }));
 
@@ -92,9 +92,14 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
       <Box key={apt._id} bg={C.surface} borderWidth="1px" borderColor={C.border} borderRadius="lg" px={4} py={3}>
         <Grid
           gap={3} alignItems="center"
-          templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: '84px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(150px, 1.3fr) max-content' }}
+          templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: '100px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(150px, 1.3fr) max-content' }}
         >
-          {field('Time', <Text fontSize="sm" color={C.text}>{formatTime(apt.time)}</Text>)}
+          {field('Time', (
+            <>
+              <Text fontSize="sm" color={C.text}>{formatTime(apt.time)}</Text>
+              <Text fontSize="xs" color={C.textMid}>{dayHeading(apt.date)}</Text>
+            </>
+          ))}
           {isStudent
             ? field('Professor Name', <Text fontSize="sm" color={C.text} overflowWrap="anywhere">{apt.facultyId ? apt.facultyId.name : 'Unknown'}</Text>)
             : field('Student', (
@@ -164,8 +169,8 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
       )}
 
       {groups.map(g => (
-        <Box key={g.date} mb={5}>
-          <Heading as="h3" size="sm" color={C.text} mb={2}>{dayHeading(g.date)}</Heading>
+        <Box key={g.day || 'older'} mb={5}>
+          <Heading as="h3" size="sm" color={C.text} mb={2}>{g.day ? `Requested ${dayHeading(g.day)}` : 'Earlier requests'}</Heading>
           <Flex direction="column" gap={2}>{g.items.map(row)}</Flex>
         </Box>
       ))}
