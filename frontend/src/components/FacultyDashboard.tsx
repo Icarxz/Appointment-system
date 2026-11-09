@@ -27,6 +27,7 @@ import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import ExportBar from './ExportBar';
 import SearchableSelect from './SearchableSelect';
 import { cohortConfig } from '../data/cohortConfig';
+import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
 import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,9 +377,10 @@ const saveConsultationHours = async () => {
   const [logProgram, setLogProgram] = useState('');
   const [logYear, setLogYear] = useState('');
   const [logSection, setLogSection] = useState('');
-  const [logSort, setLogSort] = useState<'desc' | 'asc'>('desc'); // by consultation date
-  const logFiltersActive = !!(logSearch || logGender || logProgram || logYear || logSection || logSort !== 'desc');
-  const clearLogFilters = () => { setLogSearch(''); setLogGender(''); setLogProgram(''); setLogYear(''); setLogSection(''); setLogSort('desc'); };
+  const [logSort, setLogSort] = useState<'desc' | 'asc'>('desc'); // order of the day groups
+  const [logDay, setLogDay] = useState(''); // one chosen day ("YYYY-MM-DD"): the day requested for sign-off rows, the day saved for saved rows
+  const logFiltersActive = !!(logSearch || logGender || logProgram || logYear || logSection || logDay || logSort !== 'desc');
+  const clearLogFilters = () => { setLogSearch(''); setLogGender(''); setLogProgram(''); setLogYear(''); setLogSection(''); setLogDay(''); setLogSort('desc'); };
   const matchesLogFilters = (apt: any) => {
     const section = apt.studentSection || '';
     const c = parseCohort(section);
@@ -389,14 +391,17 @@ const saveConsultationHours = async () => {
       (!logSection || c.section === logSection) &&
       (!q || (apt.studentName || '').toLowerCase().includes(q) || (apt.casePresented || apt.reason || '').toLowerCase().includes(q));
   };
-  const sortLogRows = (rows: any[]) => [...rows].sort((a, b) => {
-    const ka = (a.date || '') + ' ' + (a.time || '');
-    const kb = (b.date || '') + ' ' + (b.time || '');
-    return logSort === 'asc' ? ka.localeCompare(kb) : kb.localeCompare(ka);
-  });
+  // Ready for sign-off is grouped by the day the student REQUESTED; saved records by the day they were SAVED (signed off).
+  const requestedDayOf = (a: any) => manilaDay(a.createdAt);
+  const savedDayOf = (a: any) => manilaDay(a.completedAt);
   const signOffAll = myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)');
-  const pendingSignOff = sortLogRows(signOffAll.filter(matchesLogFilters));
-  const savedLog = sortLogRows(consultLog.filter(matchesLogFilters));
+  const pendingSignOff = signOffAll.filter(a => matchesLogFilters(a) && (!logDay || requestedDayOf(a) === logDay));
+  const savedLog = consultLog.filter(a => matchesLogFilters(a) && (!logDay || savedDayOf(a) === logDay));
+  const signOffGroups = groupByDay(pendingSignOff, requestedDayOf, a => a.createdAt || '', logSort);
+  const savedGroups = groupByDay(savedLog, savedDayOf, a => a.completedAt || '', logSort);
+  const dayRow = (day: string, verb: string, none: string) => (
+    <Tr><Td colSpan={7} py={2} fontWeight="700" fontSize="sm" bg="blackAlpha.50" _dark={{ bg: 'whiteAlpha.100' }} color={textColor}>{day ? `${verb} ${dayHeading(day)}` : none}</Td></Tr>
+  );
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const weekLabel = useMemo(() => formatWeekLabel(weekDates), [weekDates]);
@@ -1220,7 +1225,7 @@ const saveConsultationHours = async () => {
             <FilterPanel
               columns={{ base: 1, sm: 2, lg: 3 }}
               shown={pendingSignOff.length + savedLog.length} total={signOffAll.length + consultLog.length} noun="consultations"
-              canClear={logFiltersActive} onClear={clearLogFilters}
+              canClear={logFiltersActive} onClear={clearLogFilters} clearLabel="↻ Refresh"
             >
               <FilterField label="Gender">
                 <SearchableSelect placeholder="All genders" value={logGender} onChange={setLogGender} maxW="100%" options={GENDER_OPTIONS} />
@@ -1237,9 +1242,12 @@ const saveConsultationHours = async () => {
                 <SearchableSelect placeholder="All sections" value={logSection} onChange={setLogSection} maxW="100%"
                   options={[...new Set(Object.values(cohortConfig).flatMap(p => Object.values(p).flat()))].sort().map(sec => ({ value: sec, label: 'Section ' + sec }))} />
               </FilterField>
-              <FilterField label="Sort by date">
-                <SearchableSelect placeholder="Newest first" value={logSort} onChange={(v) => setLogSort(v === 'asc' ? 'asc' : 'desc')} maxW="100%"
-                  options={[{ value: 'desc', label: 'Newest first' }, { value: 'asc', label: 'Oldest first' }]} />
+              <FilterField label="Sort by day">
+                <SearchableSelect placeholder="Newest day first" value={logSort} onChange={(v) => setLogSort(v === 'asc' ? 'asc' : 'desc')} maxW="100%"
+                  options={[{ value: 'desc', label: 'Newest day first' }, { value: 'asc', label: 'Oldest day first' }]} />
+              </FilterField>
+              <FilterField label="Day (requested / saved)">
+                <Input type="date" value={logDay} onChange={(e) => setLogDay(e.target.value)} color={textColor} borderColor={borderColor} bg={cardBg} />
               </FilterField>
               <FilterField label="Search">
                 <Input placeholder="Student or case..." value={logSearch} onChange={(e) => setLogSearch(e.target.value)} color={textColor} borderColor={borderColor} bg={cardBg} />
@@ -1267,7 +1275,10 @@ const saveConsultationHours = async () => {
                   <Tbody>
                     {pendingSignOff.length === 0 ? (
                       <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No consultations are waiting for sign-off.</Td></Tr>
-                    ) : pendingSignOff.map(apt => (
+                    ) : signOffGroups.map(g => (
+                      <React.Fragment key={g.day || 'older'}>
+                      {dayRow(g.day, 'Requested', 'Earlier requests')}
+                      {g.rows.map(apt => (
                         <Tr key={apt._id}>
                           <Td minW="190px" color={textColor}>
                             <PersonCell name={apt.studentName} />
@@ -1315,6 +1326,8 @@ const saveConsultationHours = async () => {
                           </Td>
                         </Tr>
                       ))}
+                      </React.Fragment>
+                    ))}
                   </Tbody>
                 </Table>
               </Box>
@@ -1341,7 +1354,10 @@ const saveConsultationHours = async () => {
                   <Tbody>
                     {savedLog.length === 0 ? (
                       <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No saved consultation records yet.</Td></Tr>
-                    ) : savedLog.map(apt => (
+                    ) : savedGroups.map(g => (
+                      <React.Fragment key={g.day || 'older'}>
+                      {dayRow(g.day, 'Saved', 'Earlier records')}
+                      {g.rows.map(apt => (
                       <Tr key={apt._id}>
                         <Td minW="190px" color={textColor}><PersonCell name={apt.studentName} /></Td>
                         <Td minW="95px"><GenderBadge gender={apt.studentId?.gender} /></Td>
@@ -1378,6 +1394,8 @@ const saveConsultationHours = async () => {
                           </ChakraButton>
                         </Td>
                       </Tr>
+                    ))}
+                      </React.Fragment>
                     ))}
                   </Tbody>
                 </Table>

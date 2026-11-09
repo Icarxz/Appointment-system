@@ -57,8 +57,10 @@ export function FilterField({ label, children }: { label: string; children: Reac
   );
 }
 
-export function FilterPanel({ children, shown, total, noun, canClear, onClear, columns }: {
+export function FilterPanel({ children, shown, total, noun, canClear, onClear, columns, clearLabel = 'Clear filters' }: {
   children: React.ReactNode; shown: number; total: number; noun: string; canClear: boolean; onClear: () => void;
+  /** The button only shows while a dropdown is selected; it resets them. */
+  clearLabel?: string;
   columns?: { base?: number; sm?: number; md?: number; lg?: number };
 }) {
   const bg = useColorModeValue('gray.50', 'whiteAlpha.50');
@@ -68,7 +70,7 @@ export function FilterPanel({ children, shown, total, noun, canClear, onClear, c
       <SimpleGrid columns={columns || { base: 1, sm: 2, lg: 4 }} spacing={3} alignItems="end">{children}</SimpleGrid>
       <Flex mt={3} align="center" justify="space-between" gap={3} flexWrap="wrap">
         <Text fontSize="xs" opacity={0.7}>Showing {shown} of {total} {noun}</Text>
-        {canClear && <ChakraButton size="xs" variant="ghost" colorScheme="blue" onClick={onClear}>Clear filters</ChakraButton>}
+        {canClear && <ChakraButton size="xs" variant="ghost" colorScheme="blue" onClick={onClear}>{clearLabel}</ChakraButton>}
       </Flex>
     </Box>
   );
