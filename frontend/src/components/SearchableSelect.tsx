@@ -22,11 +22,15 @@ interface Props {
   size?: 'sm' | 'md';
   isDisabled?: boolean;
   ariaLabel?: string;
+  /** false hides the search box (for a short list such as Newest / Oldest). Default true. */
+  searchable?: boolean;
+  /** false hides the placeholder row that clears the choice (for a control that always has a value). Default true. */
+  clearable?: boolean;
 }
 
 export default function SearchableSelect({
   value, options, onChange, placeholder = 'Select an option',
-  maxW = '100%', size = 'md', isDisabled = false, ariaLabel,
+  maxW = '100%', size = 'md', isDisabled = false, ariaLabel, searchable = true, clearable = true,
 }: Props) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [query, setQuery] = useState('');
@@ -58,7 +62,7 @@ export default function SearchableSelect({
       </PopoverTrigger>
       <PopoverContent maxW={maxW} zIndex={1500} bg={f.bg} color={f.text} borderColor={f.border}>
         <PopoverBody p={2}>
-          <HStack mb={2}>
+          {searchable && <HStack mb={2}>
             <SearchIcon color="gray.400" />
             <Input
               size="sm" autoFocus value={query}
@@ -66,12 +70,12 @@ export default function SearchableSelect({
               placeholder={`Search ${placeholder.toLowerCase()}...`}
               aria-label={`Search ${placeholder.toLowerCase()}`}
             />
-          </HStack>
+          </HStack>}
           <VStack align="stretch" spacing={1} maxH="240px" overflowY="auto">
-            <Button size="sm" variant={!value ? 'solid' : 'ghost'} justifyContent="flex-start"
+            {clearable && <Button size="sm" variant={!value ? 'solid' : 'ghost'} justifyContent="flex-start"
               onClick={() => { onChange(''); close(); }}>
               {placeholder}
-            </Button>
+            </Button>}
             {filtered.map(option => (
               <Button key={option.value} size="sm" variant={value === option.value ? 'solid' : 'ghost'}
                 justifyContent="flex-start" whiteSpace="normal" height="auto" minH="36px"

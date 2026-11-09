@@ -41,6 +41,9 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
   const redBorder = useColorModeValue('#ef4444', '#f87171');
   const faintBg = useColorModeValue('#f1f5f9', '#162033');
   const lineColor = useColorModeValue('#e2e8f0', '#1e3048');
+  const reqBg = useColorModeValue('#fef3c7', '#78350f');
+  const reqBorder = useColorModeValue('#f59e0b', '#fbbf24');
+  const reqText = useColorModeValue('#92400e', '#fde68a');
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(false);
@@ -68,6 +71,7 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
       <HStack spacing={4} flexWrap="wrap" mb={3} fontSize="xs" color={muted}>
         <HStack spacing={1}>{swatch(consultBg, consultBorder)}<Text>Consultation hours</Text></HStack>
         <HStack spacing={1}>{swatch(vacantBg, vacantBorder, true)}<Text>Vacant hour</Text></HStack>
+        <HStack spacing={1}>{swatch(reqBg, reqBorder)}<Text>Has requests</Text></HStack>
         <HStack spacing={1}>{swatch(classBg, classBg)}<Text>Class</Text></HStack>
         <HStack spacing={1}>{swatch(redBg, redBorder)}<Text>Booked</Text></HStack>
         <HStack spacing={1}>{swatch(faintBg, lineColor)}<Text>Not available</Text></HStack>
@@ -106,8 +110,8 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
                             h="auto" minH="44px" w="100%" px={compact ? '2px' : 1} py={1}
                             display="flex" flexDirection="column" alignItems="center" justifyContent="center"
                             fontWeight="600" fontSize={compact ? '10px' : '11px'} lineHeight="1.25" whiteSpace="normal" color={text}
-                            bg={consult ? consultBg : vacantBg}
-                            borderWidth="1px" borderStyle={consult ? 'solid' : 'dashed'} borderColor={consult ? consultBorder : vacantBorder}
+                            bg={slot.pending > 0 ? reqBg : consult ? consultBg : vacantBg}
+                            borderWidth={slot.pending > 0 ? '2px' : '1px'} borderStyle={consult || slot.pending > 0 ? 'solid' : 'dashed'} borderColor={slot.pending > 0 ? reqBorder : consult ? consultBorder : vacantBorder}
                             boxShadow={selected ? '0 0 0 2px #2563eb' : 'none'}
                             _hover={{ borderColor: '#2563eb' }}
                             onClick={() => onPick(slot)}
@@ -116,7 +120,7 @@ export default function WeeklyBookingCalendar({ slots, busy, weekStart, leadHour
                             aria-pressed={selected}
                           >
                             <span>{range(slot.start, slot.end)}</span>
-                            {slot.pending > 0 && <Text as="span" fontSize="10px" fontWeight="500" color={muted}>{slot.pending}{compact ? '' : ' requested'}</Text>}
+                            {slot.pending > 0 && <Text as="span" fontSize="10px" fontWeight="700" color={reqText}>{slot.pending}{compact ? '' : ' requested'}</Text>}
                           </Button>
                         );
                       }

@@ -178,9 +178,9 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
           {role === 'FACULTY' && filterBox('Gender', (
             <SearchableSelect value={gender} onChange={setGender} placeholder="All Genders" options={GENDER_OPTIONS} />
           ))}
-          {filterBox('Sort by date', (
-            <SearchableSelect value={sortDir} onChange={value => setSortDir(value === 'asc' ? 'asc' : 'desc')} placeholder="Newest first"
-              options={[{ value: 'desc', label: 'Newest first' }, { value: 'asc', label: 'Oldest first' }]} />
+          {filterBox('Sort by day', (
+            <SearchableSelect value={sortDir} onChange={value => setSortDir(value === 'asc' ? 'asc' : 'desc')} placeholder="Newest day first" searchable={false} clearable={false}
+              options={[{ value: 'desc', label: 'Newest day first' }, { value: 'asc', label: 'Oldest day first' }]} />
           ))}
         </Grid>
         <IconButton aria-label="Clear filters" title="Clear filters" icon={<RepeatIcon />} variant="outline" bg={C.surface} borderColor={C.border}

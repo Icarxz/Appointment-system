@@ -11,7 +11,7 @@ export default function WelcomeHeader({ name, actions }: { name: string; actions
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   return (
-    <Box className="no-print" px={{ base: 4, md: 8 }} py={{ base: 2, md: actions ? 2 : 3 }} borderBottom={`1px solid ${border}`} bg={bg} flexShrink={0}>
+    <Box className="no-print" pl={{ base: 4, md: 8 }} pr={{ base: 4, md: '72px' }} py={{ base: 2, md: actions ? 2 : 3 }} borderBottom={`1px solid ${border}`} bg={bg} flexShrink={0}>
       <Flex align="center" justify="space-between" gap={3} wrap="wrap">
         <Box display="flex" alignItems="baseline" gap={3} minW={0}>
           <Box as="span" fontSize={{ base: '13px', md: '14px' }} color={color} noOfLines={1} display="block">{greeting}, <b>{name}</b></Box>
