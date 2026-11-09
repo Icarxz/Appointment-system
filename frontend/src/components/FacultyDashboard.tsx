@@ -1237,9 +1237,9 @@ const saveConsultationHours = async () => {
                 <SearchableSelect placeholder="All sections" value={logSection} onChange={setLogSection} maxW="100%"
                   options={[...new Set(Object.values(cohortConfig).flatMap(p => Object.values(p).flat()))].sort().map(sec => ({ value: sec, label: 'Section ' + sec }))} />
               </FilterField>
-              <FilterField label="Sort by date">
-                <SearchableSelect placeholder="Newest first" value={logSort} onChange={(v) => setLogSort(v === 'asc' ? 'asc' : 'desc')} maxW="100%"
-                  options={[{ value: 'desc', label: 'Newest first' }, { value: 'asc', label: 'Oldest first' }]} />
+              <FilterField label="Sort by day">
+                <SearchableSelect placeholder="Newest day first" searchable={false} clearable={false} value={logSort} onChange={(v) => setLogSort(v === 'asc' ? 'asc' : 'desc')} maxW="100%"
+                  options={[{ value: 'desc', label: 'Newest day first' }, { value: 'asc', label: 'Oldest day first' }]} />
               </FilterField>
               <FilterField label="Search">
                 <Input placeholder="Student or case..." value={logSearch} onChange={(e) => setLogSearch(e.target.value)} color={textColor} borderColor={borderColor} bg={cardBg} />
