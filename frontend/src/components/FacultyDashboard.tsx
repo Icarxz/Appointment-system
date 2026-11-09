@@ -932,12 +932,15 @@ const saveConsultationHours = async () => {
                           const { top, height } = getEventPos(event);
                           const isTeach = event.type === "teaching";
                           const isConsult = event.type === "consultation";
+                          const isAppt = event.type === "appointment"; // approved or completed (green): click opens the details panel
                           const accent = isTeach ? C.teach : isConsult ? C.consult : C.appt;
                           const bg = isTeach ? C.teachBg : isConsult ? C.consultBg : C.apptBg;
                           const textCol = isTeach ? C.teachText : isConsult ? C.consultText : C.apptText;
 
                           return (
-                            <div key={event.id} title={`${event.subject} · ${event.section} · ${event.room}${event.completed ? ' · Completed' : ''}`} onClick={(e) => e.stopPropagation()} style={{ position: "absolute", left: "3px", right: "3px", top: `${top}px`, height: `${height}px`, background: bg, borderLeft: `3px solid ${accent}`, borderRadius: "4px", padding: "4px 7px", overflow: "hidden", cursor: "pointer", zIndex: 1, boxSizing: "border-box", opacity: event.completed ? 0.7 : 1 }}>
+                            <div key={event.id} title={`${event.subject} · ${event.section} · ${event.room}${event.completed ? ' · Completed' : ''}${isAppt ? ' · Click for details' : ''}`}
+                              {...(isAppt ? { role: "button", tabIndex: 0, "aria-label": `Details of the consultation with ${event.subject}`, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setDetailsId(String(event.id)); } } } : {})}
+                              onClick={(e) => { e.stopPropagation(); if (isAppt) setDetailsId(String(event.id)); }} style={{ position: "absolute", left: "3px", right: "3px", top: `${top}px`, height: `${height}px`, background: bg, borderLeft: `3px solid ${accent}`, borderRadius: "4px", padding: "4px 7px", overflow: "hidden", cursor: isAppt ? "pointer" : "default", zIndex: 1, boxSizing: "border-box", opacity: event.completed ? 0.7 : 1 }}>
                               <div style={{ fontSize: "11px", fontWeight: 700, color: textCol, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.subject}</div>
                               {height > 44 && (<div style={{ fontSize: "10px", color: textCol, opacity: 0.72, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.section}</div>)}
                               {event.completed && height > 44 && (<div style={{ fontSize: "9.5px", fontWeight: 700, color: textCol, opacity: 0.75, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: "1px", fontStyle: "italic" }}>(Completed)</div>)}
