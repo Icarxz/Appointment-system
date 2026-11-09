@@ -179,7 +179,7 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0, position: 'relative' }}>
         {/* Desktop: the bell sits in the top right corner of the page. On phones it is in the top bar above. */}
         {showMailbox && !isMobile && (
-          <div className="no-print" style={{ position: 'absolute', top: 0, right: '14px', zIndex: 20, display: 'flex', alignItems: 'center', height: '48px' }}>
+          <div className="no-print" style={{ position: 'absolute', top: 0, right: '14px', zIndex: 20, display: 'flex', alignItems: 'center', height: '64px' }}>
             <NotificationBell compact navText={C.dk ? '#e2e8f0' : '#0f2240'} navBg={C.dk ? 'rgba(255,255,255,0.10)' : '#eef2f7'} />
           </div>
         )}
