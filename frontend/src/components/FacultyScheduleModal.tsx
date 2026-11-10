@@ -17,7 +17,7 @@ const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00
 const mondayOf = (iso: string) => { const dow = new Date(`${iso}T00:00:00Z`).getUTCDay(); return addDays(iso, dow === 0 ? -6 : 1 - dow); };
 const rangeLabel = (monday: string) => {
   const f = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  return `${f(monday)} – ${f(addDays(monday, 5))}`;
+  return `${f(monday)} – ${f(addDays(monday, 6))}`;
 };
 
 interface Props { faculty: { _id: string; name?: string } | null; isOpen: boolean; onClose: () => void }
@@ -51,7 +51,7 @@ export default function FacultyScheduleModal({ faculty, isOpen, onClose }: Props
   useEffect(() => {
     if (!isOpen || !id) return;
     let cancelled = false;
-    authFetch(`${bookingsUrl(id)}?from=${weekStart}&to=${addDays(weekStart, 5)}`)
+    authFetch(`${bookingsUrl(id)}?from=${weekStart}&to=${addDays(weekStart, 6)}`)
       .then(r => r.json())
       .then(j => { if (!cancelled) setBookings(Array.isArray(j) ? j : []); })
       .catch(() => { if (!cancelled) setBookings([]); });
