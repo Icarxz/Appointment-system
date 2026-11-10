@@ -6,8 +6,8 @@ import {
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 
-// The admin's class schedule editor: an empty weekly grid with a line every 30 minutes (7:00 AM to 6:00 PM,
-// Monday to Saturday). Click an empty spot to add a class, click a class to change or delete it.
+// The admin's class schedule editor: an empty weekly grid with a line every 30 minutes (7:00 AM to 7:00 PM,
+// Monday to Sunday). Click an empty spot to add a class, click a class to change or delete it.
 // Every save goes to the server, which checks the times (30-minute steps, no overlap with another class, no clash
 // with an approved consultation) and answers with a plain message when it refuses.
 
@@ -15,10 +15,13 @@ interface ClassBlock { _id: string; subject: string; room: string; dayOfWeek: nu
 interface Draft { id: string | null; subject: string; room: string; day: number; start: number; end: number }
 
 const FIRST = 7 * 60;      // 7:00 AM
-const LAST = 18 * 60;      // 6:00 PM
+const LAST = 19 * 60;      // 7:00 PM
 const STEP = 30;
 const ROW_PX = 24;         // height of one 30-minute row
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// Monday first on screen. The server stores Sunday as 0 and Monday to Saturday as 1-6, so each column carries its stored value.
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
 const ROWS = (LAST - FIRST) / STEP;
 
 const toMin = (t: string): number => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0); };
@@ -124,7 +127,7 @@ export default function ClassGridEditor({ facultyId, facultyName }: Props) {
       </Flex>
 
       <Box overflowX="auto" opacity={loading ? 0.6 : 1}>
-        <Flex minW="560px" borderWidth="1px" borderColor={border} borderRadius="md" overflow="hidden">
+        <Flex minW="640px" borderWidth="1px" borderColor={border} borderRadius="md" overflow="hidden">
           <Box w="58px" flexShrink={0} borderRightWidth="1px" borderColor={border}>
             <Box h="28px" />
             {rowLabels.map(min => (
@@ -136,12 +139,12 @@ export default function ClassGridEditor({ facultyId, facultyName }: Props) {
           {DAYS.map((day, i) => (
             <Box key={day} flex="1" minW="0" borderRightWidth={i < DAYS.length - 1 ? '1px' : 0} borderColor={border}>
               <Text h="28px" lineHeight="28px" textAlign="center" fontSize="xs" fontWeight="700" color={text} borderBottomWidth="1px" borderColor={border}>{day}</Text>
-              <Box position="relative" h={`${ROWS * ROW_PX}px`} cursor="cell" onClick={(e) => onColumnClick(i + 1, e)} aria-label={`${day} column`}>
+              <Box position="relative" h={`${ROWS * ROW_PX}px`} cursor="cell" onClick={(e) => onColumnClick(DAY_VALUES[i], e)} aria-label={`${day} column`}>
                 {rowLabels.map((min, r) => (
                   <Box key={min} position="absolute" left={0} right={0} top={`${r * ROW_PX}px`} borderTopWidth={r ? '1px' : 0}
                     borderTopStyle={min % 60 === 0 ? 'solid' : 'dashed'} borderColor={border} opacity={min % 60 === 0 ? 0.9 : 0.5} pointerEvents="none" />
                 ))}
-                {blocks.filter(b => b.dayOfWeek === i + 1).map(b => {
+                {blocks.filter(b => b.dayOfWeek === DAY_VALUES[i]).map(b => {
                   const top = ((toMin(b.startTime) - FIRST) / STEP) * ROW_PX;
                   const height = Math.max(ROW_PX - 2, ((toMin(b.endTime) - toMin(b.startTime)) / STEP) * ROW_PX - 2);
                   return (
@@ -184,7 +187,7 @@ export default function ClassGridEditor({ facultyId, facultyName }: Props) {
                 <FormControl mb={3}>
                   <FormLabel>Day</FormLabel>
                   <Select value={draft.day} onChange={e => set({ day: Number(e.target.value) })}>
-                    {DAYS.map((d, i) => <option key={d} value={i + 1}>{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][i]}</option>)}
+                    {DAYS.map((d, i) => <option key={d} value={DAY_VALUES[i]}>{DAY_NAMES[i]}</option>)}
                   </Select>
                 </FormControl>
                 <HStack align="flex-start">

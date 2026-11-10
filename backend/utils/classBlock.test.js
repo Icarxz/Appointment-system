@@ -15,16 +15,20 @@ test('required fields and the day range', () => {
   assert.strictEqual(bad({ subject: '   ' }).ok, false);
   assert.strictEqual(bad({ room: '' }).ok, false);
   assert.strictEqual(bad({ room: undefined }).ok, false);
-  for (const d of [0, 7, 1.5, 'x', null]) assert.strictEqual(bad({ dayOfWeek: d }).ok, false, String(d));
-  for (const d of [1, 2, 3, 4, 5, 6]) assert.strictEqual(bad({ dayOfWeek: d }).ok, true, String(d));
+  for (const d of [-1, 7, 1.5, 'x', null, '', '  ', undefined, false, true, [], NaN]) assert.strictEqual(bad({ dayOfWeek: d }).ok, false, String(d));
+  for (const d of [0, 1, 2, 3, 4, 5, 6, '0', '6']) assert.strictEqual(bad({ dayOfWeek: d }).ok, true, String(d)); // 0 = Sunday
 });
 
-test('times: format, 30-minute grid, 7 AM to 6 PM, end after start', () => {
+test('times: format, 30-minute grid, 7 AM to 7 PM, end after start', () => {
   for (const t of ['7:00', '25:00', '09:60', '', null, 900]) assert.strictEqual(bad({ startTime: t }).ok, false, String(t));
   assert.strictEqual(bad({ startTime: '09:15', endTime: '10:00' }).ok, false);
   assert.strictEqual(bad({ startTime: '09:00', endTime: '10:10' }).ok, false);
   assert.strictEqual(bad({ startTime: '06:30', endTime: '08:00' }).ok, false);
-  assert.strictEqual(bad({ startTime: '17:00', endTime: '18:30' }).ok, false);
+  assert.strictEqual(bad({ startTime: '17:00', endTime: '18:30' }).ok, true);   // a 6:30 PM end is fine now
+  assert.strictEqual(bad({ startTime: '18:30', endTime: '19:00' }).ok, true);   // the last half hour of the day
+  assert.strictEqual(bad({ startTime: '07:00', endTime: '19:00' }).ok, true);   // the whole day as one block
+  assert.strictEqual(bad({ startTime: '18:30', endTime: '19:30' }).ok, false);  // past 7:00 PM
+  assert.strictEqual(bad({ startTime: '19:00', endTime: '19:30' }).ok, false);
   assert.strictEqual(bad({ startTime: '17:00', endTime: '18:00' }).ok, true);
   assert.strictEqual(bad({ startTime: '10:00', endTime: '10:00' }).ok, false);
   assert.strictEqual(bad({ startTime: '11:00', endTime: '10:00' }).ok, false);
@@ -64,4 +68,26 @@ test('real schedule rows from the sheet all validate, one after another', () => 
       placed.push(r.value);
     }
   }
+});
+
+test('Sunday is day 0: it validates, clashes only with other Sunday classes, and is blocked by approved Sunday consultations', () => {
+  const sib = [{ subject: 'ICT 1', dayOfWeek: 0, startTime: '08:00', endTime: '10:00' }];
+  assert.strictEqual(bad({ dayOfWeek: 0 }).ok, true);
+  const r = bad({ dayOfWeek: 0, startTime: '09:00', endTime: '10:30' }, sib);
+  assert.strictEqual(r.ok, false);
+  assert.match(r.error, /Sunday/);
+  assert.strictEqual(bad({ dayOfWeek: 6, startTime: '09:00', endTime: '10:30' }, sib).ok, true); // Saturday is a different day
+  assert.strictEqual(bad({ dayOfWeek: 1, startTime: '09:00', endTime: '10:30' }, sib).ok, true); // so is Monday
+  // 2026-11-08 is a Sunday; 2026-11-09 is a Monday
+  const apt = (date, time, duration) => ({ date, time, duration });
+  const blocked = bad({ dayOfWeek: 0, startTime: '08:00', endTime: '09:00' }, [], [apt('2026-11-08', '08:30', 30)]);
+  assert.strictEqual(blocked.ok, false);
+  assert.match(blocked.error, /2026-11-08/);
+  assert.strictEqual(bad({ dayOfWeek: 0, startTime: '08:00', endTime: '09:00' }, [], [apt('2026-11-09', '08:30', 30)]).ok, true);
+});
+
+test('a block stays one continuous range: 2:30 PM to 4:00 PM is a single valid record', () => {
+  const r = bad({ dayOfWeek: 2, startTime: '14:30', endTime: '16:00' });
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.value, { ...ok, dayOfWeek: 2, startTime: '14:30', endTime: '16:00' });
 });

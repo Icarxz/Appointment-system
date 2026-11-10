@@ -59,7 +59,12 @@ interface ScheduleEvent {
 // CONSTANTS & HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// Seven columns, Monday first. The server stores Sunday as 0 and Monday to Saturday as 1-6 (JavaScript getDay()).
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+// The consultation-hour pickers stay Monday to Saturday until Sunday consultation booking exists (a later PR).
+const CONSULT_DAY_LABELS = DAY_LABELS.slice(0, 6);
+// Stored day (0 = Sunday ... 6 = Saturday) -> column on screen (0 = Monday ... 6 = Sunday)
+const columnOfStoredDay = (d: number) => (d + 6) % 7;
 const timeToMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 const START_HOUR = 7;
 const END_HOUR   = 20;
@@ -89,7 +94,7 @@ function getWeekDates(offset: number): Date[] {
   const monday = new Date(today);
   monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) + offset * 7);
   monday.setHours(0, 0, 0, 0);
-  return Array.from({ length: 6 }, (_, i) => {
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     return d;
@@ -99,7 +104,7 @@ function getWeekDates(offset: number): Date[] {
 function formatWeekLabel(dates: Date[]): string {
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const s = dates[0];
-  const e = dates[5];
+  const e = dates[6];
   return `${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
 }
 
@@ -175,7 +180,7 @@ export default function FacultyDashboard() {
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
   const { aptId, closeApt } = useDeepLink<Page>(["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage);
   const [weekOffset, setWeekOffset] = useState(0);
-  // Phones open on one day at a time; the 6-column week grid needs a wider screen.
+  // Phones open on one day at a time; the 7-column week grid needs a wider screen.
   const [viewMode,   setViewMode]   = useState<ViewMode>(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "day" : "week"));
   const [focusDay,   setFocusDay]   = useState(0);       
   
@@ -402,7 +407,7 @@ const saveConsultationHours = async () => {
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const weekLabel = useMemo(() => formatWeekLabel(weekDates), [weekDates]);
-  const visibleDayIndices = viewMode === "week" ? [0, 1, 2, 3, 4, 5] : [focusDay];
+  const visibleDayIndices = viewMode === "week" ? [0, 1, 2, 3, 4, 5, 6] : [focusDay];
 
   // ── Color tokens (Synced with Chakra Dark Mode) ────────────────────────────
   const dk = palette.dk;
@@ -699,7 +704,7 @@ const saveConsultationHours = async () => {
         section: "",
         room: "",
         type: "consultation",
-        dayOfWeek: block.dayOfWeek - 1,
+        dayOfWeek: columnOfStoredDay(block.dayOfWeek),
         startHour: sH, startMinute: sM,
         endHour: eH, endMinute: eM
       });
@@ -723,7 +728,7 @@ const saveConsultationHours = async () => {
         section,
         room: sched.room,
         type: "teaching",
-        dayOfWeek: sched.dayOfWeek - 1, 
+        dayOfWeek: columnOfStoredDay(sched.dayOfWeek), 
         startHour: sH,
         startMinute: sM,
         endHour: eH,
@@ -862,7 +867,7 @@ const saveConsultationHours = async () => {
             {/* Schedule Grid */}
             <div style={{ padding: "clamp(12px, 3vw, 20px)", display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ overflowX: "auto", width: "100%" }}>
-              <div style={{ background: C.surface, borderRadius: "10px", border: `1px solid ${C.border}`, overflow: "hidden", minWidth: viewMode === "day" ? "340px" : "520px", maxWidth: viewMode === "day" ? "480px" : "none", margin: viewMode === "day" ? "0 auto" : "0" }}>
+              <div style={{ background: C.surface, borderRadius: "10px", border: `1px solid ${C.border}`, overflow: "hidden", minWidth: viewMode === "day" ? "340px" : "620px", maxWidth: viewMode === "day" ? "480px" : "none", margin: viewMode === "day" ? "0 auto" : "0" }}>
                 <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, background: C.surfaceAlt }}>
                   <div style={{ width: "58px", flexShrink: 0, borderRight: `1px solid ${C.border}` }} />
                   {visibleDayIndices.map((di, col) => {
@@ -1141,7 +1146,7 @@ const saveConsultationHours = async () => {
                 {consultBlocks.map((block, i) => (
                   <HStack key={i}>
                     <Select size="sm" value={block.dayOfWeek} onChange={(e) => updateBlock(i, 'dayOfWeek', Number(e.target.value))}>
-                      {DAY_LABELS.map((d, idx) => <option key={idx} value={idx + 1}>{d}</option>)}
+                      {CONSULT_DAY_LABELS.map((d, idx) => <option key={idx} value={idx + 1}>{d}</option>)}
                     </Select>
                     <Input size="sm" type="time" value={block.startTime} onChange={(e) => updateBlock(i, 'startTime', e.target.value)} />
                     <Input size="sm" type="time" value={block.endTime} onChange={(e) => updateBlock(i, 'endTime', e.target.value)} />
@@ -1164,7 +1169,7 @@ const saveConsultationHours = async () => {
                 <Text fontSize="sm" color={mutedText} mb={3}>Extra weekly hours in your vacant time, on top of your 4 fixed hours. They repeat every week, and students can book them like any other slot.</Text>
                 <HStack mb={3}>
                   <Select size="sm" value={addedForm.dayOfWeek} onChange={(e) => setAddedForm({ ...addedForm, dayOfWeek: Number(e.target.value) })}>
-                    {DAY_LABELS.map((d, idx) => <option key={idx} value={idx + 1}>{d}</option>)}
+                    {CONSULT_DAY_LABELS.map((d, idx) => <option key={idx} value={idx + 1}>{d}</option>)}
                   </Select>
                   <Input size="sm" type="time" value={addedForm.startTime} onChange={(e) => setAddedForm({ ...addedForm, startTime: e.target.value })} />
                   <Input size="sm" type="time" value={addedForm.endTime} onChange={(e) => setAddedForm({ ...addedForm, endTime: e.target.value })} />
@@ -1174,7 +1179,7 @@ const saveConsultationHours = async () => {
                   {addedHours.length === 0 && <Text fontSize="xs" color={mutedText}>No added hours yet.</Text>}
                   {addedHours.map(h => (
                     <HStack key={h._id} justify="space-between">
-                      <Text fontSize="sm" color={textColor}>Every {DAY_LABELS[h.dayOfWeek - 1]} · {formatTime(h.startTime)} – {formatTime(h.endTime)}</Text>
+                      <Text fontSize="sm" color={textColor}>Every {DAY_LABELS[columnOfStoredDay(h.dayOfWeek)]} · {formatTime(h.startTime)} – {formatTime(h.endTime)}</Text>
                       <ChakraButton size="xs" colorScheme="red" variant="ghost" onClick={() => removeExtraHours(h._id)}>Remove</ChakraButton>
                     </HStack>
                   ))}
