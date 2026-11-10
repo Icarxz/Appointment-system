@@ -7,6 +7,8 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
+import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
+import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
 import ClassGridEditor from './ClassGridEditor';
 import ProfilePage from './ProfilePage';
 import ProfileGate from './ProfileGate';
@@ -190,6 +192,23 @@ export default function AdminDashboard() {
     const time = (r: any) => new Date(r.completedAt || 0).getTime();
     return [...list].sort((a, b) => recordsSort === 'asc' ? time(a) - time(b) : time(b) - time(a));
   }, [consultationRecords, recordsSearch, recordsFaculty, recordsCase, recordsSort]);
+
+  // The printable form of the chosen faculty: the same data the faculty's own form uses (GET /consultation-log/:id, oldest first).
+  const [printLog, setPrintLog] = useState<{ facultyId: string; rows: any[] } | null>(null);
+  useEffect(() => {
+    if (!recordsFaculty) { setPrintLog(null); return; }
+    let cancelled = false;
+    authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/consultation-log/${recordsFaculty}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(rows => { if (!cancelled) setPrintLog({ facultyId: recordsFaculty, rows: Array.isArray(rows) ? rows : [] }); })
+      .catch(() => { if (!cancelled) setPrintLog({ facultyId: recordsFaculty, rows: [] }); });
+    return () => { cancelled = true; };
+  }, [recordsFaculty, consultationRecords.length]);
+  const printReady = !!recordsFaculty && printLog?.facultyId === recordsFaculty;
+  const recordGroups = React.useMemo(
+    () => groupByDay(filteredRecords as any[], (r: any) => manilaDay(r.completedAt), (r: any) => r.completedAt || "", recordsSort),
+    [filteredRecords, recordsSort],
+  );
 
   const filteredFacultyList = React.useMemo(() => facultyList.filter(f =>
     (!facultyPositionFilter || f.programPosition === facultyPositionFilter) &&
@@ -570,10 +589,13 @@ export default function AdminDashboard() {
         )}
 
         {activePage === 'records' && (
-          <Box id="print-area" bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+          <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <Flex mb={4} align="center" justify="space-between" gap={3} flexWrap="wrap" className="no-print">
-              <Text color={mutedText} fontSize="sm">Completed consultations signed off by faculty.</Text>
-              <ChakraButton colorScheme="blue" size="sm" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
+              <Text color={mutedText} fontSize="sm">
+                Completed consultations signed off by faculty. {recordsFaculty ? 'The printout is that faculty member\'s Students\' Consultation Form.' : 'Choose a faculty to print their Students\' Consultation Form.'}
+              </Text>
+              <ChakraButton colorScheme="blue" size="sm" onClick={printConsultationForm} isDisabled={!printReady}
+                title={recordsFaculty ? undefined : 'Choose a faculty first'}>Print / Save as PDF</ChakraButton>
             </Flex>
 
             <FilterPanel
@@ -603,21 +625,10 @@ export default function AdminDashboard() {
               </FilterField>
             </FilterPanel>
 
-            <Box sx={{ display: 'none', '@media print': { display: 'block' } }} mb={4}>
-              <Heading size="md" color={textColor}>Consultation Records</Heading>
-              <Text fontSize="sm" color={mutedText}>Generated {formatDateTime(new Date())}</Text>
-            </Box>
-
             <ScrollTable><Table variant="simple" size="md">
               <Thead>
                 <Tr>
-                  <Th
-                    color={mutedText} cursor="pointer" userSelect="none" whiteSpace="nowrap"
-                    onClick={() => setRecordsSort(s => s === 'desc' ? 'asc' : 'desc')}
-                    title="Click to change the sort order"
-                  >
-                    Date Signed Off {recordsSort === 'desc' ? '↓' : '↑'}
-                  </Th>
+                  <Th color={mutedText} whiteSpace="nowrap">Consultation Date</Th>
                   <Th color={mutedText}>Student</Th>
                   <Th color={mutedText}>Faculty</Th>
                   <Th color={mutedText}>Case Presented</Th>
@@ -628,17 +639,26 @@ export default function AdminDashboard() {
                 {filteredRecords.length === 0 && (
                   <Tr><Td colSpan={5}><Text color={mutedText} py={6} textAlign="center">No completed consultations found.</Text></Td></Tr>
                 )}
-                {filteredRecords.map(r => (
+                {recordGroups.map(g => (
+                  <React.Fragment key={g.day || 'older'}>
+                  <Tr><Td colSpan={5} py={2} fontWeight="700" fontSize="sm" bg="blackAlpha.50" _dark={{ bg: 'whiteAlpha.100' }} color={textColor}>{g.day ? `Saved ${dayHeading(g.day)}` : 'Earlier records'}</Td></Tr>
+                  {g.rows.map(r => (
                   <Tr key={r._id} _hover={{ bg: hoverBg }}>
-                    <Td color={textColor} whiteSpace="nowrap">{r.completedAt ? formatDate(r.completedAt) : ''}</Td>
+                    <Td color={textColor} whiteSpace="nowrap">{r.date ? formatDate(r.date) : ''}</Td>
                     <Td color={textColor}><PersonCell name={r.studentName || 'Unknown'} sub={r.studentSection} /></Td>
                     <Td color={textColor}>{r.facultyId?.name || 'Unknown'}</Td>
                     <Td maxW="220px" color={textColor} whiteSpace="normal">{r.casePresented ? <Badge colorScheme="orange" variant="subtle" whiteSpace="normal" borderRadius="md" px={2}>{r.casePresented}</Badge> : '—'}</Td>
                     <Td maxW="260px" color={textColor} whiteSpace="normal">{r.interventionTaken}</Td>
                   </Tr>
+                  ))}
+                  </React.Fragment>
                 ))}
               </Tbody>
             </Table></ScrollTable>
+
+            {printReady && printLog && (
+              <ConsultationPrintForm facultyName={facultyList.find(f => f._id === recordsFaculty)?.name || filteredRecords.find(r => r.facultyId?._id === recordsFaculty)?.facultyId?.name || ''} entries={printLog.rows} />
+            )}
           </Box>
         )}
 
