@@ -23,6 +23,8 @@ import ProfilePage from './ProfilePage';
 import PageTitle from './PageTitle';
 import type { IconName } from './NavIcon';
 import RequestList from './RequestList';
+import ConfirmAction from './ConfirmAction';
+import type { ConfirmConfig } from './ConfirmAction';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import ExportBar from './ExportBar';
 import SearchableSelect from './SearchableSelect';
@@ -193,6 +195,7 @@ export default function FacultyDashboard() {
   const hasSyncedRef = useRef(false);
   const [notice, setNotice] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null); // the "Are you sure?" dialog for save buttons
   const [detailsId, setDetailsId] = useState<string | null>(null); // the request whose View Details panel is open
   // Faculty's own private calendar notes — date-specific (not recurring), e.g. { _id, date: 'YYYY-MM-DD', startTime, endTime, text }
   const [personalEvents, setPersonalEvents] = useState<any[]>([]);
@@ -490,6 +493,11 @@ const saveConsultationHours = async () => {
   }, [userId]);
 
   // ── Existing Status Handlers ────────────────────────────────────────
+  const STATUS_LABELS: Record<string, string> = {
+    AVAILABLE: 'Available', IN_CLASS: 'In Class', IN_CONSULTATION: 'Consultation Hours', IN_MEETING: 'In a Meeting',
+    ON_BREAK: 'On Break', OUT_OF_OFFICE: 'Out of Office', ON_LEAVE: 'On Leave', ABSENT: 'Absent',
+  };
+
   const handleUpdateMyStatus = async () => {
     setIsUpdating(true);
     try {
@@ -509,8 +517,7 @@ const saveConsultationHours = async () => {
     setIsUpdating(false);
   };
 
-  const handlePostNotice = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePostNotice = async () => {
     try {
       await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/notice/${userId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -1099,19 +1106,26 @@ const saveConsultationHours = async () => {
                     </Select>
                   </FormControl>
                   <FormControl><FormLabel color={textColor}>Location</FormLabel><Input value={myLocation} onChange={(e) => setMyLocation(e.target.value)} color={textColor} /></FormControl>
-                  <ChakraButton colorScheme="blue" onClick={handleUpdateMyStatus} isLoading={isUpdating} w="100%">Publish Status</ChakraButton>
+                  <ChakraButton colorScheme="blue" onClick={() => setConfirmCfg({
+                    title: 'Update your live status?',
+                    body: `Students will see you as "${STATUS_LABELS[myStatus] || myStatus}"${myLocation.trim() ? ` at "${myLocation.trim()}"` : ''}.`,
+                    confirmLabel: 'Update status', run: handleUpdateMyStatus,
+                  })} isLoading={isUpdating} w="100%">Update Live Status</ChakraButton>
                 </VStack>
               </Box>
 
               
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
                 <Heading size="md" color={textColor} mb={6}>Post a Notice (Students)</Heading>
-                <form onSubmit={handlePostNotice}>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  setConfirmCfg({ title: 'Post this notice to students?', body: 'Students will be able to see it. You can post a new one later to replace it.', confirmLabel: 'Post notice', run: handlePostNotice });
+                }}>
                   <VStack spacing={4}>
                     <FormControl><FormLabel color={textColor}>Reason for absence / Make-up info</FormLabel>
                       <Textarea placeholder="e.g. Attending a seminar today. Make up class on Friday." value={notice} onChange={e => setNotice(e.target.value)} rows={4} color={textColor} />
                     </FormControl>
-                    <ChakraButton type="submit" colorScheme="blue" variant="outline" w="100%">Broadcast Notice</ChakraButton>
+                    <ChakraButton type="submit" colorScheme="blue" variant="outline" w="100%">Post Notice</ChakraButton>
                   </VStack>
                 </form>
               </Box>
@@ -1141,7 +1155,11 @@ const saveConsultationHours = async () => {
                 <Text fontSize="sm" fontWeight="bold" color={isValidTotal ? 'green.500' : 'red.500'}>
                   Total: {totalHours} / 4.0 hours
                 </Text>
-                <ChakraButton colorScheme="blue" onClick={saveConsultationHours} isDisabled={!isValidTotal}>Save Consultation Hours</ChakraButton>
+                <ChakraButton colorScheme="blue" onClick={() => setConfirmCfg({
+                  title: 'Save your consultation hours?',
+                  body: `You are saving ${totalHours} hours of consultation time. Students will see the updated hours when they book.`,
+                  confirmLabel: 'Save hours', run: saveConsultationHours,
+                })} isDisabled={!isValidTotal}>Save Consultation Hours</ChakraButton>
               </VStack>
 
               <Box borderTopWidth="1px" borderColor={borderColor} mt={6} pt={5}>
@@ -1320,7 +1338,16 @@ const saveConsultationHours = async () => {
                             )}
                           </Td>
                           <Td minW="125px">
-                            <ChakraButton size="sm" colorScheme="green" onClick={() => submitLogEntry(apt._id)}>
+                            <ChakraButton size="sm" colorScheme="green" onClick={() => {
+                              // Ask only when the entry is complete; otherwise submitLogEntry shows what is missing.
+                              const chosen = (logForm[apt._id]?.interventionTaken || '').trim();
+                              if (!chosen || chosen === 'Others') { submitLogEntry(apt._id); return; }
+                              setConfirmCfg({
+                                title: 'Complete and save this consultation?',
+                                body: `${apt.studentName}'s consultation on ${formatDate(apt.date)} will be signed off and added to your records. Afterwards only the intervention can be edited.`,
+                                confirmLabel: 'Complete & save', run: () => submitLogEntry(apt._id),
+                              });
+                            }}>
                               Complete &amp; Save
                             </ChakraButton>
                           </Td>
@@ -1389,7 +1416,11 @@ const saveConsultationHours = async () => {
                           )}
                         </Td>
                         <Td minW="125px">
-                          <ChakraButton size="sm" colorScheme="blue" onClick={() => saveConsultLogChanges(apt)} isLoading={savingLogId === apt._id}>
+                          <ChakraButton size="sm" colorScheme="blue" onClick={() => setConfirmCfg({
+                            title: 'Save changes to this record?',
+                            body: `The intervention for ${apt.studentName} (${formatDate(apt.date)}) will be updated in your consultation records.`,
+                            confirmLabel: 'Save changes', run: () => saveConsultLogChanges(apt),
+                          })} isLoading={savingLogId === apt._id}>
                             Save Changes
                           </ChakraButton>
                         </Td>
@@ -1454,6 +1485,7 @@ const saveConsultationHours = async () => {
           </Box>
         )}
     </DashboardShell>
+    <ConfirmAction config={confirmCfg} onClose={() => setConfirmCfg(null)} />
     <AppointmentDetailsDrawer aptId={detailsId ?? aptId} onClose={() => { setDetailsId(null); closeApt(); }} />
     </>
   );
