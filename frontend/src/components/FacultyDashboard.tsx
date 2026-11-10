@@ -24,6 +24,7 @@ import PageTitle from './PageTitle';
 import type { IconName } from './NavIcon';
 import RequestList from './RequestList';
 import ConfirmAction from './ConfirmAction';
+import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
 import type { ConfirmConfig } from './ConfirmAction';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import ExportBar from './ExportBar';
@@ -79,13 +80,6 @@ const interventionChoice = (value = '') =>
 const interventionOtherText = (value = '') =>
   value && value !== 'Others' && !INTERVENTION_OPTIONS.includes(value as typeof INTERVENTION_OPTIONS[number]) ? value : '';
 
-const printConsultationForm = () => {
-  const previousTitle = document.title;
-  document.title = ' ';
-  const restoreTitle = () => { document.title = previousTitle; };
-  window.addEventListener('afterprint', restoreTitle, { once: true });
-  window.print();
-}; 
 const TOTAL_SLOTS = (END_HOUR - START_HOUR) * 2;
 const GRID_HEIGHT = TOTAL_SLOTS * SLOT_PX;
 
@@ -1433,55 +1427,7 @@ const saveConsultationHours = async () => {
               </Box>
             </Box>
 
-            <Box id="printable-log" className="print-only consultation-print-form" bg="white" color="black" p={6}>
-              <VStack spacing={0} mb={2} className="consultation-print-heading">
-                <Text fontSize="xs">Republic of the Philippines</Text>
-                <Text fontSize="xs" fontWeight="bold">UNIVERSITY OF ANTIQUE</Text>
-                <Text fontSize="xs">Sibalom, Antique</Text>
-                <Heading size="sm" mt={1} letterSpacing="wide">STUDENTS' CONSULTATION FORM</Heading>
-              </VStack>
-
-              <HStack justifyContent="space-between" mb={2} fontSize="xs" className="consultation-print-meta">
-                <VStack align="start" spacing={0}>
-                  <Text>Name of Faculty: <b>{userName}</b></Text>
-                  <Text>School Term: __________ Sem, AY __________</Text>
-                </VStack>
-                <Text>Consultation Schedule: __________</Text>
-              </HStack>
-
-              <Table id="consult-form-table" className="consultation-print-table" size="sm" variant="simple" border="1px solid black">
-                <Thead bg="gray.600">
-                  <Tr>
-                    <Th color="white" border="1px solid black">Name of Student/Advisee</Th>
-                    <Th color="white" border="1px solid black">Gender</Th>
-                    <Th color="white" border="1px solid black">Course and Year</Th>
-                    <Th color="white" border="1px solid black">Date</Th>
-                    <Th color="white" border="1px solid black">Case Presented</Th>
-                    <Th color="white" border="1px solid black">Intervention/Action Taken</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {Array.from({ length: Math.max(15, consultLog.length) }).map((_, i) => {
-                    const entry = consultLog[i];
-                    return (
-                      <Tr key={i} height="21px">
-                        <Td border="1px solid black" p={1} fontSize="xs">{entry ? `${i + 1}. ${entry.studentName || ''}` : `${i + 1}.`}</Td>
-                        <Td border="1px solid black" p={1} fontSize="xs">{entry?.studentId?.gender || ''}</Td>
-                        <Td border="1px solid black" p={1} fontSize="xs">{entry?.studentSection || ''}</Td>
-                        <Td border="1px solid black" p={1} fontSize="xs">{entry?.date ? formatDate(entry.date) : ''}</Td>
-                        <Td border="1px solid black" p={1} fontSize="xs" whiteSpace="pre-wrap">{entry?.casePresented || ''}</Td>
-                        <Td border="1px solid black" p={1} fontSize="xs" whiteSpace="pre-wrap">{entry?.interventionTaken || ''}</Td>
-                      </Tr>
-                    );
-                  })}
-                </Tbody>
-              </Table>
-
-              <HStack justifyContent="space-between" mt={4} fontSize="xs">
-                <Text>VAA-FM-035</Text>
-                <Text>Rev.1/01-15-20</Text>
-              </HStack>
-            </Box>
+            <ConsultationPrintForm facultyName={userName || ''} entries={consultLog} />
           </Box>
         )}
     </DashboardShell>
