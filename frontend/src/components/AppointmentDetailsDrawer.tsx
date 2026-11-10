@@ -64,7 +64,7 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
 
   return (
     <Drawer isOpen={!!aptId} placement="right" size="md" onClose={onClose}>
-      <DrawerOverlay />
+      <DrawerOverlay bg="blackAlpha.300" backdropFilter="blur(6px)" />
       <DrawerContent>
         <DrawerCloseButton />
         <DrawerHeader fontSize="md">Appointment details</DrawerHeader>

@@ -589,9 +589,9 @@ export default function AdminDashboard() {
                 <SearchableSelect placeholder="All cases" value={recordsCase} onChange={setRecordsCase} maxW="100%"
                   options={[...new Set(consultationRecords.map(r => r.casePresented).filter(Boolean))].sort().map(value => ({ value, label: value }))} />
               </FilterField>
-              <FilterField label="Sort by date">
-                <SearchableSelect placeholder="Newest first" value={recordsSort} onChange={(v) => setRecordsSort(v === 'asc' ? 'asc' : 'desc')} maxW="100%"
-                  options={[{ value: 'desc', label: 'Newest first' }, { value: 'asc', label: 'Oldest first' }]} />
+              <FilterField label="Sort by day">
+                <SearchableSelect placeholder="Newest day first" searchable={false} clearable={false} value={recordsSort} onChange={(v) => setRecordsSort(v === 'asc' ? 'asc' : 'desc')} maxW="100%"
+                  options={[{ value: 'desc', label: 'Newest day first' }, { value: 'asc', label: 'Oldest day first' }]} />
               </FilterField>
               <FilterField label="Search">
                 <Input

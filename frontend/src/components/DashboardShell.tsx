@@ -135,8 +135,6 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
         <div style={{ marginTop: '7px', width: '20px', height: '3px', background: '#2563eb', borderRadius: '2px' }} />
       </div>
       <SidebarIdentity name={userName} onClick={onOpenProfile ? () => choose(onOpenProfile) : undefined} active={profileActive} />
-      {/* On phones the bell lives in the top bar instead, so it keeps polling while the menu is closed. */}
-      {showMailbox && !isMobile && <NotificationBell navText={C.navText} navBg={C.navBg} />}
       <nav aria-label={`${portalLabel} menu`} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
         {renderNav(mainNav)}
       </nav>
@@ -178,7 +176,13 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
         <aside className="no-print" style={{ width: SIDEBAR_WIDTH, flexShrink: 0, background: C.sidebar }}>{sidebarBody}</aside>
       )}
 
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0, position: 'relative' }}>
+        {/* Desktop: the bell sits in the top right corner of the page. On phones it is in the top bar above. */}
+        {showMailbox && !isMobile && (
+          <div className="no-print" style={{ position: 'absolute', top: 0, right: '14px', zIndex: 20, display: 'flex', alignItems: 'center', height: '64px' }}>
+            <NotificationBell compact navText={C.dk ? '#e2e8f0' : '#0f2240'} navBg={C.dk ? 'rgba(255,255,255,0.10)' : '#eef2f7'} />
+          </div>
+        )}
         {children}
       </main>
 

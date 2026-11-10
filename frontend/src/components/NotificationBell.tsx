@@ -124,13 +124,13 @@ export default function NotificationBell({ navText, navBg, compact = false }: Pr
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
           <span style={{ position: 'relative', display: 'inline-flex' }}>
-            <BellIcon boxSize="16px" />
+            <BellIcon boxSize={compact ? '24px' : '16px'} />
             {unread > 0 && (
               <span style={{
-                position: 'absolute', top: '-9px', right: '-13px',
-                minWidth: '18px', height: '18px', padding: '0 5px', boxSizing: 'border-box',
-                borderRadius: '9px', background: '#ef4444', color: '#fff',
-                fontSize: '10px', fontWeight: 700, lineHeight: '18px', textAlign: 'center',
+                position: 'absolute', top: compact ? '-10px' : '-9px', right: compact ? '-16px' : '-13px',
+                minWidth: compact ? '22px' : '18px', height: compact ? '22px' : '18px', padding: '0 5px', boxSizing: 'border-box',
+                borderRadius: '11px', background: '#ef4444', color: '#fff',
+                fontSize: compact ? '12px' : '10px', fontWeight: 700, lineHeight: compact ? '22px' : '18px', textAlign: 'center',
               }}>
                 {formatBadge(unread)}
               </span>
