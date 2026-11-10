@@ -123,6 +123,11 @@
   body.printing-report #printable-report,
   body.printing-report #printable-report * { visibility: visible; }
   body.printing-report #printable-report { position: absolute; left: 0; top: 0; width: 100%; }
+  /* One chart card: usePrintCard() marks the card with .print-this and the body with .printing-card while the dialog is open. */
+  body.printing-card .print-this,
+  body.printing-card .print-this * { visibility: visible; }
+  body.printing-card .print-this .print-card-only { display: block !important; }
+  body.printing-card .print-this { position: absolute; left: 0; top: 0; width: 100%; height: auto !important; box-shadow: none !important; }
   .print-only { display: block !important; }
 
   /* The dashboards are exactly one screen tall on screen; on paper they must grow with their content. */
@@ -132,6 +137,8 @@
 
 /* A line that exists only on paper (title and date of a printed report) */
 .print-only { display: none; }
+/* A line that exists only when ONE chart card is printed */
+.print-card-only { display: none; }
 
 #root {
   /* width: 1126px; */

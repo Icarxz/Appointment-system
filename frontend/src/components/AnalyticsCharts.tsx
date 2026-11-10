@@ -1,5 +1,7 @@
-import { Box, Flex, HStack, Text, Tooltip, useColorModeValue } from '@chakra-ui/react';
+import { useRef } from 'react';
+import { Box, Button, Flex, HStack, Text, Tooltip, useColorModeValue } from '@chakra-ui/react';
 import type { ReactNode } from 'react';
+import { usePrintCard } from '../utils/printReport';
 
 // Small dependency-free chart pieces shared by the Admin/Dean report and the faculty analytics.
 // Hand-built SVG/CSS on purpose: no charting library is installed, and a new one this close to
@@ -17,15 +19,29 @@ const useTheme = () => ({
 
 export function ChartCard({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   const t = useTheme();
+  const ref = useRef<HTMLDivElement>(null);
+  const printCard = usePrintCard();
   return (
-    <Box bg={t.surface} p={5} borderRadius="lg" borderWidth="1px" borderColor={t.border} shadow="sm" h="100%">
-      <Text fontWeight="700" fontSize="sm" color={t.text}>{title}</Text>
+    <Box ref={ref} bg={t.surface} p={5} borderRadius="lg" borderWidth="1px" borderColor={t.border} shadow="sm" h="100%">
+      <Flex justify="space-between" align="flex-start" gap={2}>
+        <Text fontWeight="700" fontSize="sm" color={t.text}>{title}</Text>
+        {/* Prints or saves as PDF just this card (not the whole tab). */}
+        <Button className="no-print" size="xs" variant="ghost" flexShrink={0} leftIcon={<PrintIcon />} onClick={() => printCard(ref.current)}
+          aria-label={`Print or save "${title}" as PDF`}>Print / Save as PDF</Button>
+      </Flex>
+      <Text className="print-card-only" fontSize="xs" color="black" mb={1}>CCIS Sync · printed {new Date().toLocaleString()}</Text>
       {hint && <Text fontSize="xs" color={t.muted} mb={3}>{hint}</Text>}
       {!hint && <Box mb={3} />}
       {children}
     </Box>
   );
 }
+
+const PrintIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M6 9V3h12v6" /><rect x="3" y="9" width="18" height="9" rx="2" /><path d="M6 14h12v7H6z" />
+  </svg>
+);
 
 // Big-number tile. With onClick it becomes a button (used to open the "who" side panel).
 export function KpiTile({ label, value, sub, accent = '#2563eb', onClick, hint, icon, dense }: {
