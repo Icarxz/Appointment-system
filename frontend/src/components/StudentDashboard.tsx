@@ -16,7 +16,7 @@ import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import CancelReasonPicker, { STUDENT_CANCEL_REASONS } from './CancelReasonPicker';
 import BulkCancelModal from './BulkCancelModal';
-import WeeklyCalendar from './WeeklyCalendar';
+import FacultyScheduleModal from './FacultyScheduleModal';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
 import { PAGE_PAD, CARD_PAD, useNavPalette } from '../utils/uiTokens';
@@ -72,23 +72,7 @@ export default function StudentDashboard() {
   const [fStatus, setFStatus] = useState('');
   const { isOpen: isMasterOpen, onOpen: onMasterOpen, onClose: onMasterClose } = useDisclosure();
   const [masterFaculty, setMasterFaculty] = useState<any>(null);
-  const [masterData, setMasterData] = useState<{ classes: any[]; official: any[]; added: any[] }>({ classes: [], official: [], added: [] });
-  const [masterLoading, setMasterLoading] = useState(false);
-
-  const openMaster = (prof: any) => {
-    setMasterFaculty(prof); setMasterLoading(true); onMasterOpen();
-    const base = `${import.meta.env.VITE_API_URL}/api/faculty`;
-    Promise.all([
-      authFetch(`${base}/my-schedule/${prof._id}`).then(r => r.json()),
-      authFetch(`${base}/consultation-hours/${prof._id}`).then(r => r.json()),
-      authFetch(`${base}/added-hours/of/${prof._id}`).then(r => r.json()),
-    ])
-      .then(([classes, official, added]) => setMasterData({
-        classes: Array.isArray(classes) ? classes : [], official: Array.isArray(official) ? official : [], added: Array.isArray(added) ? added : [],
-      }))
-      .catch(() => setMasterData({ classes: [], official: [], added: [] }))
-      .finally(() => setMasterLoading(false));
-  };
+  const openMaster = (prof: any) => { setMasterFaculty(prof); onMasterOpen(); };
 
   const [selectedFaculty, setSelectedFaculty] = useState('');
   const [facultySearch, setFacultySearch] = useState('');
@@ -445,7 +429,7 @@ export default function StudentDashboard() {
                       return (
                         <Tr key={prof._id}>
                           <Td color={textColor}>
-                            <PersonCell name={prof.name} sub={prof.programPosition} onClick={() => openMaster(prof)} title="View master schedule" />
+                            <PersonCell name={prof.name} sub={prof.programPosition} onClick={() => openMaster(prof)} title="View schedule" />
                           </Td>
                           <Td><GenderBadge gender={prof.gender} /></Td>
                           <Td>
@@ -641,18 +625,7 @@ export default function StudentDashboard() {
         onSubmit={handleAppointmentSubmit}
       />
       <AppointmentDetailsDrawer aptId={detailsId ?? aptId} onClose={() => { setDetailsId(null); closeApt(); }} />
-      <Modal isOpen={isMasterOpen} onClose={onMasterClose} size="4xl" isCentered scrollBehavior="inside">
-        <ModalOverlay />
-        <ModalContent bg={cardBg}>
-          <ModalHeader color={textColor}>{masterFaculty?.name}: Master Schedule</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody pb={6}>
-            {masterLoading ? <Text color={mutedText}>Loading schedule...</Text> : (
-              <WeeklyCalendar classes={masterData.classes} official={masterData.official} added={masterData.added} />
-            )}
-          </ModalBody>
-        </ModalContent>
-      </Modal>
+      <FacultyScheduleModal faculty={masterFaculty} isOpen={isMasterOpen} onClose={onMasterClose} />
       <Modal isOpen={isSummaryOpen} onClose={onSummaryClose} isCentered>
         <ModalOverlay />
         <ModalContent>

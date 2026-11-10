@@ -20,6 +20,7 @@ import SearchableSelect from './SearchableSelect';
 import RequestList from './RequestList';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import WelcomeHeader from './WelcomeHeader';
+import FacultyScheduleModal from './FacultyScheduleModal';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
@@ -47,12 +48,18 @@ function GenderBadge({ gender }: { gender?: string }) {
   return <Badge colorScheme={color} borderRadius="full" px={2}>{gender}</Badge>;
 }
 
-function PersonCell({ name, sub }: { name: string; sub?: string }) {
+function PersonCell({ name, sub, onClick, title }: { name: string; sub?: string; onClick?: () => void; title?: string }) {
   return (
     <HStack spacing={3} align="center">
       <Avatar size="sm" name={name} />
       <Box minW={0}>
-        <Text fontWeight="bold" lineHeight="short">{name}</Text>
+        <Text
+          fontWeight="bold" lineHeight="short"
+          cursor={onClick ? 'pointer' : undefined}
+          color={onClick ? 'blue.500' : undefined}
+          _hover={onClick ? { textDecoration: 'underline' } : undefined}
+          onClick={onClick} title={title}
+        >{name}</Text>
         {sub && <Text fontSize="xs" opacity={0.65} lineHeight="short">{sub}</Text>}
       </Box>
     </HStack>
@@ -130,6 +137,7 @@ export default function AdminDashboard() {
   const [newFacultyName, setNewFacultyName] = useState('');
   const [newAccount, setNewAccount] = useState<{ id: string; role: string } | null>(null); // the account just created, so its class grid can open
 
+  const [scheduleOf, setScheduleOf] = useState<any | null>(null); // faculty whose schedule is open
   const [emailEdit, setEmailEdit] = useState<any | null>(null); // account being moved to a school email
   const [emailEditValue, setEmailEditValue] = useState('');
   const [nameEdit, setNameEdit] = useState<any | null>(null);
@@ -330,7 +338,7 @@ export default function AdminDashboard() {
       portalLabel="Admin Console"
       userName={userName || ''}
       showMailbox={false}
-      extras={<ProfileGate role="ADMIN" />}
+      extras={<><ProfileGate role="ADMIN" /><FacultyScheduleModal faculty={scheduleOf} isOpen={!!scheduleOf} onClose={() => setScheduleOf(null)} /></>}
       nav={[
         { key: 'appointments', section: 'Operations', icon: 'inbox', label: 'Appointments', badge: appointments.filter(a => a.status === 'PENDING').length, active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
         { key: 'home', section: 'Operations', icon: 'grid', label: 'Class Schedules', active: activePage === 'home', onClick: () => setActivePage('home') },
@@ -470,7 +478,7 @@ export default function AdminDashboard() {
                 )}
                 {visibleFaculty.map(prof => (
                   <Tr key={prof._id} _hover={{ bg: hoverBg }}>
-                    <Td color={textColor}><PersonCell name={prof.name} sub={userById[prof._id]?.email} /></Td>
+                    <Td color={textColor}><PersonCell name={prof.name} sub={userById[prof._id]?.email} onClick={() => setScheduleOf(prof)} title="View schedule" /></Td>
                     <Td color={textColor}>{prof.programPosition}</Td>
                     <Td><GenderBadge gender={prof.gender} /></Td>
                     <Td color={textColor}>{userById[prof._id]?.facultyId || (userById[prof._id]?.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
@@ -482,6 +490,7 @@ export default function AdminDashboard() {
                     <Td>
                       {userById[prof._id]?.role === 'FACULTY' && (
                         <HStack spacing={2}>
+                          <ChakraButton size="xs" variant="outline" onClick={() => setScheduleOf(prof)}>Schedule</ChakraButton>
                           <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(userById[prof._id])}>
                             {userById[prof._id]?.facultyId ? 'Edit ID' : 'Add ID'}
                           </ChakraButton>

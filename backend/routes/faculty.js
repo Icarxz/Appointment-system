@@ -38,6 +38,7 @@ const crypto = require('crypto'); // Built-in Node.js module for secure hashes
 const ConsultationHours = require('../models/ConsultationHours');
 const AddedConsultationHours = require('../models/AddedConsultationHours');
 const { buildSlots, buildBusy, openWindow, addDays, dayOfWeekOf, overlaps } = require('../utils/slots');
+const { parseRange, toBookingBlocks, SHOWN } = require('../utils/scheduleBookings');
 const { isOverlapping } = require('../utils/timeMath');
 const { planApproval } = require('../utils/approvalTime');
 const { validateClassBlock } = require('../utils/classBlock');
@@ -295,6 +296,22 @@ router.get('/my-schedule/:facultyId', requireAuth(ALL_ROLES), async (req, res) =
     res.json(schedules);
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching schedule.' });
+  }
+});
+
+// Accepted and completed consultations of one faculty member between ?from= and ?to= (YYYY-MM-DD, inclusive), for the
+// schedule calendar. Pending requests are not included, and no student names are sent (see utils/scheduleBookings.js).
+router.get('/schedule-bookings/:facultyId', requireAuth(ALL_ROLES), async (req, res) => {
+  try {
+    const range = parseRange(req.query.from, req.query.to);
+    if (range.error) return res.status(400).json({ error: range.error });
+    if (!mongoose.isValidObjectId(req.params.facultyId)) return res.status(400).json({ error: 'Invalid faculty id.' });
+    const rows = await Appointment.find({
+      facultyId: req.params.facultyId, status: { $in: SHOWN }, date: { $gte: range.from, $lte: range.to },
+    }).select('date time duration status').lean();
+    res.json(toBookingBlocks(rows));
+  } catch (error) {
+    res.status(500).json({ error: 'Server error fetching bookings.' });
   }
 });
 
