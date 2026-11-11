@@ -217,12 +217,50 @@ def read_region(gray, y0, y1, psm=6):
     return pytesseract.image_to_string(crop, config=f'--psm {psm}'), (float(np.mean(confs)) if confs else 0.0)
 
 
-def parse_metadata(gray, grid_top, grid_bottom):
+NAME_RE = re.compile(r"^[A-Z]{3,}[A-Za-z .'\-]{3,}[, ]\s*(?:MIT|MSIT|MS|MBA|MAEd|DIT|LPT|PhD|DBA|EdD)\.?$", re.I)   # printed-name shape; garbled reads still qualify but stay flagged
+NAME_CONF_OK = 90.0
+
+
+def read_faculty_name(gray, y_from, x_left, x_right):
+    """Printed-name extraction (never signature recognition). The VAA-FM-061 footer has four signature blocks; the faculty
+    member's printed name is the line above "Faculty Member" in block 2 ("Acknowledged by"). That block is cropped on its own,
+    OCR'd under three preprocessings and EVERY candidate is kept. The name is only trusted when >=2 independent reads agree
+    exactly with high word confidence; otherwise the best read is kept as-is (never "corrected") and stays flagged."""
+    w = x_right - x_left
+    bx0, bx1 = int(x_left + w * 0.235), int(x_left + w * 0.475)
+    block = gray[y_from:, bx0:bx1]
+    variants = {'raw': block,
+                'otsu': cv2.threshold(block, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
+                'dark': np.where(block < 110, 0, 255).astype('uint8')}
+    cands = []
+    for vname, img in variants.items():
+        d = pytesseract.image_to_data(img, config='--psm 6', output_type=pytesseract.Output.DICT)
+        lines = {}
+        for t, c, b, p, l, x, y in zip(d['text'], d['conf'], d['block_num'], d['par_num'], d['line_num'], d['left'], d['top']):
+            if t.strip() and float(c) >= 0:
+                lines.setdefault((b, p, l), []).append((x, y, t, float(c)))
+        for words in lines.values():
+            words.sort()
+            text = clean(' '.join(wd[2] for wd in words))
+            if NAME_RE.match(text):
+                cands.append({'text': text, 'confidence': round(float(np.mean([wd[3] for wd in words])), 1),
+                              'variant': vname, 'bbox': [int(bx0 + words[0][0]), int(y_from + words[0][1])]})
+    out = {'facultyName': None, 'facultyNameConfidence': None, 'facultyNameSource': 'printed_text',
+           'facultyNameNeedsReview': True, 'facultyNameCandidates': cands}
+    if cands:
+        best = max(cands, key=lambda c: c['confidence'])
+        out['facultyName'], out['facultyNameConfidence'] = best['text'], best['confidence']
+        agree = sum(1 for c in cands if c['text'] == best['text'])
+        out['facultyNameNeedsReview'] = not (agree >= 2 and best['confidence'] >= NAME_CONF_OK)
+    return out
+
+
+def parse_metadata(gray, grid_top, grid_bottom, x_left, x_right):
     warnings = []
     head, hc = read_region(gray, grid_top - 150, grid_top - 4, 6)
     foot, fc = read_region(gray, grid_bottom - 30, gray.shape[0], 4)
     flat = clean(head + ' ' + foot)
-    md = {'formId': None, 'term': None, 'academicYear': None, 'effectivityDate': None, 'facultyName': None}
+    md = {'formId': None, 'term': None, 'academicYear': None, 'effectivityDate': None}
     m = re.search(r'VAA-FM-\d+', flat)
     md['formId'] = m.group(0) if m else None
     m = re.search(r'Term:?\s*(.+?)\s+A\.?\s?Y\.?:?\s*(\d{4})\s*-\s*(\d{4})', flat, re.I)
@@ -232,15 +270,14 @@ def parse_metadata(gray, grid_top, grid_bottom):
     if m and m.group(1).upper() in MONTHS:
         md['effectivityDate'] = f'{int(m.group(3)):04d}-{MONTHS[m.group(1).upper()]:02d}-{int(m.group(2)):02d}'
     # the faculty name is the bold underlined line directly above "Faculty Member"
-    names = re.findall(r'([A-Z][A-Z .\-]+,\s*(?:MIT|MSIT|PhD|MS|MBA|MAEd|DIT|LPT)[A-Za-z.]*)', foot)
-    if names:
-        md['facultyName'] = clean(names[0])
+    md.update(read_faculty_name(gray, grid_bottom + 20, x_left, x_right))
     for k in ('formId', 'term', 'academicYear', 'effectivityDate', 'facultyName'):
-        if not md[k]:
+        if not md.get(k):
             warnings.append({'code': 'metadata-missing', 'field': k, 'message': f'{k} was not read from the document; enter or confirm it manually'})
     if hc < LOW_CONF:
         warnings.append({'code': 'low-confidence', 'field': 'header', 'message': f'header OCR confidence {hc:.0f}%'})
-    md['facultyNameNeedsReview'] = True       # signature scribbles overlap the name line; a human must always confirm identity
+    if md['facultyNameNeedsReview']:
+        warnings.append({'code': 'faculty-name-needs-review', 'message': 'printed faculty name missing, low-confidence or covered by a signature; identity must be verified by a person before confirmation'})
     md['headerConfidence'] = round(hc, 1)
     workload = {}
     for key, pat in (('lectureHours', r'Lecture Hours:?\s*(\d+(?:\.\d+)?)'), ('laboratoryHours', r'Laboratory Hours:?\s*(\d+(?:\.\d+)?)'),
@@ -304,7 +341,7 @@ def extract(pdf_path, dpi=300, debug_dir=None):
             if o is not c and o['dayOfWeek'] == c['dayOfWeek'] and o['startTime'] < c['endTime'] and c['startTime'] < o['endTime']:
                 c['flags'].append('overlap'); c['needsReview'] = True
 
-    md, workload, w = parse_metadata(gray, header_top, ys[-1])
+    md, workload, w = parse_metadata(gray, header_top, ys[-1], xs[0], xs[-1])
     warnings += w
     hours = sum((int(c['endTime'][:2]) * 60 + int(c['endTime'][3:]) - int(c['startTime'][:2]) * 60 - int(c['startTime'][3:])) for c in classes) / 60
     workload['extractedTeachingHours'] = hours

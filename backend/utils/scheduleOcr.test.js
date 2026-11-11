@@ -21,7 +21,16 @@ test('header: term, academic year, effectivity date and form id are read; facult
   assert.deepStrictEqual(
     [draft.metadata.term, draft.metadata.academicYear, draft.metadata.effectivityDate, draft.metadata.formId],
     ['Second Semester', '2025-2026', '2026-03-09', 'VAA-FM-061']);
-  assert.strictEqual(draft.metadata.facultyNameNeedsReview, true);   // signatures overlap the name line
+  assert.strictEqual(draft.metadata.facultyNameNeedsReview, true);   // signature covers the printed name
+});
+
+test('faculty name: provenance and measured confidence are recorded, the unreliable read is never trusted', () => {
+  const m = draft.metadata;
+  assert.strictEqual(m.facultyNameSource, 'printed_text');
+  assert.strictEqual(typeof m.facultyNameConfidence, 'number');      // measured for the name line, not the header
+  assert.ok(m.facultyNameConfidence < 90);                           // below the trust threshold on this sample
+  assert.ok(m.facultyNameCandidates.length >= 2);                    // every read kept for the review screen
+  assert.ok(draft.warnings.some(w => w.code === 'faculty-name-needs-review'));
 });
 
 test('teaching blocks: same day/start/end as the Percy fixture (merged cells stay ONE record)', () => {

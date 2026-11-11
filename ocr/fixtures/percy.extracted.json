@@ -14,8 +14,39 @@
     "term": "Second Semester",
     "academicYear": "2025-2026",
     "effectivityDate": "2026-03-09",
-    "facultyName": null,
+    "facultyName": "CARL Af IER MIT",
+    "facultyNameConfidence": 64.5,
+    "facultyNameSource": "printed_text",
     "facultyNameNeedsReview": true,
+    "facultyNameCandidates": [
+      {
+        "text": "CARL Af IER MIT",
+        "confidence": 64.5,
+        "variant": "raw",
+        "bbox": [
+          987,
+          2242
+        ]
+      },
+      {
+        "text": "CARL hl SER MIT",
+        "confidence": 64.5,
+        "variant": "otsu",
+        "bbox": [
+          987,
+          2242
+        ]
+      },
+      {
+        "text": "CARL ATES MIT",
+        "confidence": 64.0,
+        "variant": "dark",
+        "bbox": [
+          987,
+          2243
+        ]
+      }
+    ],
     "headerConfidence": 89.5
   },
   "workload": {
@@ -329,9 +360,8 @@
   ],
   "warnings": [
     {
-      "code": "metadata-missing",
-      "field": "facultyName",
-      "message": "facultyName was not read from the document; enter or confirm it manually"
+      "code": "faculty-name-needs-review",
+      "message": "printed faculty name missing, low-confidence or covered by a signature; identity must be verified by a person before confirmation"
     }
   ]
 }

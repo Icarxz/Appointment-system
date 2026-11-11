@@ -13,7 +13,11 @@ Needs: Python 3, `opencv-python`, `numpy`, `pytesseract`, the `tesseract` binary
 How it works: render 300 DPI -> deskew -> OpenCV line detection -> rows with no line between them are ONE merged cell
 (Tue 14:30-16:00 = one record) -> Tesseract per filled cell -> parse subject / section / room. Day uses the repo convention (Sun=0).
 
-Known limits (measured on ONE sample): faculty name is blocked by signatures, so it is always flagged for review;
+Faculty name: only the PRINTED name above "Faculty Member" is read (block 2 of the footer is cropped and OCR'd three ways; all candidates are kept
+with `facultyNameSource`, a measured `facultyNameConfidence`, and `facultyNameNeedsReview`). It is trusted only when >=2 reads agree at >=90% confidence;
+signatures are never recognised or used as identity. Matching it to the selected account is a Phase 4/5 backend rule.
+
+Known limits (measured on ONE sample): on Percy's sheet the signature covers the name, so the read is garbled (~64% confidence) and flagged;
 `IICT` vs `ICT` rooms can be misread, so `ICT` rooms get `room-prefix-check`; only page 1 and only this template are supported;
 Saturday/Sunday columns and 6:30 PM blocks are handled by the grid but untested with real data.
 Deployment (Python worker vs Node alternative) is still an open decision in the plan.
