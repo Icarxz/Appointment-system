@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 // weekly hours (which live in ConsultationHours and are not affected by these). Recurs every week.
 const AddedConsultationHoursSchema = new mongoose.Schema({
   facultyId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  dayOfWeek: { type: Number, required: true, min: 1, max: 6 }, // 1=Mon ... 6=Sat
+  dayOfWeek: { type: Number, required: true, min: 1, max: 5 }, // 1=Mon ... 5=Fri: no weekend consultation hours
   startTime: { type: String, required: true }, // "13:00"
   endTime:   { type: String, required: true }  // "15:00"
 }, { timestamps: true });

@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Appointment = require('../models/Appointment');
 const ConsultationHours = require('../models/ConsultationHours');
 const AddedConsultationHours = require('../models/AddedConsultationHours');
+const { CONSULTATION_DAYS } = require('../utils/daySettings');
 const { buildFacultyAnalytics } = require('../utils/facultyAnalytics');
 const { buildSharedReport } = require('../utils/reportMetrics');
 const { sharedReportCsv, facultyReportCsv } = require('../utils/csvExport');
@@ -20,7 +21,7 @@ async function loadSharedReport(role) {
     Appointment.find({}).select(APPOINTMENT_FIELDS).lean(),
     User.find({}).select('name email role accountStatus programPosition gender schoolId onboardingComplete').lean(),
     ConsultationHours.find({}).select('startTime endTime').lean(),
-    AddedConsultationHours.find({ dayOfWeek: { $gte: 1 } }).select('startTime endTime').lean(),
+    AddedConsultationHours.find({ dayOfWeek: { $in: CONSULTATION_DAYS } }).select('startTime endTime').lean(),
   ]);
   return buildSharedReport({
     appointments, users,
@@ -58,7 +59,7 @@ async function loadFacultyAnalytics(facultyId) {
   const [appointments, official, added] = await Promise.all([
     Appointment.find({ facultyId }).select(APPOINTMENT_FIELDS).lean(),
     ConsultationHours.find({ facultyId }).lean(),
-    AddedConsultationHours.find({ facultyId, dayOfWeek: { $gte: 1 } }).lean(),
+    AddedConsultationHours.find({ facultyId, dayOfWeek: { $in: CONSULTATION_DAYS } }).lean(),
   ]);
   return buildFacultyAnalytics({ appointments, official, added, todayIso: manilaNow().dateStr });
 }

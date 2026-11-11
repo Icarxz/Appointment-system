@@ -27,6 +27,7 @@ import ConfirmAction from './ConfirmAction';
 import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
 import type { ConfirmConfig } from './ConfirmAction';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
+import { visibleDays } from '../utils/daySettings';
 import ExportBar from './ExportBar';
 import SearchableSelect from './SearchableSelect';
 import { cohortConfig } from '../data/cohortConfig';
@@ -59,10 +60,10 @@ interface ScheduleEvent {
 // CONSTANTS & HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Seven columns, Monday first. The server stores Sunday as 0 and Monday to Saturday as 1-6 (JavaScript getDay()).
+// Up to seven columns, Monday first (utils/daySettings.ts decides which show). The server stores Sunday as 0 and Monday to Saturday as 1-6.
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-// The consultation-hour pickers stay Monday to Saturday until Sunday consultation booking exists (a later PR).
-const CONSULT_DAY_LABELS = DAY_LABELS.slice(0, 6);
+// Consultation hours are Monday to Friday only, so the pickers offer five days (values 1-5).
+const CONSULT_DAY_LABELS = DAY_LABELS.slice(0, 5);
 // Stored day (0 = Sunday ... 6 = Saturday) -> column on screen (0 = Monday ... 6 = Sunday)
 const columnOfStoredDay = (d: number) => (d + 6) % 7;
 const timeToMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
@@ -104,7 +105,7 @@ function getWeekDates(offset: number): Date[] {
 function formatWeekLabel(dates: Date[]): string {
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const s = dates[0];
-  const e = dates[6];
+  const e = dates[dates.length - 1];
   return `${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
 }
 
@@ -180,6 +181,7 @@ export default function FacultyDashboard() {
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
   const { aptId, closeApt } = useDeepLink<Page>(["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [showWeekend, setShowWeekend] = useState(false); // display preference: reveal empty Saturday / Sunday columns
   // Phones open on one day at a time; the 7-column week grid needs a wider screen.
   const [viewMode,   setViewMode]   = useState<ViewMode>(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "day" : "week"));
   const [focusDay,   setFocusDay]   = useState(0);       
@@ -406,8 +408,12 @@ const saveConsultationHours = async () => {
   );
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
-  const weekLabel = useMemo(() => formatWeekLabel(weekDates), [weekDates]);
-  const visibleDayIndices = viewMode === "week" ? [0, 1, 2, 3, 4, 5, 6] : [focusDay];
+  // Monday to Friday always. Saturday / Sunday only when this faculty has a class that day, or "Show weekend" is on
+  // (a weekend column that holds a class is always shown). Weekend columns are for notes only: no consultation hours or requests.
+  const weekColumns = visibleDays({ classDays: mySchedule.map((c: any) => c.dayOfWeek), showWeekend }).map(columnOfStoredDay);
+  const weekendHasClass = mySchedule.some((c: any) => c.dayOfWeek === 0 || c.dayOfWeek === 6);
+  const weekLabel = formatWeekLabel(weekDates.slice(0, Math.max(...weekColumns) + 1));
+  const visibleDayIndices = viewMode === "week" ? weekColumns : [focusDay];
 
   // ── Color tokens (Synced with Chakra Dark Mode) ────────────────────────────
   const dk = palette.dk;
@@ -849,6 +855,7 @@ const saveConsultationHours = async () => {
                 )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <button className="touch-target" aria-pressed={showWeekend} title={weekendHasClass ? "A weekend column that has classes is always shown" : "Show empty Saturday and Sunday columns (weekends are for notes only)"} onClick={() => setShowWeekend(v => !v)} style={{ ...btnBase, padding: "6px 12px", borderRadius: "6px", border: `1px solid ${C.border}`, background: showWeekend ? "#2563eb" : C.surface, color: showWeekend ? "#fff" : C.textMid, fontSize: "12px" }}>Show weekend</button>
                 <div className="toolbar-divider" style={{ width: "1px", height: "24px", background: C.border }} />
                 <button className="touch-target" onClick={() => setWeekOffset(0)} style={{ ...btnBase, padding: "6px 12px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "12px" }}>Today</button>
                 <div style={{ display: "flex" }}>

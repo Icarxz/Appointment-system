@@ -7,6 +7,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from '@chakra-ui/icons';
 import { authFetch } from './authFetch';
 import WeeklyCalendar from './WeeklyCalendar';
 import type { Booking } from './WeeklyCalendar';
+import { visibleDays, columnOfDay, canSeeWeekend } from '../utils/daySettings';
 
 const API = import.meta.env.VITE_API_URL;
 const bookingsUrl = (facultyId: string) => `${API}/api/faculty/schedule-bookings/${facultyId}`;
@@ -15,9 +16,9 @@ const bookingsUrl = (facultyId: string) => `${API}/api/faculty/schedule-bookings
 const manilaToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 const mondayOf = (iso: string) => { const dow = new Date(`${iso}T00:00:00Z`).getUTCDay(); return addDays(iso, dow === 0 ? -6 : 1 - dow); };
-const rangeLabel = (monday: string) => {
+const rangeLabel = (monday: string, lastOffset: number) => {
   const f = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  return `${f(monday)} – ${f(addDays(monday, 6))}`;
+  return `${f(monday)} – ${f(addDays(monday, lastOffset))}`;
 };
 
 interface Props { faculty: { _id: string; name?: string } | null; isOpen: boolean; onClose: () => void }
@@ -31,6 +32,9 @@ export default function FacultyScheduleModal({ faculty, isOpen, onClose }: Props
   const [loading, setLoading] = useState(false);
   const [weekStart, setWeekStart] = useState(() => mondayOf(manilaToday()));
   const id = faculty?._id;
+  // Saturday / Sunday columns: staff viewers only (never students), and only when this faculty has a class that day.
+  const allowWeekend = canSeeWeekend(localStorage.getItem('userRole'));
+  const lastOffset = Math.max(...visibleDays({ classDays: data.classes.map((c: any) => c.dayOfWeek), allowWeekend }).map(columnOfDay));
 
   // Reset to this week and load the weekly pattern each time the modal opens for a professor
   useEffect(() => {
@@ -69,11 +73,11 @@ export default function FacultyScheduleModal({ faculty, isOpen, onClose }: Props
             <>
               <HStack mb={3} spacing={2}>
                 <IconButton aria-label="Previous week" icon={<ChevronLeftIcon boxSize={5} />} size="sm" variant="outline" onClick={() => setWeekStart(addDays(weekStart, -7))} />
-                <Text fontWeight="600" fontSize="sm" minW="130px" textAlign="center">{rangeLabel(weekStart)}</Text>
+                <Text fontWeight="600" fontSize="sm" minW="130px" textAlign="center">{rangeLabel(weekStart, lastOffset)}</Text>
                 <IconButton aria-label="Next week" icon={<ChevronRightIcon boxSize={5} />} size="sm" variant="outline" onClick={() => setWeekStart(addDays(weekStart, 7))} />
                 <Button size="sm" variant="ghost" onClick={() => setWeekStart(mondayOf(manilaToday()))}>This week</Button>
               </HStack>
-              <WeeklyCalendar classes={data.classes} official={data.official} added={data.added} weekStart={weekStart} bookings={bookings} />
+              <WeeklyCalendar classes={data.classes} official={data.official} added={data.added} weekStart={weekStart} bookings={bookings} allowWeekend={allowWeekend} />
             </>
           )}
         </ModalBody>

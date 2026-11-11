@@ -5,9 +5,10 @@ import {
   ModalHeader, ModalOverlay, Select, Text, useColorModeValue, useToast,
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
+import { visibleDays, DAY_SHORT, DAY_LONG } from '../utils/daySettings';
 
 // The admin's class schedule editor: an empty weekly grid with a line every 30 minutes (7:00 AM to 7:00 PM,
-// Monday to Sunday). Click an empty spot to add a class, click a class to change or delete it.
+// Monday to Friday, plus Saturday / Sunday when needed). Click an empty spot to add a class, click a class to change or delete it.
 // Every save goes to the server, which checks the times (30-minute steps, no overlap with another class, no clash
 // with an approved consultation) and answers with a plain message when it refuses.
 
@@ -18,10 +19,7 @@ const FIRST = 7 * 60;      // 7:00 AM
 const LAST = 19 * 60;      // 7:00 PM
 const STEP = 30;
 const ROW_PX = 24;         // height of one 30-minute row
-// Monday first on screen. The server stores Sunday as 0 and Monday to Saturday as 1-6, so each column carries its stored value.
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
+// The columns come from utils/daySettings.ts: Monday to Friday always, Saturday / Sunday only when needed (see below).
 const ROWS = (LAST - FIRST) / STEP;
 
 const toMin = (t: string): number => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0); };
@@ -46,6 +44,13 @@ export default function ClassGridEditor({ facultyId, facultyName }: Props) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showWeekend, setShowWeekend] = useState(false); // display preference: reveal empty Saturday / Sunday columns
+  // Monday to Friday, plus Saturday / Sunday when this faculty has a class that day or "Show weekend" is on. A weekend column
+  // that holds a class is always shown. Each column carries its stored day (Sunday is 0).
+  const DAY_VALUES = visibleDays({ classDays: blocks.map(b => b.dayOfWeek), showWeekend });
+  const DAYS = DAY_VALUES.map(d => DAY_SHORT[d]);
+  const DAY_NAMES = DAY_VALUES.map(d => DAY_LONG[d]);
+  const weekendHasClass = blocks.some(b => b.dayOfWeek === 0 || b.dayOfWeek === 6);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,11 +128,16 @@ export default function ClassGridEditor({ facultyId, facultyName }: Props) {
           <Text fontWeight="700" color={text}>{facultyName}</Text>
           <Text fontSize="xs" color={muted}>Click an empty spot to add a class. Click a class to change or delete it.</Text>
         </Box>
-        <Button size="sm" colorScheme="blue" onClick={() => openNew(1, 8 * 60)}>Add class</Button>
+        <HStack spacing={2}>
+          <Button size="sm" variant={showWeekend ? 'solid' : 'outline'} colorScheme="blue" aria-pressed={showWeekend}
+            title={weekendHasClass ? 'A weekend column that has classes is always shown' : 'Show empty Saturday and Sunday columns, to add a weekend class'}
+            onClick={() => setShowWeekend(v => !v)}>Show weekend</Button>
+          <Button size="sm" colorScheme="blue" onClick={() => openNew(1, 8 * 60)}>Add class</Button>
+        </HStack>
       </Flex>
 
       <Box overflowX="auto" opacity={loading ? 0.6 : 1}>
-        <Flex minW="640px" borderWidth="1px" borderColor={border} borderRadius="md" overflow="hidden">
+        <Flex minW={`${58 + DAYS.length * 92}px`} borderWidth="1px" borderColor={border} borderRadius="md" overflow="hidden">
           <Box w="58px" flexShrink={0} borderRightWidth="1px" borderColor={border}>
             <Box h="28px" />
             {rowLabels.map(min => (

@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, dayOfWeekOf } = require('./slots');
+const {
+  splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, dayOfWeekOf,
+  OPERATING_START, OPERATING_LAST_START, OPERATING_LAST_END,
+} = require('./slots');
 
 test('splits a 2-hour block into two 1-hour slots', () => {
   assert.deepStrictEqual(splitIntoSlots('09:00', '11:00').map(s => `${s.start}-${s.end}`), ['09:00-10:00', '10:00-11:00']);
@@ -168,12 +171,66 @@ test('insideBookableHours: vacant weekday hours are allowed even outside consult
   assert.ok(!insideBookableHours({ date: '2026-10-27', time: '07:00', duration: 60, ...args }));  // starts before 8 AM
 });
 
-test('insideBookableHours: weekends need real consultation hours', () => {
+test('insideBookableHours: weekends are never bookable, even if old weekend consultation rows exist', () => {
+  const sat = [{ dayOfWeek: 6, startTime: '09:00', endTime: '11:00' }];
+  const sun = [{ dayOfWeek: 0, startTime: '09:00', endTime: '11:00' }];
   assert.ok(!insideBookableHours({ date: '2026-10-31', time: '10:00', duration: 60, official: [], added: [] })); // Saturday
-  assert.ok(insideBookableHours({ date: '2026-10-31', time: '10:00', duration: 60, official: [{ dayOfWeek: 6, startTime: '09:00', endTime: '11:00' }], added: [] }));
+  assert.ok(!insideBookableHours({ date: '2026-10-31', time: '10:00', duration: 60, official: sat, added: [] }));
   assert.ok(!insideBookableHours({ date: '2026-11-01', time: '10:00', duration: 60, official: [], added: [] })); // Sunday
+  assert.ok(!insideBookableHours({ date: '2026-11-01', time: '10:00', duration: 60, official: sun, added: sun }));
 });
 
 test('insideBookableHours: consultation hours outside 8-5 still count (7:30 start)', () => {
   assert.ok(insideBookableHours({ date: '2026-10-27', time: '07:30', duration: 60, official: [{ dayOfWeek: 2, startTime: '07:30', endTime: '09:00' }], added: [] }));
+});
+
+// ---- Weekend policy: weekend classes may exist, but weekends are never bookable ----
+// 2026-10-31 is a Saturday and 2026-11-01 a Sunday; "today" is Mon 2026-10-26 (see `base`), one week ahead.
+const weekendHours = [{ dayOfWeek: 6, startTime: '09:00', endTime: '11:00' }, { dayOfWeek: 0, startTime: '09:00', endTime: '11:00' }];
+const onWeekend = (slots) => slots.filter(x => [0, 6].includes(dayOfWeekOf(x.date)));
+
+test('weekend: no slots are generated, even if old weekend consultation rows exist', () => {
+  assert.strictEqual(buildSlots({ ...base, official: weekendHours, added: weekendHours }).length, 0);
+  assert.strictEqual(onWeekend(buildSlots({ ...vac, official: weekendHours, added: weekendHours })).length, 0);
+});
+
+test('weekend: a weekend class changes nothing for students (no slots, no busy cells)', () => {
+  const classes = [{ dayOfWeek: 6, startTime: '09:00', endTime: '10:00' }, { dayOfWeek: 0, startTime: '09:00', endTime: '10:00' }];
+  assert.strictEqual(onWeekend(buildSlots({ ...vac, official: [], classes })).length, 0);
+  assert.deepStrictEqual(buildBusy({ classes, appointments: [], today: '2026-10-26', weeks: 1 }), []);
+});
+
+test('weekend: an old weekend consultation row gives no maximum length and no bookable range', () => {
+  const rows = { official: weekendHours, added: [] };
+  assert.strictEqual(maxDurationAt({ date: '2026-10-31', time: '09:00', ...rows }), 0);
+  assert.strictEqual(maxDurationAt({ date: '2026-11-01', time: '09:00', ...rows }), 0);
+  assert.ok(!insideConsultHours({ date: '2026-10-31', time: '09:00', duration: 60, ...rows }));
+});
+
+test('slots exist exactly on the consultation days (one shared setting)', () => {
+  const { CONSULTATION_DAYS } = require('./daySettings');
+  for (let d = 0; d <= 6; d++) {
+    const s = buildSlots({ ...base, official: [{ dayOfWeek: d, startTime: '09:00', endTime: '10:00' }] });
+    assert.strictEqual(s.length, CONSULTATION_DAYS.includes(d) ? 1 : 0, `day ${d}`);
+  }
+});
+
+test('evening: blocks may run to 7:00 PM, the last start is 6:30 PM, nothing starts at 7:00 PM', () => {
+  const on = (startTime, endTime) => buildSlots({ ...base, official: [{ dayOfWeek: 2, startTime, endTime }] }).map(x => `${x.start}-${x.end}`);
+  assert.deepStrictEqual(on('17:00', '19:00'), ['17:00-18:00', '18:00-19:00']);
+  assert.deepStrictEqual(on('18:30', '19:00'), ['18:30-19:00']);
+  assert.deepStrictEqual(on('19:00', '19:30'), []);
+  assert.deepStrictEqual(on('16:00', '17:00'), ['16:00-17:00']); // unchanged
+});
+
+test('insideBookableHours: a 6:30 PM start fits a block that ends at 7:00 PM, and not a longer request', () => {
+  const eve = { official: [{ dayOfWeek: 2, startTime: '18:30', endTime: '19:00' }], added: [] };
+  assert.ok(insideBookableHours({ date: '2026-10-27', time: '18:30', duration: 30, ...eve }));
+  assert.ok(!insideBookableHours({ date: '2026-10-27', time: '18:30', duration: 60, ...eve })); // would end after 7:00 PM
+});
+
+test('the operating limits are exported so the added-hours route uses the very same numbers', () => {
+  assert.strictEqual(OPERATING_START, 7 * 60 + 30);
+  assert.strictEqual(OPERATING_LAST_START, 18 * 60 + 30);
+  assert.strictEqual(OPERATING_LAST_END, 19 * 60);
 });
