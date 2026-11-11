@@ -3,9 +3,11 @@
 // remainder when a block isn't a whole number of hours (e.g. 9:30-11:00 -> 9:30-10:30, 10:30-11:00).
 
 const { timeToMinutes } = require('./timeMath');
+const { CONSULTATION_DAYS } = require('./daySettings');
 
 const OPERATING_START = 450; // 7:30 AM: same limits the booking form always had
-const OPERATING_LAST_START = 960; // 4:00 PM
+const OPERATING_LAST_START = 1110; // 6:30 PM: the last half hour of a block that ends at 7:00 PM
+const OPERATING_LAST_END = 1140;   // 7:00 PM: consultation hours may not run later than this
 
 const pad = (n) => String(n).padStart(2, '0');
 const toHHMM = (mins) => `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
@@ -56,7 +58,7 @@ function buildSlots({ official, added, classes, appointments, today, nowMs, week
     const date = addDays(today, i);
     if (date === flaggedDate) continue;
     const dow = dayOfWeekOf(date);
-    if (dow === 0) continue; // no Sunday consultations
+    if (!CONSULTATION_DAYS.includes(dow)) continue; // no weekend consultation or vacant slots, even where a weekend class exists
 
     const blocks = [
       ...official.filter(h => h.dayOfWeek === dow).map(h => ({ ...h, kind: 'OFFICIAL' })),
@@ -121,7 +123,7 @@ function buildBusy({ classes, appointments, today, weeks = 4, flaggedDate = '' }
   for (let i = 0; i < weeks * 7; i++) {
     const date = addDays(today, i);
     const dow = dayOfWeekOf(date);
-    if (dow === 0) continue;
+    if (!CONSULTATION_DAYS.includes(dow)) continue; // weekends are not shown to students
     if (date === flaggedDate) continue; // the whole day is closed, nothing to explain cell by cell
     for (const c of classes.filter(x => x.dayOfWeek === dow)) {
       busy.push({ date, start: c.startTime, end: c.endTime, type: 'CLASS' });
@@ -138,6 +140,7 @@ function buildBusy({ classes, appointments, today, weeks = 4, flaggedDate = '' }
 // 10-11) count as one continuous run. Returns [[startMin, endMin], ...] sorted.
 function consultRuns({ date, official, added }) {
   const dow = dayOfWeekOf(date);
+  if (!CONSULTATION_DAYS.includes(dow)) return []; // weekend consultation hours never count, even if old rows exist
   const spans = [...official, ...added]
     .filter(h => h.dayOfWeek === dow)
     .map(h => [timeToMinutes(h.startTime), timeToMinutes(h.endTime)])
@@ -245,5 +248,5 @@ function openWindow(args) {
 }
 
 module.exports = {
-  MAX_CONSULT_MINUTES, VACANT_START, VACANT_END, splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, availableWindow, openWindow, consultRuns, dayOfWeekOf, addDays, overlaps,
+  MAX_CONSULT_MINUTES, VACANT_START, VACANT_END, OPERATING_START, OPERATING_LAST_START, OPERATING_LAST_END, splitIntoSlots, buildSlots, buildBusy, insideBookableHours, insideConsultHours, maxDurationAt, availableWindow, openWindow, consultRuns, dayOfWeekOf, addDays, overlaps,
 };

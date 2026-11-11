@@ -37,11 +37,12 @@ const StatusHistory = require('../models/StatusHistory');
 const crypto = require('crypto'); // Built-in Node.js module for secure hashes
 const ConsultationHours = require('../models/ConsultationHours');
 const AddedConsultationHours = require('../models/AddedConsultationHours');
-const { buildSlots, buildBusy, openWindow, addDays, dayOfWeekOf, overlaps } = require('../utils/slots');
+const { buildSlots, buildBusy, openWindow, addDays, dayOfWeekOf, overlaps, OPERATING_START, OPERATING_LAST_START, OPERATING_LAST_END } = require('../utils/slots');
 const { parseRange, toBookingBlocks, SHOWN } = require('../utils/scheduleBookings');
 const { isOverlapping } = require('../utils/timeMath');
 const { planApproval } = require('../utils/approvalTime');
 const { validateClassBlock } = require('../utils/classBlock');
+const { CONSULTATION_DAYS, isConsultationDay, parseDay } = require('../utils/daySettings');
 const { requireAuth } = require('../middleware/auth');
 
 // Generic shape check for admin-provisioned accounts (any domain, but still a single "@").
@@ -232,7 +233,7 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
 
       const [official, added, dayClasses, approvedAppointments] = await Promise.all([
         ConsultationHours.find({ facultyId }).lean(),
-        AddedConsultationHours.find({ facultyId, dayOfWeek: { $gte: 1 } }).lean(),
+        AddedConsultationHours.find({ facultyId, dayOfWeek: { $in: CONSULTATION_DAYS } }).lean(),
         Schedule.find({ facultyId, dayOfWeek }),
         Appointment.find({ facultyId, date: targetApt.date, status: 'APPROVED', _id: { $ne: targetApt._id } }),
       ]);
@@ -441,7 +442,7 @@ async function loadSlots(facultyId, flaggedDate = '') {
   const horizon = addDays(today, 28);
   const [official, added, classes, appointments] = await Promise.all([
     ConsultationHours.find({ facultyId }).lean(),
-    AddedConsultationHours.find({ facultyId, dayOfWeek: { $gte: 1 } }).lean(),
+    AddedConsultationHours.find({ facultyId, dayOfWeek: { $in: CONSULTATION_DAYS } }).lean(),
     Schedule.find({ facultyId }).lean(),
     Appointment.find({ facultyId, status: { $in: ['PENDING', 'APPROVED'] }, date: { $gte: today, $lt: horizon } }).lean(),
   ]);
@@ -467,7 +468,7 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 router.get('/added-hours', requireAuth(['FACULTY']), async (req, res) => {
   try {
-    res.json(await AddedConsultationHours.find({ facultyId: req.user.userId, dayOfWeek: { $gte: 1 } }).sort({ dayOfWeek: 1, startTime: 1 }));
+    res.json(await AddedConsultationHours.find({ facultyId: req.user.userId, dayOfWeek: { $in: CONSULTATION_DAYS } }).sort({ dayOfWeek: 1, startTime: 1 }));
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching added hours.' });
   }
@@ -477,13 +478,16 @@ router.post('/added-hours', requireAuth(['FACULTY']), async (req, res) => {
   try {
     const facultyId = req.user.userId;
     const { dayOfWeek, startTime, endTime } = req.body || {};
-    const dow = Number(dayOfWeek);
-    if (!Number.isInteger(dow) || dow < 1 || dow > 6 || !HHMM.test(String(startTime)) || !HHMM.test(String(endTime))) {
+    const dow = parseDay(dayOfWeek); // null / '' must not become 0
+    if (!Number.isInteger(dow) || !HHMM.test(String(startTime)) || !HHMM.test(String(endTime))) {
       return res.status(400).json({ error: 'Choose a day, a start time and an end time.' });
+    }
+    if (!isConsultationDay(dow)) {
+      return res.status(400).json({ error: 'Consultation hours are only available Monday to Friday.' });
     }
     const s = timeToMinutes(startTime), e = timeToMinutes(endTime);
     if (e - s < 30) return res.status(400).json({ error: 'Added hours must be at least 30 minutes long.' });
-    if (s < 450 || s > 960 || e > 1080) return res.status(400).json({ error: 'Added hours must start between 7:30 AM and 4:00 PM and end by 6:00 PM.' });
+    if (s < OPERATING_START || s > OPERATING_LAST_START || e > OPERATING_LAST_END) return res.status(400).json({ error: 'Added hours must start between 7:30 AM and 6:30 PM and end by 7:00 PM.' });
 
     const [classes, official, added] = await Promise.all([
       Schedule.find({ facultyId, dayOfWeek: dow }),
@@ -504,7 +508,7 @@ router.post('/added-hours', requireAuth(['FACULTY']), async (req, res) => {
 // Weekly added hours of any faculty member (shown on their public master schedule).
 router.get('/added-hours/of/:facultyId', requireAuth(ALL_ROLES), async (req, res) => {
   try {
-    res.json(await AddedConsultationHours.find({ facultyId: req.params.facultyId, dayOfWeek: { $gte: 1 } }).sort({ dayOfWeek: 1, startTime: 1 }).select('dayOfWeek startTime endTime'));
+    res.json(await AddedConsultationHours.find({ facultyId: req.params.facultyId, dayOfWeek: { $in: CONSULTATION_DAYS } }).sort({ dayOfWeek: 1, startTime: 1 }).select('dayOfWeek startTime endTime'));
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching added hours.' });
   }
@@ -750,7 +754,7 @@ router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']
     if (!appointments.some(isOpen)) return res.json(appointments);
     const [official, added, classes] = await Promise.all([
       ConsultationHours.find({ facultyId }).lean(),
-      AddedConsultationHours.find({ facultyId, dayOfWeek: { $gte: 1 } }).lean(),
+      AddedConsultationHours.find({ facultyId, dayOfWeek: { $in: CONSULTATION_DAYS } }).lean(),
       Schedule.find({ facultyId }).lean(),
     ]);
     const approved = appointments.filter(a => a.status === 'APPROVED');
@@ -895,6 +899,11 @@ router.post('/consultation-hours', requireAuth(['FACULTY']), async (req, res) =>
     const { hours } = req.body; // [{ dayOfWeek, startTime, endTime }, ...]
     const facultyId = req.user.userId; // always the logged-in faculty, never trust the body
 
+    // Consultation hours are Monday to Friday only (a weekend class may exist, a weekend consultation may not).
+    if (!Array.isArray(hours) || hours.some(h => !isConsultationDay(parseDay(h && h.dayOfWeek)))) {
+      return res.status(400).json({ error: 'Consultation hours are only available Monday to Friday.' });
+    }
+
     // 1. Total must be exactly 4 hours (240 minutes)
     const totalMinutes = hours.reduce((sum, h) => sum + (timeToMinutes(h.endTime) - timeToMinutes(h.startTime)), 0);
     if (totalMinutes !== 240) {
@@ -937,7 +946,7 @@ const validateNote = async (facultyId, { date, startTime, endTime, text }) => {
   if (!text || !String(text).trim()) return 'Note text is required.';
   if (String(text).length > 500) return 'Note must be 500 characters or fewer.';
 
-  // Weekday of the specific date, timezone-safe. 1=Mon ... 6=Sat (matches Schedule/ConsultationHours); Sunday=0 matches nothing.
+  // Weekday of the specific date, timezone-safe. 0=Sun ... 6=Sat (matches Schedule/ConsultationHours).
   const dayOfWeek = new Date(date + 'T00:00:00Z').getUTCDay();
   const fixed = [
     ...(await Schedule.find({ facultyId, dayOfWeek })),

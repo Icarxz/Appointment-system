@@ -41,6 +41,9 @@ app.use('/api/faculty', facultyRoutes);
 const authRoutes = require('./routes/auth');
 app.use('/api/auth', authRoutes); // This adds the /api/auth prefix
 
+const scheduleImportRoutes = require('./routes/scheduleImport');
+app.use('/api/schedule-import', scheduleImportRoutes); // Faculty Schedule PDF Importer: review and check a draft (Faculty own / Admin)
+
 const analyticsRoutes = require('./routes/analytics');
 app.use('/api/analytics', analyticsRoutes); // Reports & Analytics (Admin/Dean only)
 

@@ -1,4 +1,5 @@
 import { Box, Flex, HStack, Text, useColorModeValue } from '@chakra-ui/react';
+import { visibleDays, isConsultationDay, DAY_SHORT, columnOfDay, dayAtColumn } from '../utils/daySettings';
 
 interface Block { dayOfWeek: number; startTime: string; endTime: string; subject?: string; status?: string }
 export interface Booking { date: string; time: string; duration: number; status: 'APPROVED' | 'COMPLETED' | string }
@@ -8,11 +9,11 @@ interface Props {
   weekStart?: string;
   /** Accepted (APPROVED) and COMPLETED consultations. Pending requests are never passed in. */
   bookings?: Booking[];
+  /** Show a Saturday / Sunday column when this faculty has a class that day. Staff views pass true; students never see weekends. */
+  allowWeekend?: boolean;
 }
 
-// Monday first on screen; the server stores Sunday as 0 and Monday to Saturday as 1-6.
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
+// Columns come from utils/daySettings.ts: Monday to Friday, plus Saturday / Sunday only when allowed and a class exists that day.
 const HOUR_PX = 44;
 const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0); };
 const label = (min: number) => `${((Math.floor(min / 60) + 11) % 12) + 1}${Math.floor(min / 60) >= 12 ? 'PM' : 'AM'}`;
@@ -22,21 +23,24 @@ const dayDate = (weekStart: string, i: number) => new Date(Date.parse(`${weekSta
 const clock = (t: string) => { const [h, m] = t.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}${h >= 12 ? 'PM' : 'AM'}`; };
 
 // Read-only weekly calendar for a faculty member: classes (no classroom, ever), consultation hours and
-// added consultation hours laid out on a Monday-Sunday time grid.
-export default function WeeklyCalendar({ classes, official, added, weekStart, bookings = [] }: Props) {
+// added consultation hours laid out on a Monday-Friday time grid (plus a weekend column when allowed and a class exists).
+export default function WeeklyCalendar({ classes, official, added, weekStart, bookings = [], allowWeekend = false }: Props) {
   const border = useColorModeValue('#dde3ec', '#1e3048');
   const muted = useColorModeValue('#6b7fa0', '#7a93b0');
   const text = useColorModeValue('#0f2240', '#e8f0fe');
+  const DAY_VALUES = visibleDays({ classDays: classes.map(c => c.dayOfWeek), allowWeekend });
+  const DAYS = DAY_VALUES.map(d => DAY_SHORT[d]);
 
   // Accepted and completed consultations of the shown week, as blocks on the same grid
   const booked: Block[] = (weekStart ? bookings : [])
     .map(b => ({ b, i: dayIndex(weekStart as string, b.date) }))
     .filter(x => x.i >= 0 && x.i <= 6)
-    .map(({ b, i }) => ({ dayOfWeek: DAY_VALUES[i], startTime: b.time, endTime: addMin(b.time, b.duration || 60), status: b.status }));
+    .map(({ b, i }) => ({ dayOfWeek: dayAtColumn(i), startTime: b.time, endTime: addMin(b.time, b.duration || 60), status: b.status }));
   const occupied = booked.filter(b => b.status === 'APPROVED');
   const completed = booked.filter(b => b.status === 'COMPLETED');
 
-  const all = [...classes, ...official, ...added, ...booked];
+  const all = [...classes, ...official.filter(b => isConsultationDay(b.dayOfWeek)), ...added.filter(b => isConsultationDay(b.dayOfWeek)), ...booked]
+    .filter(b => DAY_VALUES.includes(b.dayOfWeek));
   const startHour = Math.min(7, ...all.map(b => Math.floor(toMin(b.startTime) / 60)));
   const endHour = Math.max(17, ...all.map(b => Math.ceil(toMin(b.endTime) / 60)));
   const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
@@ -44,8 +48,8 @@ export default function WeeklyCalendar({ classes, official, added, weekStart, bo
 
   const kinds = [
     { items: classes, name: 'Class', bg: 'gray.200', darkBg: 'gray.600', fg: 'gray.800' },
-    { items: official, name: 'Consultation Hours', bg: 'green.200', darkBg: 'green.700', fg: 'green.900' },
-    { items: added, name: 'Added Consultation Hours', bg: 'purple.200', darkBg: 'purple.700', fg: 'purple.900' },
+    { items: official.filter(b => isConsultationDay(b.dayOfWeek)), name: 'Consultation Hours', bg: 'green.200', darkBg: 'green.700', fg: 'green.900' },
+    { items: added.filter(b => isConsultationDay(b.dayOfWeek)), name: 'Added Consultation Hours', bg: 'purple.200', darkBg: 'purple.700', fg: 'purple.900' },
     { items: completed, name: 'Completed', bg: 'blue.200', darkBg: 'blue.700', fg: 'blue.900' },
     { items: occupied, name: 'Occupied', bg: 'red.200', darkBg: 'red.700', fg: 'red.900' },
   ];
@@ -53,7 +57,7 @@ export default function WeeklyCalendar({ classes, official, added, weekStart, bo
 
   return (
     <Box overflowX="auto">
-      <Flex minW="700px" borderWidth="1px" borderColor={border} borderRadius="md" overflow="hidden">
+      <Flex minW={`${48 + DAYS.length * 100}px`} borderWidth="1px" borderColor={border} borderRadius="md" overflow="hidden">
         {/* time gutter */}
         <Box w="48px" flexShrink={0} borderRightWidth="1px" borderColor={border}>
           <Box h="28px" />
@@ -64,7 +68,7 @@ export default function WeeklyCalendar({ classes, official, added, weekStart, bo
         {DAYS.map((day, i) => (
           <Box key={day} flex="1" minW="0" borderRightWidth={i < DAYS.length - 1 ? '1px' : 0} borderColor={border}>
             <Text h="28px" lineHeight="28px" textAlign="center" fontSize="xs" fontWeight="700" color={text} borderBottomWidth="1px" borderColor={border}>
-              {day}{weekStart && <Text as="span" fontWeight="400" color={muted}> {dayDate(weekStart, i)}</Text>}
+              {day}{weekStart && <Text as="span" fontWeight="400" color={muted}> {dayDate(weekStart, columnOfDay(DAY_VALUES[i]))}</Text>}
             </Text>
             <Box position="relative" h={`${total}px`}>
               {hours.map((h, r) => (

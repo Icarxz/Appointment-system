@@ -7,6 +7,7 @@
 // Consultation hours that overlap a class are allowed: the booking calendar already hides those hours.
 
 const { timeToMinutes } = require('./timeMath');
+const { isClassDay } = require('./daySettings');
 
 const FIRST_MINUTE = 7 * 60;   // 7:00 AM
 const LAST_MINUTE = 19 * 60;   // 7:00 PM
@@ -31,7 +32,7 @@ function validateClassBlock(raw, siblings = [], approved = []) {
 
   if (!subject) return { ok: false, error: 'Subject is required.' };
   if (!room) return { ok: false, error: 'Room is required.' };
-  if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) return { ok: false, error: 'Day must be Sunday to Saturday.' };
+  if (!isClassDay(dayOfWeek)) return { ok: false, error: 'Day must be Sunday to Saturday.' };
   if (typeof startTime !== 'string' || typeof endTime !== 'string' || !TIME_RE.test(startTime) || !TIME_RE.test(endTime)) {
     return { ok: false, error: 'Start and end must be times like 09:30.' };
   }

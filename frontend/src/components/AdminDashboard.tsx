@@ -21,6 +21,7 @@ import RequestList from './RequestList';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import WelcomeHeader from './WelcomeHeader';
 import FacultyScheduleModal from './FacultyScheduleModal';
+import ScheduleImportReview from './ScheduleImportReview';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
@@ -137,6 +138,7 @@ export default function AdminDashboard() {
   const [newFacultyName, setNewFacultyName] = useState('');
   const [newAccount, setNewAccount] = useState<{ id: string; role: string } | null>(null); // the account just created, so its class grid can open
 
+  const [reviewOpen, setReviewOpen] = useState(false); // Class Schedules: review an OCR schedule draft (importer preview)
   const [scheduleOf, setScheduleOf] = useState<any | null>(null); // faculty whose schedule is open
   const [emailEdit, setEmailEdit] = useState<any | null>(null); // account being moved to a school email
   const [emailEditValue, setEmailEditValue] = useState('');
@@ -371,6 +373,12 @@ export default function AdminDashboard() {
               <SearchableSelect placeholder="Choose instructor..." value={selectedFacultyId} onChange={setSelectedFacultyId} maxW="360px"
                 options={facultyList.map(f => ({ value: f._id, label: f.name }))} />
             </FormControl>
+            {selectedFacultyId && (
+              <HStack mb={3} justify="flex-end">
+                <ChakraButton size="sm" variant="outline" onClick={() => setReviewOpen(true)} title="Preview of the schedule importer: check an OCR draft. Nothing is saved.">Review schedule draft (preview)</ChakraButton>
+                <ScheduleImportReview key={selectedFacultyId} facultyId={selectedFacultyId} facultyName={facultyList.find(f => f._id === selectedFacultyId)?.name || ''} isOpen={reviewOpen} onClose={() => setReviewOpen(false)} />
+              </HStack>
+            )}
             {selectedFacultyId
               ? <ClassGridEditor key={selectedFacultyId} facultyId={selectedFacultyId} facultyName={facultyList.find(f => f._id === selectedFacultyId)?.name || ''} />
               : <Text color={mutedText}>Choose an instructor to see and edit their classes.</Text>}

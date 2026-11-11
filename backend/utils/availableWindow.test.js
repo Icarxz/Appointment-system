@@ -55,11 +55,13 @@ test('back-to-back: an approved appointment ending at the start leaves the rest 
   assert.deepStrictEqual([w.start, w.end, w.minutes], ['08:30', '17:00', 510]);
 });
 
-test('Saturday has no vacant window: only consultation hours count', () => {
-  const official = [{ dayOfWeek: 6, startTime: '09:00', endTime: '11:00' }];
-  assert.strictEqual(availableWindow({ ...none, official, date: SAT, time: '09:00' }).minutes, 120);
-  assert.strictEqual(availableWindow({ ...none, official, date: SAT, time: '10:30' }).minutes, 30);
-  assert.strictEqual(availableWindow({ ...none, official, date: SAT, time: '14:00' }).minutes, 0);
+test('Saturday and Sunday have no bookable time at all, even with old weekend consultation rows', () => {
+  const sat = [{ dayOfWeek: 6, startTime: '09:00', endTime: '11:00' }];
+  const sun = [{ dayOfWeek: 0, startTime: '09:00', endTime: '11:00' }];
+  assert.strictEqual(availableWindow({ ...none, official: sat, date: SAT, time: '09:00' }).minutes, 0);
+  assert.strictEqual(availableWindow({ ...none, added: sat, date: SAT, time: '10:30' }).minutes, 0);
+  assert.strictEqual(availableWindow({ ...none, official: sat, date: SAT, time: '14:00' }).minutes, 0);
+  assert.strictEqual(availableWindow({ ...none, official: sun, date: '2026-11-08', time: '09:00' }).minutes, 0);
 });
 
 test('consultation hours that run past 5 PM still count', () => {
