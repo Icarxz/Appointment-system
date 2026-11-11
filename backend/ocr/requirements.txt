@@ -1,0 +1,6 @@
+numpy
+opencv-python-headless
+pytesseract
+Pillow
+# optional, faster/cleaner PDF rendering than the pdftoppm fallback:
+# pymupdf
