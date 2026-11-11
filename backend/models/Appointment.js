@@ -16,6 +16,7 @@ const AppointmentSchema = new mongoose.Schema({
   missedAt: { type: Date },                    // when it was marked MISSED (STUDENT) / MISSED (FACULTY)
   reminderSent: { type: Boolean, default: false }, // has the 1-hour-before reminder already been sent to faculty?
   studentReminderSent: { type: Boolean, default: false }, // ...and to the student (in-app + email)?
+  completionPromptSent: { type: Boolean, default: false }, // has the "confirm this consultation" message (15 minutes after) been sent to both people?
 
   // An appeal after a missed or cancelled consultation: students appeal to the faculty member,
   // faculty appeal to the Dean. Appeals are a record of the reason only (no review). Older appeals may still carry PENDING/ACCEPTED/REJECTED.

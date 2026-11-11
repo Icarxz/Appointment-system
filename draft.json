@@ -1,0 +1,335 @@
+﻿{
+  "parserVersion": "vaa-fm-061/0.1.0",
+  "template": "VAA-FM-061",
+  "status": "DRAFT_NEEDS_REVIEW",
+  "source": {
+    "sha256": "ed507d80911f86143d7757d5260e480de8dd2e8459079f9d0a16a637ed0f2807",
+    "pages": 1,
+    "dpi": 300,
+    "renderer": "pymupdf",
+    "deskewDegrees": 0.095
+  },
+  "metadata": {
+    "formId": "VAA-FM-061",
+    "term": "Second Semester",
+    "academicYear": "2025-2026",
+    "effectivityDate": "2026-03-09",
+    "facultyName": null,
+    "facultyNameNeedsReview": true,
+    "headerConfidence": 89.7
+  },
+  "workload": {
+    "lectureHours": 6.0,
+    "laboratoryHours": 9.0,
+    "totalHours": 28.0,
+    "preparations": 2.0,
+    "overload": 3.0,
+    "extractedTeachingHours": 15.0,
+    "reconciles": true
+  },
+  "classes": [
+    {
+      "dayOfWeek": 1,
+      "startTime": "11:30",
+      "endTime": "12:30",
+      "confidence": 85.5,
+      "bbox": [
+        358,
+        1277,
+        964,
+        1372
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 8 - Platform Technologies",
+      "section": "BSIT 3-D",
+      "room": "IICT 306",
+      "rawText": "INFOT 8 - Platform Technologies BSIT 3-D | lICT 306",
+      "subject": "INFOT 8 - Platform Technologies (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "13:30",
+      "endTime": "14:30",
+      "confidence": 91.2,
+      "bbox": [
+        358,
+        1468,
+        964,
+        1564
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 8 - Platform Technologies",
+      "section": "BSIT 3-B",
+      "room": "IICT 307",
+      "rawText": "INFOT 8 - Platform Technologies BSIT 3-B | IICT 307",
+      "subject": "INFOT 8 - Platform Technologies (BSIT 3-B)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "15:30",
+      "endTime": "16:30",
+      "confidence": 87.3,
+      "bbox": [
+        358,
+        1660,
+        964,
+        1756
+      ],
+      "flags": [],
+      "courseTitle": "INFOE 4 (MMT) - Videography in Multimedia",
+      "section": "BSIT 3-D",
+      "room": "IICT 304",
+      "rawText": "INFOE 4 (MMT) - Videography in Multimedia BSIT 3-D | IICT 304",
+      "subject": "INFOE 4 (MMT) - Videography in Multimedia (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "14:30",
+      "endTime": "16:00",
+      "confidence": 89.7,
+      "bbox": [
+        964,
+        1564,
+        1595,
+        1708
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 8 - Platform Technologies",
+      "section": "BSIT 3-D",
+      "room": "IICT 307",
+      "rawText": "INFOT 8 - Platform Technologies BSIT 3-D | lICT 307",
+      "subject": "INFOT 8 - Platform Technologies (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 84.5,
+      "bbox": [
+        964,
+        1708,
+        1595,
+        1803
+      ],
+      "flags": [],
+      "courseTitle": "INFOE 4 (MMT) - Videography in Multimedia",
+      "section": "BSIT 3-D",
+      "room": "IICT 304",
+      "rawText": "INFOE 4 (MMT) - Videography in Multimedia BSIT 3-D | IICT 304",
+      "subject": "INFOE 4 (MMT) - Videography in Multimedia (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "11:00",
+      "endTime": "12:00",
+      "confidence": 90.3,
+      "bbox": [
+        1595,
+        1229,
+        2186,
+        1324
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 8 - Platform Technologies",
+      "section": "BSIT 3-D",
+      "room": "IICT 308",
+      "rawText": "INFOT 8 - Platform Technologies BSIT 3-D | lICT 308",
+      "subject": "INFOT 8 - Platform Technologies (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "13:00",
+      "endTime": "14:00",
+      "confidence": 91.6,
+      "bbox": [
+        1595,
+        1420,
+        2186,
+        1516
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 8 - Platform Technologies",
+      "section": "BSIT 3-B",
+      "room": "IICT 307",
+      "rawText": "INFOT 8 - Platform Technologies BSIT 3-B | IICT 307",
+      "subject": "INFOT 8 - Platform Technologies (BSIT 3-B)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "14:00",
+      "endTime": "15:00",
+      "confidence": 90.7,
+      "bbox": [
+        1595,
+        1516,
+        2186,
+        1612
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 8 - Platform Technologies",
+      "section": "BSIT 3-B",
+      "room": "IICT 108",
+      "rawText": "INFOT 8 - Platform Technologies BSIT 3-B | IICT 108",
+      "subject": "INFOT 8 - Platform Technologies (BSIT 3-B)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 85.5,
+      "bbox": [
+        1595,
+        1708,
+        2186,
+        1803
+      ],
+      "flags": [],
+      "courseTitle": "INFOE 4 (MMT) ~ Videography in Multimedia",
+      "section": "BSIT 3-D",
+      "room": "IICT 304",
+      "rawText": "INFOE 4 (MMT) ~ Videography in Multimedia BSIT 3-D | lICT 304",
+      "subject": "INFOE 4 (MMT) ~ Videography in Multimedia (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "14:30",
+      "endTime": "16:00",
+      "confidence": 89.4,
+      "bbox": [
+        2186,
+        1564,
+        2792,
+        1708
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 8 - Platform Technologies",
+      "section": "BSIT 3-D",
+      "room": "IICT 307",
+      "rawText": "INFOT 8 - Platform Technologies BSIT 3-D | lICT 307",
+      "subject": "INFOT 8 - Platform Technologies (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 90.6,
+      "bbox": [
+        2186,
+        1708,
+        2792,
+        1803
+      ],
+      "flags": [],
+      "courseTitle": "INFOE 4 (MMT) - Videography in Multimedia",
+      "section": "BSIT 3-D",
+      "room": "IICT 304",
+      "rawText": "INFOE 4 (MMT) - Videography in Multimedia BSIT 3-D | IICT 304",
+      "subject": "INFOE 4 (MMT) - Videography in Multimedia (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "13:00",
+      "endTime": "14:00",
+      "confidence": 88.6,
+      "bbox": [
+        2792,
+        1420,
+        3408,
+        1516
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 8 - Platform Technologies",
+      "section": "BSIT 3-B",
+      "room": "IICT 307",
+      "rawText": "INFOT 8 - Platform Technologies BSIT 3-B | IICT 307",
+      "subject": "INFOT 8 - Platform Technologies (BSIT 3-B)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "14:00",
+      "endTime": "15:00",
+      "confidence": 88.3,
+      "bbox": [
+        2792,
+        1516,
+        3408,
+        1612
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 8 - Platform Technologies",
+      "section": "BSIT 3-B",
+      "room": "IICT 108",
+      "rawText": "INFOT 8 - Platform Technologies BSIT 3-B | lICT 108",
+      "subject": "INFOT 8 - Platform Technologies (BSIT 3-B)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 86.5,
+      "bbox": [
+        2792,
+        1708,
+        3408,
+        1803
+      ],
+      "flags": [],
+      "courseTitle": "INFOE 4 (MMT) - Videography in Multimedia",
+      "section": "BSIT 3-D",
+      "room": "IICT 304",
+      "rawText": "INFOE 4 (MMT) - Videography in Multimedia BSIT 3-D | IICT 304",
+      "subject": "INFOE 4 (MMT) - Videography in Multimedia (BSIT 3-D)",
+      "needsReview": false
+    }
+  ],
+  "consultationHours": [
+    {
+      "dayOfWeek": 2,
+      "startTime": "09:00",
+      "endTime": "11:00",
+      "confidence": 95.0,
+      "bbox": [
+        964,
+        1038,
+        1595,
+        1229
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "09:00",
+      "endTime": "11:00",
+      "confidence": 95.5,
+      "bbox": [
+        2186,
+        1038,
+        2792,
+        1229
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "metadata-missing",
+      "field": "facultyName",
+      "message": "facultyName was not read from the document; enter or confirm it manually"
+    }
+  ]
+}
