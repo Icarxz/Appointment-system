@@ -11,13 +11,14 @@ const API = import.meta.env.VITE_API_URL;
 
 // Phase 4 of the Faculty Schedule PDF Importer: REVIEW and CHECK a schedule draft. It never changes a schedule: a draft that passes is only
 // "ready to confirm". Activation, PDF upload and the three entry points come in later phases.
-// For now the draft is the JSON that backend/ocr/schedule_extractor.py writes (loaded from a file) so this screen can be tried with real output.
+// For now the draft is the JSON that ocr/schedule_ocr.py writes (loaded from a file) so this screen can be tried with real output.
 
 interface Row { id: string; dayOfWeek: number; startTime: string; endTime: string; needsReview: boolean; reviewReasons: string[]; rawText?: string;
   subject?: string; section?: string; room?: string; label?: string }
 interface Issue { code: string; message: string; ref: { type: 'class' | 'consult'; id: string } | null }
-interface Report { ok: boolean; errors: Issue[]; warnings: Issue[]; summary: { weeklyConsultationMinutes: number } }
-interface Parsed { document: { term: string; academicYear: string; effectivityDate: string; facultyNameHint: string };
+interface Report { ok: boolean; errors: Issue[]; warnings: Issue[]; summary: { weeklyConsultationMinutes: number }; identity?: { status: 'match' | 'mismatch' | 'unreadable'; read: string } }
+interface Parsed { metadata: { term: string; academicYear: string; effectivityDate: string; facultyName: string; facultyNameConfidence: number | null; facultyNameNeedsReview: boolean };
+  workload: { lectureHours: number | null; laboratoryHours: number | null };
   classes: Row[]; consultationHours: Row[]; warnings: Issue[]; excludedWeekendConsultations: number }
 
 // 07:00 ... 19:00 in 30-minute steps: a list to pick from, so a misaligned time cannot be typed
@@ -65,7 +66,7 @@ export default function ScheduleImportReview({ facultyId, facultyName, isOpen, o
     setBusy(true);
     try {
       const res = await authFetch(`${API}/api/schedule-import/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ facultyId, classes, consultationHours: hours, identityConfirmed: identity }) });
+        body: JSON.stringify({ facultyId, classes, consultationHours: hours, metadata: parsed?.metadata, workload: parsed?.workload, identityConfirmed: identity }) });
       const data = await res.json();
       if (!res.ok) { toast({ title: 'Could not check the schedule', description: data.error, status: 'error', duration: 5000 }); return; }
       setReport(data);
@@ -116,7 +117,7 @@ export default function ScheduleImportReview({ facultyId, facultyName, isOpen, o
           ) : (
             <VStack align="stretch" spacing={5}>
               <Box fontSize="sm" color={muted}>
-                {[parsed.document.term, parsed.document.academicYear && `AY ${parsed.document.academicYear}`, parsed.document.effectivityDate && `effective ${parsed.document.effectivityDate}`].filter(Boolean).join(' · ') || 'Term, year and effectivity date were not read: enter them when confirming.'}
+                {[parsed.metadata.term, parsed.metadata.academicYear && `AY ${parsed.metadata.academicYear}`, parsed.metadata.effectivityDate && `effective ${parsed.metadata.effectivityDate}`].filter(Boolean).join(' · ') || 'Term, year and effectivity date were not read: enter them when confirming.'}
               </Box>
               {parsed.warnings.map((w, i) => <Alert key={i} status="warning" borderRadius="md" py={2}><AlertIcon /><Text fontSize="sm">{w.message}</Text></Alert>)}
 
@@ -168,10 +169,20 @@ export default function ScheduleImportReview({ facultyId, facultyName, isOpen, o
               </Box>
 
               <Box borderWidth="1px" borderRadius="md" p={3}>
-                <Checkbox isChecked={identity} onChange={e => { setIdentity(e.target.checked); setReport(null); }}>
-                  This document belongs to <b>{facultyName}</b>
-                </Checkbox>
-                <Text fontSize="xs" color={muted} mt={1} ml={6}>The name on the form is covered by a signature, so it cannot be read reliably{parsed.document.facultyNameHint ? ` (fragment read: "${parsed.document.facultyNameHint}")` : ''}. Compare it with the scan yourself.</Text>
+                {report?.identity?.status === 'mismatch' ? (
+                  <Text fontSize="sm" color="red.500" fontWeight={600}>The name printed on the sheet ("{report.identity.read}") does not match {facultyName}. Choose the right faculty account or a different document.</Text>
+                ) : report?.identity?.status === 'match' ? (
+                  <Text fontSize="sm" color="green.500" fontWeight={600}>The name printed on the sheet matches {facultyName}.</Text>
+                ) : (
+                  <>
+                    <Checkbox isChecked={identity} onChange={e => { setIdentity(e.target.checked); setReport(null); }}>
+                      This document belongs to <b>{facultyName}</b>
+                    </Checkbox>
+                    <Text fontSize="xs" color={muted} mt={1} ml={6}>
+                      The printed name could not be read reliably{parsed.metadata.facultyName ? ` (read: "${parsed.metadata.facultyName}"${parsed.metadata.facultyNameConfidence != null ? `, ${Math.round(parsed.metadata.facultyNameConfidence)}% sure` : ''})` : ''}, often because a signature covers it. Compare the scan with the selected account yourself.
+                    </Text>
+                  </>
+                )}
               </Box>
 
               {report && (

@@ -1,35 +1,43 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { fromOcrDraft, validateDraft, toScheduleRecord, subjectWithSection } = require('./scheduleDraft');
+const fs = require('fs');
+const path = require('path');
+const { fromOcrDraft, validateDraft, toScheduleRecord, subjectWithSection, compareNames, identityOf, importAccess } = require('./scheduleDraft');
 const { DEMO_FACULTY_SCHEDULES } = require('./demoSchedules');
 
-// A draft shaped like backend/ocr/schedule_extractor.py output, built from the Percy demo schedule (the data phase 3 matched).
+// The REAL output of ocr/schedule_ocr.py for the Percy sheet (committed with phase 3). On it the signature covers the printed name,
+// so the name is a garbled read at about 64% confidence: exactly the case the identity check has to handle.
+const FIXTURE = path.join(__dirname, '..', '..', 'ocr', 'fixtures', 'percy.extracted.json');
+const draftOf = (over = {}) => ({ ...JSON.parse(fs.readFileSync(FIXTURE, 'utf8')), ...over });
 const percy = DEMO_FACULTY_SCHEDULES.find(f => f.key === 'percy');
-const splitSection = (subject) => { const m = subject.match(/^(.*) \(([^)]+)\)$/); return m ? { subject: m[1], section: m[2] } : { subject, section: '' }; };
-const draftOf = (over = {}) => ({
-  parserVersion: 'test',
-  document: { term: '2nd Semester', academicYear: '2025-2026', effectivityDate: 'March 9, 2026', facultyNameHint: 'Spence' },
-  classes: percy.classes.map(c => ({ dayOfWeek: c.dayOfWeek, startTime: c.startTime, endTime: c.endTime, room: c.room, ...splitSection(c.subject), confidence: 92, needsReview: false, reviewReasons: [], rawText: 'x' })),
-  consultationHours: percy.hours.map(h => ({ ...h, label: 'CONSULTATION HOURS', confidence: 95, needsReview: false, reviewReasons: [] })),
-  warnings: [{ code: 'FACULTY_IDENTITY', message: 'covered by a signature' }],
-  status: 'NEEDS_REVIEW', ...over,
-});
-const rows = (over) => { const d = fromOcrDraft(draftOf(over)); assert.ok(!d.error, d.error); return d; };
-const check = (d, o) => validateDraft(d, { identityConfirmed: true, ...o });
+const rows = (over, opts) => { const d = fromOcrDraft(draftOf(over), opts); assert.ok(!d.error, d.error); return d; };
+const check = (d, o) => validateDraft(d, { identityConfirmed: true, targetName: 'Carl Spence Percy', ...o });
 const codes = (r) => r.errors.map(e => e.code);
+const trustedName = (name) => ({ metadata: { ...draftOf().metadata, facultyName: name, facultyNameConfidence: 96, facultyNameNeedsReview: false } });
 
 test('fromOcrDraft: rejects things that are not a draft', () => {
   for (const bad of [null, 'x', {}, { classes: [] }, { classes: {}, consultationHours: [] }]) assert.ok(fromOcrDraft(bad).error, JSON.stringify(bad));
-  const many = { classes: Array.from({ length: 201 }, () => ({})), consultationHours: [] };
-  assert.ok(fromOcrDraft(many).error);
+  assert.ok(fromOcrDraft({ classes: Array.from({ length: 201 }, () => ({})), consultationHours: [] }).error);
+  assert.ok(fromOcrDraft({ status: 'FAILED', classes: [], consultationHours: [] }).error);
 });
 
-test('fromOcrDraft: the Percy draft becomes 14 classes + 2 consultation blocks with stable ids', () => {
+test('fromOcrDraft: the real Percy draft becomes 14 classes + 2 consultation blocks with stable ids and its sheet details', () => {
   const d = rows();
   assert.strictEqual(d.classes.length, 14);
   assert.strictEqual(d.consultationHours.length, 2);
   assert.deepStrictEqual(d.classes.slice(0, 2).map(c => c.id), ['c1', 'c2']);
-  assert.strictEqual(d.document.academicYear, '2025-2026');
+  assert.strictEqual(d.metadata.academicYear, '2025-2026');
+  assert.strictEqual(d.metadata.effectivityDate, '2026-03-09');
+  assert.strictEqual(d.workload.lectureHours, 6);
+});
+
+test('fromOcrDraft: the OCR flags become readable review reasons', () => {
+  const flagged = rows().classes.filter(c => c.flags.includes('room-prefix-check'));
+  assert.ok(flagged.length > 0);
+  assert.ok(flagged.every(c => c.needsReview && /IICT/.test(c.reviewReasons.join(' '))));
+  const low = rows({ classes: [{ dayOfWeek: 1, startTime: '08:00', endTime: '09:00', courseTitle: 'X', section: 'S', room: 'R', confidence: 40, flags: [] }] }).classes[0];
+  assert.deepStrictEqual(low.flags, ['low-confidence']);
+  assert.strictEqual(low.needsReview, true);
 });
 
 test('fromOcrDraft: weekend consultations are excluded with a warning; weekend classes are kept', () => {
@@ -37,25 +45,64 @@ test('fromOcrDraft: weekend consultations are excluded with a warning; weekend c
     classes: [{ dayOfWeek: 6, startTime: '08:00', endTime: '10:00', subject: 'Sat class', section: 'BSIT 1-A', room: 'R1' }],
     consultationHours: [{ dayOfWeek: 6, startTime: '09:00', endTime: '11:00' }, { dayOfWeek: 0, startTime: '09:00', endTime: '10:00' }, { dayOfWeek: 2, startTime: '09:00', endTime: '11:00' }],
   });
-  assert.strictEqual(d.classes.length, 1);
   assert.strictEqual(d.classes[0].dayOfWeek, 6);
   assert.deepStrictEqual(d.consultationHours.map(h => h.dayOfWeek), [2]);
   assert.strictEqual(d.excludedWeekendConsultations, 2);
   assert.ok(d.warnings.some(w => w.code === 'WEEKEND_CONSULTATION_EXCLUDED'));
 });
 
-test('fromOcrDraft: the OCR faculty-identity warning is not copied (it becomes a blocking check instead)', () => {
-  assert.ok(!rows().warnings.some(w => w.code === 'FACULTY_IDENTITY'));
+test('fromOcrDraft: the OCR name warning is not copied (the identity check replaces it)', () => {
+  assert.ok(!rows().warnings.some(w => w.code === 'faculty-name-needs-review'));
 });
 
-test('a clean Percy draft passes once the identity is confirmed, and not before', () => {
+test('identity: a garbled read (the real Percy sheet) is UNREADABLE, not a mismatch, and a person can confirm it', () => {
   const d = rows();
-  const ok = check(d);
-  assert.deepStrictEqual(ok.errors, []);
-  assert.strictEqual(ok.ok, true);
-  assert.strictEqual(ok.summary.weeklyConsultationMinutes, 240);
-  const no = validateDraft(d, { identityConfirmed: false });
+  assert.strictEqual(identityOf(d.metadata, 'Carl Spence Percy').status, 'unreadable');
+  const no = validateDraft(d, { identityConfirmed: false, targetName: 'Carl Spence Percy' });
   assert.deepStrictEqual(codes(no), ['IDENTITY_NOT_CONFIRMED']);
+  const yes = check(d);
+  assert.deepStrictEqual(yes.errors, []);
+  assert.strictEqual(yes.ok, true);
+  assert.strictEqual(yes.summary.weeklyConsultationMinutes, 240);
+});
+
+test('identity: a clear read of the right name passes without a checkbox', () => {
+  const d = rows(trustedName('CARL SPENCE PERCY MIT'));
+  const r = validateDraft(d, { identityConfirmed: false, targetName: 'Carl Spence Percy' });
+  assert.strictEqual(r.identity.status, 'match');
+  assert.deepStrictEqual(r.errors, []);
+});
+
+test('identity: a clear read of ANOTHER name is a hard block that the checkbox cannot override', () => {
+  const d = rows(trustedName('MARY ANNE EDJAN'));
+  const r = validateDraft(d, { identityConfirmed: true, targetName: 'Carl Spence Percy' });
+  assert.strictEqual(r.identity.status, 'mismatch');
+  assert.ok(codes(r).includes('IDENTITY_MISMATCH'));
+  assert.strictEqual(r.ok, false);
+});
+
+test('identity: below 90% confidence, or flagged by the OCR, is never trusted', () => {
+  const md = draftOf().metadata;
+  assert.strictEqual(identityOf({ ...md, facultyName: 'CARL SPENCE PERCY', facultyNameConfidence: 89, facultyNameNeedsReview: false }, 'Carl Spence Percy').status, 'unreadable');
+  assert.strictEqual(identityOf({ ...md, facultyName: 'CARL SPENCE PERCY', facultyNameConfidence: 99, facultyNameNeedsReview: true }, 'Carl Spence Percy').status, 'unreadable');
+  assert.strictEqual(identityOf({ ...md, facultyName: '', facultyNameConfidence: 99, facultyNameNeedsReview: false }, 'Carl Spence Percy').status, 'unreadable');
+});
+
+test('compareNames: titles, case and middle initials are ignored; a different name is a mismatch', () => {
+  assert.strictEqual(compareNames('CARL SPENCE PERCY MIT', 'Percy, Carl Spence D.'), 'match');
+  assert.strictEqual(compareNames('Carl Percy', 'Carl Spence Percy'), 'match');
+  assert.strictEqual(compareNames('Mary Anne Edjan', 'Carl Spence Percy'), 'mismatch');
+  assert.strictEqual(compareNames('', 'Carl Spence Percy'), 'unknown');
+});
+
+test('metadata that was not read is a warning; a workload that does not add up is a warning', () => {
+  const d = rows({ metadata: { ...draftOf().metadata, term: '', effectivityDate: '' } });
+  const r = check(d);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.warnings.filter(w => w.code === 'METADATA_MISSING').length, 2);
+  const off = check(rows({ workload: { lectureHours: 6, laboratoryHours: 4 } }));
+  assert.ok(off.warnings.some(w => w.code === 'WORKLOAD_MISMATCH'));
+  assert.ok(!check(rows()).warnings.some(w => w.code === 'WORKLOAD_MISMATCH')); // the real sheet reconciles: 6 + 9 = 15
 });
 
 test('classes: overlap, 7 PM end, 30-minute grid and missing room are all blocking', () => {
@@ -119,14 +166,12 @@ test('an approved future consultation blocks a class; a pending one only warns',
   assert.ok(pending.warnings.some(w => w.code === 'PENDING_OVERLAP'));
 });
 
-test('rows the OCR flagged become warnings, not errors', () => {
-  const d = rows();
-  d.classes[0].needsReview = true; d.classes[0].reviewReasons = ['Low OCR confidence (41).'];
-  const r = check(d);
+test('rows the OCR flagged become warnings, not errors, and point at their row', () => {
+  const r = check(rows());
   assert.strictEqual(r.ok, true);
   const w = r.warnings.find(x => x.code === 'REVIEW_ROW');
-  assert.deepStrictEqual(w.ref, { type: 'class', id: 'c1' });
-  assert.match(w.message, /Low OCR confidence/);
+  assert.ok(w && w.ref.type === 'class');
+  assert.match(w.message, /IICT/);
 });
 
 test('toScheduleRecord: section is folded into the subject once, like the demo schedules', () => {
@@ -137,13 +182,22 @@ test('toScheduleRecord: section is folded into the subject once, like the demo s
   assert.deepStrictEqual(rec, { dayOfWeek: 2, startTime: '07:00', endTime: '08:30', subject: 'LIS 6 (BLIS 2-A)', room: 'New Library' });
 });
 
-test('round trip: the Percy draft converts to records equal to the demo schedule', () => {
-  const recs = rows().classes.map(toScheduleRecord);
-  assert.deepStrictEqual(recs, percy.classes.map(c => ({ dayOfWeek: c.dayOfWeek, startTime: c.startTime, endTime: c.endTime, subject: c.subject, room: c.room })));
+test('round trip: the real Percy draft equals the demo schedule, and every difference is a row the OCR flagged', () => {
+  const d = rows();
+  const demo = percy.classes.map(c => ({ dayOfWeek: c.dayOfWeek, startTime: c.startTime, endTime: c.endTime, subject: c.subject, room: c.room }));
+  const got = d.classes.map(toScheduleRecord);
+  assert.strictEqual(got.length, demo.length);
+  got.forEach((rec, i) => {
+    const { room: _r1, ...restGot } = rec, { room: _r2, ...restDemo } = demo[i];
+    assert.deepStrictEqual(restGot, restDemo);                                   // day, times and subject always agree
+    if (rec.room !== demo[i].room) {                                             // the known "IICT" read as "ICT" misread...
+      assert.strictEqual(rec.room.replace(/^ICT/, 'IICT'), demo[i].room);
+      assert.ok(d.classes[i].flags.includes('room-prefix-check'), `row ${i} differs from the demo and must be flagged`); // ...is never silent
+    }
+  });
 });
 
 test('importAccess: faculty only for themselves, admin for anyone, dean and student never', () => {
-  const { importAccess } = require('./scheduleDraft');
   assert.strictEqual(importAccess({ role: 'FACULTY', userId: 'f1' }, 'f1'), 'self');
   assert.strictEqual(importAccess({ role: 'FACULTY', userId: 'f1' }, 'f2'), null);
   assert.strictEqual(importAccess({ role: 'ADMIN', userId: 'a1' }, 'f2'), 'admin');
