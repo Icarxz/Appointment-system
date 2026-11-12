@@ -1,6 +1,6 @@
 # Faculty Schedule PDF Importer: status
 
-Last updated: 2026-11-12, after Phase 5 (PR #63, open, not merged). Read this before touching the importer.
+Last updated: 2026-11-12 (afternoon), after Phase 5 (PR #63, open, not merged) and the first local try-out. Read this before touching the importer.
 
 ## What the importer is for
 A Faculty member or an Admin uploads a scanned **Faculty Individual Load (VAA-FM-061)** PDF. The system reads it (OCR), shows an
@@ -57,11 +57,14 @@ and warnings. Real fixture: `ocr/fixtures/percy.extracted.json` (the scanned PDF
 - Admin-only fallback "load a draft JSON instead" stays, because OCR hosting is undecided (below).
 
 ### Phase 5 test results
-- 221 backend tests pass (new: `pdfUpload.test.js`, `ocrRunner.test.js`, a FAILED-read test in `scheduleDraft.test.js`); frontend build clean.
+- 222 backend tests pass (new: `pdfUpload.test.js`, `ocrRunner.test.js`, a FAILED-read test in `scheduleDraft.test.js`); frontend build clean.
 - HTTP check of `/preview`: Admin and own-Faculty 200; other Faculty 403; Dean 403; unknown faculty 404; missing id 400; non-PDF 400;
   real Python OCR on a non-form PDF 422 ("could not be read as a Faculty Individual Load form"); missing Python 503 `OCR_UNAVAILABLE`.
 - Browser check of the upload step: wrong file type, 422 and 503 messages, rows loaded from a PDF response, JSON fallback shown to Admin only.
 - NOT tested: a real scan uploaded end-to-end (the Percy PDF is not in the repo). Do this once after merge, on a machine with the OCR tools.
+- First local try-out (user's Windows machine, Percy PDF): the upload reached the OCR, which failed because **Tesseract is not installed** there.
+  Found and fixed (commit a612ac3): a missing OCR tool was reported as "this PDF could not be read"; it is now a 503 "schedule reader is not
+  fully installed on this server". Also, choosing a PDF in the admin JSON-draft box now points to the PDF upload box.
 - Fixed on the way: a failed OCR read used to report "not a schedule draft"; it now says the PDF was not recognised.
 
 ## Next: Phase 6 (confirm and activate), not started
@@ -69,6 +72,12 @@ First change to real data, so the riskiest phase. To settle in a design note bef
 the confirmed rows, previous schedule snapshot), effectivity date, atomic replacement of classes + official consultation hours (all or
 nothing), what happens to already-APPROVED/PENDING appointments that the new schedule conflicts with, undo/rollback, and an audit
 history screen. Re-validate on the server at confirm time (never trust the browser's "ready" state).
+
+## Next step for a real end-to-end test (Windows)
+1. Install Tesseract (UB Mannheim build) and add `C:\Program Files\Tesseract-OCR` to PATH; check `tesseract --version` in a NEW PowerShell.
+2. `pip install pymupdf` (or install poppler) for PDF rendering; keep `opencv-python numpy pytesseract` installed.
+3. Restart the backend; upload the Percy PDF in the top box. Expected: name needs confirmation (signature covers it), 14 classes, 2 consultation
+   blocks (4 h), one warning for the `ICT 108` room. Not yet verified on Windows.
 
 ## Open decisions (need a human)
 1. **Where does OCR run?** It needs Python, OpenCV, Tesseract and poppler. Most free Node hosts do not have them. Options: a small
