@@ -5,6 +5,7 @@ const startStatusUpdater = require('./jobs/statusUpdater');
 const startConsultationReminder = require('./jobs/consultationReminder');
 const startMissedAppointments = require('./jobs/missedAppointments');
 const startPendingExpiry = require('./jobs/pendingExpiry');
+const startScheduleImportActivation = require('./jobs/scheduleImportActivation');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -56,6 +57,7 @@ mongoose.connect(process.env.MONGO_URI)
     startConsultationReminder();
     startMissedAppointments();
     startPendingExpiry();
+    startScheduleImportActivation();
 
     // Say plainly at startup whether email works (it never blocks or stops the server).
     require('./utils/mailer').logMailerStatus().catch(err => console.error('[email] status check failed:', err.message));

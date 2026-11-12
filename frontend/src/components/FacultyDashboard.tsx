@@ -1008,8 +1008,8 @@ const saveConsultationHours = async () => {
 
               {userId && (
                 <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "flex-end" }}>
-                  <button className="touch-target" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF and review it. Nothing is saved yet." style={{ ...btnBase, padding: "8px 14px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "12px" }}>Import Schedule PDF</button>
-                  <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} />
+                  <button className="touch-target" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule." style={{ ...btnBase, padding: "8px 14px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "12px" }}>Import Schedule PDF</button>
+                  <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} onApplied={fetchData} />
                 </div>
               )}
 
