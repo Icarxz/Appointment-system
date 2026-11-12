@@ -19,6 +19,8 @@ test('fromOcrDraft: rejects things that are not a draft', () => {
   for (const bad of [null, 'x', {}, { classes: [] }, { classes: {}, consultationHours: [] }]) assert.ok(fromOcrDraft(bad).error, JSON.stringify(bad));
   assert.ok(fromOcrDraft({ classes: Array.from({ length: 201 }, () => ({})), consultationHours: [] }).error);
   assert.ok(fromOcrDraft({ status: 'FAILED', classes: [], consultationHours: [] }).error);
+  // the real OCR sends FAILED with no row lists at all: the message must say the PDF was not recognised, not complain about the shape
+  assert.match(fromOcrDraft({ status: 'FAILED', error: 'template not recognised' }).error, /could not be read as a Faculty Individual Load/);
 });
 
 test('fromOcrDraft: the real Percy draft becomes 14 classes + 2 consultation blocks with stable ids and its sheet details', () => {

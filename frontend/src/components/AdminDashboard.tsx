@@ -21,7 +21,7 @@ import RequestList from './RequestList';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import WelcomeHeader from './WelcomeHeader';
 import FacultyScheduleModal from './FacultyScheduleModal';
-import ScheduleImportReview from './ScheduleImportReview';
+import SchedulePdfImporter from './SchedulePdfImporter';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
@@ -138,6 +138,7 @@ export default function AdminDashboard() {
   const [newFacultyName, setNewFacultyName] = useState('');
   const [newAccount, setNewAccount] = useState<{ id: string; role: string } | null>(null); // the account just created, so its class grid can open
 
+  const [provisionImportOpen, setProvisionImportOpen] = useState(false); // Provision Account: import a schedule PDF for the account just created
   const [reviewOpen, setReviewOpen] = useState(false); // Class Schedules: review an OCR schedule draft (importer preview)
   const [scheduleOf, setScheduleOf] = useState<any | null>(null); // faculty whose schedule is open
   const [emailEdit, setEmailEdit] = useState<any | null>(null); // account being moved to a school email
@@ -375,8 +376,8 @@ export default function AdminDashboard() {
             </FormControl>
             {selectedFacultyId && (
               <HStack mb={3} justify="flex-end">
-                <ChakraButton size="sm" variant="outline" onClick={() => setReviewOpen(true)} title="Preview of the schedule importer: check an OCR draft. Nothing is saved.">Review schedule draft (preview)</ChakraButton>
-                <ScheduleImportReview key={selectedFacultyId} facultyId={selectedFacultyId} facultyName={facultyList.find(f => f._id === selectedFacultyId)?.name || ''} isOpen={reviewOpen} onClose={() => setReviewOpen(false)} />
+                <ChakraButton size="sm" variant="outline" onClick={() => setReviewOpen(true)} title="Upload a scanned Faculty Load PDF and review it. Nothing is saved yet.">Import Schedule PDF</ChakraButton>
+                <SchedulePdfImporter key={selectedFacultyId} mode="admin" facultyId={selectedFacultyId} facultyName={facultyList.find(f => f._id === selectedFacultyId)?.name || ''} isOpen={reviewOpen} onClose={() => setReviewOpen(false)} />
               </HStack>
             )}
             {selectedFacultyId
@@ -435,6 +436,10 @@ export default function AdminDashboard() {
                   <>
                     <Heading size="sm" color="green.500" mb={1}>Account created for {newFacultyName}</Heading>
                     <Text fontSize="sm" color={mutedText} mb={4}>Add their classes below (optional). You can change them later under Class Schedules.</Text>
+                    <HStack mb={3} justify="flex-end">
+                      <ChakraButton size="sm" variant="outline" onClick={() => setProvisionImportOpen(true)} title="Upload a scanned Faculty Load PDF and review it. Nothing is saved yet.">Import Schedule PDF</ChakraButton>
+                      <SchedulePdfImporter key={`p${newAccount.id}`} mode="admin" facultyId={newAccount.id} facultyName={newFacultyName} isOpen={provisionImportOpen} onClose={() => setProvisionImportOpen(false)} />
+                    </HStack>
                     <ClassGridEditor key={newAccount.id} facultyId={newAccount.id} facultyName={newFacultyName} />
                   </>
                 ) : (

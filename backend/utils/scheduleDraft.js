@@ -55,10 +55,11 @@ const subjectWithSection = (subject, section) => {
 
 // Draft JSON -> editable rows. Weekend consultation entries are left out with a warning (they are never allowed).
 function fromOcrDraft(draft, { keepWeekendConsultations = false } = {}) {
+  // The OCR reports an unrecognised layout as { status: 'FAILED', error } with no rows: say so before complaining about the shape
+  if (draft && typeof draft === 'object' && draft.status === 'FAILED') return { error: `This PDF could not be read as a Faculty Individual Load form (${clean(draft.error, 160) || 'layout not recognised'}). Upload the scanned one-page form.` };
   if (!draft || typeof draft !== 'object' || !Array.isArray(draft.classes) || !Array.isArray(draft.consultationHours)) {
     return { error: 'This is not a schedule draft (it needs "classes" and "consultationHours" lists).' };
   }
-  if (draft.status === 'FAILED') return { error: clean(draft.error, 200) || 'The document could not be read as a Faculty Individual Load.' };
   if (draft.classes.length + draft.consultationHours.length > MAX_ROWS) return { error: `The draft has too many rows (more than ${MAX_ROWS}).` };
 
   const warnings = [];

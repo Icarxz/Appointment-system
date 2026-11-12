@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import {
   Alert, AlertIcon, Badge, Box, Button, Checkbox, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent,
-  ModalHeader, ModalOverlay, Select, Table, TableContainer, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useToast,
+  ModalHeader, ModalOverlay, Select, Spinner, Table, TableContainer, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useToast,
 } from '@chakra-ui/react';
 import { DeleteIcon } from '@chakra-ui/icons';
 import { authFetch } from './authFetch';
@@ -9,9 +9,9 @@ import { DAY_LONG, CONSULTATION_DAYS, CLASS_DAYS } from '../utils/daySettings';
 
 const API = import.meta.env.VITE_API_URL;
 
-// Phase 4 of the Faculty Schedule PDF Importer: REVIEW and CHECK a schedule draft. It never changes a schedule: a draft that passes is only
-// "ready to confirm". Activation, PDF upload and the three entry points come in later phases.
-// For now the draft is the JSON that ocr/schedule_ocr.py writes (loaded from a file) so this screen can be tried with real output.
+// Faculty Schedule PDF Importer (phases 4-5): upload the scanned PDF, REVIEW and CHECK the draft. It never changes a schedule: a draft that
+// passes is only "ready to confirm" (activation is a later phase). Used from three places: Admin > Class Schedules, Admin > Provision Account
+// and Faculty > Master Schedule. Admins can also load a draft JSON written by ocr/schedule_ocr.py (fallback while OCR hosting is undecided).
 
 interface Row { id: string; dayOfWeek: number; startTime: string; endTime: string; needsReview: boolean; reviewReasons: string[]; rawText?: string;
   subject?: string; section?: string; room?: string; label?: string }
@@ -25,9 +25,10 @@ interface Parsed { metadata: { term: string; academicYear: string; effectivityDa
 const TIMES = Array.from({ length: 25 }, (_, i) => { const m = 420 + i * 30; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; });
 const t12 = (t: string) => { const [h, m] = t.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
-interface Props { facultyId: string; facultyName: string; isOpen: boolean; onClose: () => void }
+interface Props { facultyId: string; facultyName: string; mode: 'admin' | 'faculty'; isOpen: boolean; onClose: () => void }
+const MAX_BYTES = 10 * 1024 * 1024;
 
-export default function ScheduleImportReview({ facultyId, facultyName, isOpen, onClose }: Props) {
+export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOpen, onClose }: Props) {
   const toast = useToast();
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const errBg = useColorModeValue('#fee2e2', '#4c1d1d');
@@ -39,11 +40,30 @@ export default function ScheduleImportReview({ facultyId, facultyName, isOpen, o
   const [report, setReport] = useState<Report | null>(null);
   const [busy, setBusy] = useState(false);
   const [nextId, setNextId] = useState(1);
+  const [reading, setReading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [fileHash, setFileHash] = useState('');
 
-  const reset = () => { setParsed(null); setClasses([]); setHours([]); setIdentity(false); setReport(null); };
+  const reset = () => { setParsed(null); setClasses([]); setHours([]); setIdentity(false); setReport(null); setUploadError(''); setFileHash(''); };
   const close = () => { reset(); onClose(); };
 
-  // Step 1: read the draft file and let the server clean it up (weekend consultations are left out with a warning)
+  // Step 1a: upload the scanned PDF; the server reads it with OCR and sends back editable rows
+  const uploadPdf = async (file: File | undefined) => {
+    if (!file) return;
+    setUploadError('');
+    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') { setUploadError('Choose a PDF file.'); return; }
+    if (file.size > MAX_BYTES) { setUploadError('That PDF is larger than 10 MB.'); return; }
+    setReading(true);
+    try {
+      const res = await authFetch(`${API}/api/schedule-import/preview?facultyId=${encodeURIComponent(facultyId)}`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: file });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setUploadError(data.error || 'Could not read that PDF.'); return; }
+      setParsed(data); setClasses(data.classes); setHours(data.consultationHours); setReport(null); setIdentity(false); setFileHash(data.fileHash || '');
+    } catch { setUploadError('Could not reach the server.'); }
+    finally { setReading(false); }
+  };
+
+  // Step 1b (admin fallback): read the draft file and let the server clean it up (weekend consultations are left out with a warning)
   const loadFile = async (file: File | undefined) => {
     if (!file) return;
     try {
@@ -104,15 +124,23 @@ export default function ScheduleImportReview({ facultyId, facultyName, isOpen, o
     <Modal isOpen={isOpen} onClose={close} size="6xl" scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>Review schedule draft: {facultyName}</ModalHeader>
+        <ModalHeader>Import schedule PDF: {facultyName}</ModalHeader>
         <ModalCloseButton />
         <ModalBody pb={6}>
           {!parsed ? (
             <VStack align="stretch" spacing={3}>
               <Alert status="info" borderRadius="md"><AlertIcon />
-                <Text fontSize="sm">Preview of the schedule importer. Load the draft file the OCR program wrote (JSON). You can correct it and check it here; nothing is saved or changed.</Text>
+                <Text fontSize="sm">Upload the scanned Faculty Individual Load form (PDF, up to 10 MB). It is read automatically, then you correct and check it here. Nothing is saved or changed yet.</Text>
               </Alert>
-              <Input type="file" accept="application/json,.json" pt={1} onChange={e => loadFile(e.target.files?.[0])} aria-label="Schedule draft file" />
+              <Input type="file" accept="application/pdf,.pdf" pt={1} isDisabled={reading} onChange={e => { uploadPdf(e.target.files?.[0]); e.target.value = ''; }} aria-label="Schedule PDF" />
+              {reading && <HStack><Spinner size="sm" /><Text fontSize="sm" color={muted}>Reading the PDF. This can take up to a minute.</Text></HStack>}
+              {uploadError && <Alert status="error" borderRadius="md" role="alert"><AlertIcon /><Text fontSize="sm">{uploadError}</Text></Alert>}
+              {mode === 'admin' && (
+                <Box borderTopWidth="1px" pt={3}>
+                  <Text fontSize="xs" color={muted} mb={1}>Admin only: load a draft file (JSON) written by the OCR program instead.</Text>
+                  <Input type="file" accept="application/json,.json" size="sm" pt={1} onChange={e => loadFile(e.target.files?.[0])} aria-label="Schedule draft file" />
+                </Box>
+              )}
             </VStack>
           ) : (
             <VStack align="stretch" spacing={5}>
@@ -196,7 +224,7 @@ export default function ScheduleImportReview({ facultyId, facultyName, isOpen, o
               )}
 
               <HStack justify="space-between">
-                <Button variant="ghost" onClick={reset}>Choose another file</Button>
+                <Button variant="ghost" onClick={reset} title={fileHash ? `File fingerprint ${fileHash.slice(0, 12)}` : undefined}>Choose another file</Button>
                 <HStack><Button variant="ghost" onClick={close}>Close</Button><Button colorScheme="blue" onClick={check} isLoading={busy}>Check schedule</Button></HStack>
               </HStack>
             </VStack>

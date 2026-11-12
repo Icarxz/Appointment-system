@@ -1,0 +1,75 @@
+# Faculty Schedule PDF Importer: status
+
+Last updated: Phase 5 (upload + entry points). Read this before touching the importer.
+
+## What the importer is for
+A Faculty member or an Admin uploads a scanned **Faculty Individual Load (VAA-FM-061)** PDF. The system reads it (OCR), shows an
+**editable draft**, checks it, and (Phase 6, not built) lets a person confirm it so it replaces the faculty's class schedule and
+official consultation hours. OCR output is never trusted as final: a human reviews every draft.
+
+## Phase map
+
+| Phase | What | PR | State |
+|---|---|---|---|
+| 1 | Seven-day schedule support (Sun=0 ... Sat=6) in classes, grid editor, calendars | #57, revised in #59 | merged |
+| 2 | Weekend policy + central day settings (`daySettings`), consultation limits | #59 (replaces the old `importer-phase2-sunday-consultation` branch, now obsolete) | merged |
+| 3 | OCR prototype `ocr/schedule_ocr.py`, fixture, schema | #61 | merged |
+| 4 | Draft reader, validator, review screen (read-only) | #60 | merged |
+| 5 | PDF upload, OCR runner, three entry points | this PR | in review |
+| 6 | Confirm / activate: `ScheduleImport` model, history, effectivity date, atomic replacement | none | NOT built |
+
+Closed without merging: #58 (older OCR attempt, schema superseded by #61) and #62 (parallel-session validator: wrongly blocked the
+real Percy sheet even after confirmation, and accepted weekend consultations).
+
+## Rules that are already decided (do not re-litigate without the adviser)
+- **Days:** JS/DB convention, Sunday = 0 ... Saturday = 6. Always go through `parseDay()` (null / '' / false never become Sunday).
+- **Weekend policy:** Mon-Fri is the default view. Saturday/Sunday are class-only: classes can be imported, but there are no weekend
+  consultation hours, slots or requests. Students never see weekend columns. Faculty/Dean/Admin see a weekend column only when a class
+  exists that day (or with the "Show weekend" toggle, which cannot hide a column that has classes).
+- **Grid:** 7 AM-7 PM, 30-minute steps, last consultation start 6:30 PM.
+- **Weekend consultation rows in a draft** are dropped with a warning (`WEEKEND_CONSULTATION_EXCLUDED`); if they reach the validator
+  they are blocking errors.
+- **Four-hour rule:** official consultation hours must total exactly 240 min/week. Blocking, but switchable with `requireFourHours`
+  (open question below).
+- **Identity:** only the printed name above "Faculty Member" is read; signatures are never used. A trusted read (>= 90 % confidence,
+  not flagged) must match the target account: a mismatch is a hard block that no checkbox can override. A garbled / low-confidence read
+  is "unreadable": the reviewer must tick "this document belongs to <name>".
+- **Access:** Faculty import only for their own account; Admin for any FACULTY account; Dean and Student get 403. The target of a
+  request must be a FACULTY user (404 otherwise).
+- **Nothing is saved before Phase 6.** Parse, preview and validate are read-only.
+
+## OCR contract (draft JSON)
+`parserVersion, template, status ('OK' | 'FAILED'), source, metadata{formId, term, academicYear, effectivityDate, facultyName,
+facultyNameConfidence, facultyNameSource, facultyNameNeedsReview}, workload{lectureHours, laboratoryHours, totalHours},
+classes[]{dayOfWeek, startTime, endTime, confidence, flags, courseTitle, section, room, subject, needsReview, rawText},
+consultationHours[]{dayOfWeek, startTime, endTime, label, ...}, warnings[]`.
+`fromOcrDraft()` normalizes it (stable row ids `c1..`/`h1..`, `reviewReasons`, 200-row cap). `validateDraft()` returns blocking errors
+and warnings. Real fixture: `ocr/fixtures/percy.extracted.json` (the scanned PDF is deliberately not committed: it has signatures).
+
+## Phase 5 (this PR)
+- `POST /api/schedule-import/preview?facultyId=<id>`: body is the raw PDF (`Content-Type: application/pdf`, <= 10 MB). Checks access,
+  verifies it really is a PDF, runs the OCR program, returns the same rows as `/parse` plus `fileHash` (SHA-256). Rate limited; one OCR at a time (others get 429 "busy").
+- `backend/utils/pdfUpload.js` (validation, hash), `backend/utils/ocrRunner.js` (runs Python without a shell, temp folder deleted
+  afterwards, timeout, typed errors `OCR_UNAVAILABLE | OCR_TIMEOUT | OCR_FAILED | OCR_BAD_OUTPUT`).
+- Frontend: `SchedulePdfImporter.tsx` (renamed from `ScheduleImportReview.tsx`): upload step, then the Phase 4 review screen.
+  Entry points: Admin > Class Schedules ("Import Schedule PDF"), Admin > Provision Account (only after a FACULTY account is created),
+  Faculty > Master Schedule (button under the calendar, own account only).
+- Admin-only fallback "load a draft JSON instead" stays, because OCR hosting is undecided (below).
+
+## Open decisions (need a human)
+1. **Where does OCR run?** It needs Python, OpenCV, Tesseract and poppler. Most free Node hosts do not have them. Options: a small
+   Docker worker (Render / Railway / a VM), or run OCR on a school machine. Until decided, `/preview` answers `OCR_UNAVAILABLE`
+   and the UI says so plainly. Set `OCR_PYTHON` (default `python3`) and optionally `OCR_SCRIPT`, `OCR_TIMEOUT_MS`.
+2. **Four-hour rule vs faculty with no consultation hours** (part-timers, deans). Ask the adviser.
+3. **Old weekend consultation rows** may exist in the database from earlier testing. Check:
+   `db.consultationhours.find({ dayOfWeek: { $in: [0, 6] } })` and the same for `addedconsultationhours`.
+
+## Known gaps
+- Only ONE real scan has been tested (page 1, this template). Weekend columns and 6:30 PM blocks are untested with real data.
+- Drafts live in the browser only until Phase 6; closing the window loses edits.
+- `IICT` vs `ICT` rooms can be misread: `ICT` rooms are flagged for review.
+
+## How to run / test
+    cd backend && npm ci && node --test            # all backend tests
+    cd frontend && npm ci && npm run build         # type-check + build
+    python3 ocr/schedule_ocr.py sheet.pdf > draft.json
