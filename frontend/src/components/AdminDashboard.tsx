@@ -116,7 +116,6 @@ export default function AdminDashboard() {
   const [filterSection, setFilterSection] = useState('');
   const [studentGender, setStudentGender] = useState('');
   const [facultyGender, setFacultyGender] = useState('');
-  const [role, setRole] = useState('FACULTY'); 
   const [allUsers, setAllUsers] = useState<any[]>([]);
   // const [selectedQr, setSelectedQr] = useState({ hash: '', name: '' }); 
 
@@ -131,8 +130,26 @@ export default function AdminDashboard() {
     'Program Head (BS COMSCI)',
     'Program Head (BLIS)',
     'Dean',
+    'System Admin',
   ];
-  const [room, setRoom] = useState('');
+  const [emailTouched, setEmailTouched] = useState(false); // true once the admin types in the email box themselves
+  const SCHOOL_EMAIL_DOMAIN = 'antiquespride.edu.ph';
+  // "Mark Xedrick V. Darakan" -> mark.darakan@antiquespride.edu.ph (drops middle initials / single letters)
+  const emailFromName = (fullName: string) => {
+    const parts = fullName.trim().toLowerCase().replace(/[^a-z\s.-]/g, '').split(/\s+/)
+      .filter(w => w.replace(/\./g, '').length > 1);
+    if (parts.length === 0) return '';
+    const first = parts[0];
+    const last = parts.length > 1 ? parts[parts.length - 1] : '';
+    return `${last ? `${first}.${last}` : first}@${SCHOOL_EMAIL_DOMAIN}`;
+  };
+  const handleNameChange = (value: string) => {
+    setName(value);
+    if (!emailTouched) setEmail(emailFromName(value));
+  };
+  // Access level now follows the chosen Program & Position
+  const roleFromPosition = (position: string) =>
+    position === 'Dean' ? 'DEAN' : position === 'System Admin' ? 'ADMIN' : 'FACULTY';
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
@@ -234,14 +251,14 @@ export default function AdminDashboard() {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/add`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, programPosition, room, role })
+        body: JSON.stringify({ name, email, programPosition, role: roleFromPosition(programPosition) })
       });
       const data = await response.json();
       if (response.ok) {
         toast({ title: data.message, status: 'success' });
         setNewFacultyName(data.facultyName);
         setNewAccount({ id: data.userId, role: data.role });
-        setName(''); setEmail(''); setProgramPosition(''); setRoom('');
+        setName(''); setEmail(''); setEmailTouched(false); setProgramPosition('');
         fetchAllData();
       } else { toast({ title: data.error, status: 'error' }); }
     } catch (error) { }
@@ -394,36 +411,19 @@ export default function AdminDashboard() {
                   <VStack spacing={4} align="stretch">
                     <FormControl isRequired>
                       <FormLabel color={textColor}>Full Name</FormLabel>
-                      <Input value={name} onChange={(e) => setName(e.target.value)} color={textColor} borderColor={borderColor}/>
+                      <Input value={name} onChange={(e) => handleNameChange(e.target.value)} color={textColor} borderColor={borderColor}/>
                     </FormControl>
 
-                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
-                      <FormControl isRequired>
-                        <FormLabel color={textColor}>Email</FormLabel>
-                        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} color={textColor} borderColor={borderColor}/>
-                      </FormControl>
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Email</FormLabel>
+                      <Input type="email" value={email} onChange={(e) => { setEmailTouched(true); setEmail(e.target.value.trim().toLowerCase()); }} color={textColor} borderColor={borderColor} placeholder={`name@${SCHOOL_EMAIL_DOMAIN}`}/>
+                    </FormControl>
 
-                      <FormControl isRequired>
-                        <FormLabel color={textColor}>Access Level</FormLabel>
-                        <Select value={role} onChange={(e) => setRole(e.target.value)} color={textColor} borderColor={borderColor}>
-                          <option value="FACULTY">Faculty Member</option>
-                          <option value="DEAN">College Dean</option>
-                          <option value="ADMIN">System Admin</option>
-                        </Select>
-                      </FormControl>
-                    </SimpleGrid>
-
-                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
-                      <FormControl isRequired>
-                        <FormLabel color={textColor}>Program & Position</FormLabel>
-                        <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
-                          options={provisionPositionOptions.map(position => ({ value: position, label: position }))} />
-                      </FormControl>
-                      <FormControl isRequired>
-                        <FormLabel color={textColor}>Room / Office</FormLabel>
-                        <Input value={room} onChange={(e) => setRoom(e.target.value)} color={textColor} placeholder="e.g. Dean's Office" borderColor={borderColor}/>
-                      </FormControl>
-                    </SimpleGrid>
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Program & Position</FormLabel>
+                      <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
+                        options={provisionPositionOptions.map(position => ({ value: position, label: position }))} />
+                    </FormControl>
 
                     <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={loading}>Generate Account</ChakraButton>
                   </VStack>
