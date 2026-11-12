@@ -13,6 +13,8 @@ const percy = DEMO_FACULTY_SCHEDULES.find(f => f.key === 'percy');
 const rows = (over, opts) => { const d = fromOcrDraft(draftOf(over), opts); assert.ok(!d.error, d.error); return d; };
 const check = (d, o) => validateDraft(d, { identityConfirmed: true, targetName: 'Carl Spence Percy', ...o });
 const codes = (r) => r.errors.map(e => e.code);
+// The current Percy read is clean (nothing flagged), so tests about FLAGGED rows build one: the "IICT" read as "ICT" case the OCR is known to produce.
+const flaggedRoom = () => ({ classes: draftOf().classes.map((c, i) => (i === 7 ? { ...c, room: 'ICT 108', flags: ['room-prefix-check'] } : c)) });
 const trustedName = (name) => ({ metadata: { ...draftOf().metadata, facultyName: name, facultyNameConfidence: 96, facultyNameNeedsReview: false } });
 
 test('fromOcrDraft: rejects things that are not a draft', () => {
@@ -34,7 +36,7 @@ test('fromOcrDraft: the real Percy draft becomes 14 classes + 2 consultation blo
 });
 
 test('fromOcrDraft: the OCR flags become readable review reasons', () => {
-  const flagged = rows().classes.filter(c => c.flags.includes('room-prefix-check'));
+  const flagged = rows(flaggedRoom()).classes.filter(c => c.flags.includes('room-prefix-check'));
   assert.ok(flagged.length > 0);
   assert.ok(flagged.every(c => c.needsReview && /IICT/.test(c.reviewReasons.join(' '))));
   const low = rows({ classes: [{ dayOfWeek: 1, startTime: '08:00', endTime: '09:00', courseTitle: 'X', section: 'S', room: 'R', confidence: 40, flags: [] }] }).classes[0];
@@ -169,7 +171,7 @@ test('an approved future consultation blocks a class; a pending one only warns',
 });
 
 test('rows the OCR flagged become warnings, not errors, and point at their row', () => {
-  const r = check(rows());
+  const r = check(rows(flaggedRoom()));
   assert.strictEqual(r.ok, true);
   const w = r.warnings.find(x => x.code === 'REVIEW_ROW');
   assert.ok(w && w.ref.type === 'class');
@@ -185,7 +187,7 @@ test('toScheduleRecord: section is folded into the subject once, like the demo s
 });
 
 test('round trip: the real Percy draft equals the demo schedule, and every difference is a row the OCR flagged', () => {
-  const d = rows();
+  const d = rows(flaggedRoom());
   const demo = percy.classes.map(c => ({ dayOfWeek: c.dayOfWeek, startTime: c.startTime, endTime: c.endTime, subject: c.subject, room: c.room }));
   const got = d.classes.map(toScheduleRecord);
   assert.strictEqual(got.length, demo.length);

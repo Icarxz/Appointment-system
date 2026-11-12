@@ -1,0 +1,532 @@
+{
+  "parserVersion": "vaa-fm-061/0.1.0",
+  "template": "VAA-FM-061",
+  "status": "DRAFT_NEEDS_REVIEW",
+  "source": {
+    "sha256": "bb387ea91837f02c313901224ee516c75297307d255b0fe7a8ea8cad2664c361",
+    "pages": 1,
+    "dpi": 300,
+    "renderer": "pdftoppm",
+    "deskewDegrees": 0.18
+  },
+  "metadata": {
+    "formId": "VAA-FM-061",
+    "term": "Second Semester",
+    "academicYear": "2025-2026",
+    "effectivityDate": "2026-02-02",
+    "facultyName": "RONNIE C ALEZA, MIT",
+    "facultyNameConfidence": 86.5,
+    "facultyNameSource": "printed_text",
+    "facultyNameNeedsReview": true,
+    "facultyNameCandidates": [
+      {
+        "text": "RONNIE C ALEZA, MIT",
+        "confidence": 77.5,
+        "variant": "raw",
+        "bbox": [
+          1091,
+          2184
+        ]
+      },
+      {
+        "text": "RONNIE C ALEZA, MIT",
+        "confidence": 86.5,
+        "variant": "otsu",
+        "bbox": [
+          1091,
+          2184
+        ]
+      },
+      {
+        "text": "RONNIE C a RTALEZA, MIT",
+        "confidence": 74.6,
+        "variant": "dark",
+        "bbox": [
+          1092,
+          2185
+        ]
+      }
+    ],
+    "headerConfidence": 55.2
+  },
+  "workload": {
+    "lectureHours": 16.0,
+    "laboratoryHours": 13.0,
+    "totalHours": 29.0,
+    "preparations": 6.0,
+    "overload": null,
+    "extractedTeachingHours": 29.0,
+    "reconciles": true
+  },
+  "classes": [
+    {
+      "dayOfWeek": 1,
+      "startTime": "08:30",
+      "endTime": "10:30",
+      "confidence": 62.8,
+      "bbox": [
+        532,
+        942,
+        976,
+        1126
+      ],
+      "flags": [
+        "room-check",
+        "low-confidence"
+      ],
+      "courseTitle": "ICT 1",
+      "section": "SC BSCD 1-C",
+      "room": "CT 101 A",
+      "rawText": "ICT 1 ' SC BSCD 1-C CT 101A *}",
+      "minWordConfidence": 57.0,
+      "subject": "ICT 1 (SC BSCD 1-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "10:30",
+      "endTime": "11:30",
+      "confidence": 75.8,
+      "bbox": [
+        532,
+        1126,
+        976,
+        1224
+      ],
+      "flags": [
+        "room-check",
+        "uncertain-characters"
+      ],
+      "courseTitle": "LIS 11",
+      "section": "SC BLIS 3-A",
+      "room": "HCT 301 (LAB)",
+      "rawText": "LIS 11 SC BLIS 3-A ’ HCT 301 (LAB)",
+      "minWordConfidence": 0.0,
+      "subject": "LIS 11 (SC BLIS 3-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "13:00",
+      "endTime": "14:00",
+      "confidence": 82.6,
+      "bbox": [
+        532,
+        1365,
+        976,
+        1456
+      ],
+      "flags": [],
+      "courseTitle": "SPT 6",
+      "section": "SC BLIS 3-A",
+      "room": "TBA",
+      "rawText": "SPT 6 SC BLIS 3-A \\ TBA",
+      "minWordConfidence": 75.0,
+      "subject": "SPT 6 (SC BLIS 3-A)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "14:30",
+      "endTime": "15:30",
+      "confidence": 89.9,
+      "bbox": [
+        532,
+        1500,
+        976,
+        1610
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "room-prefix-check"
+      ],
+      "courseTitle": "ELECT 2",
+      "section": "SC BSISM 3-C",
+      "room": "ICT 107",
+      "rawText": "ELECT 2 SC BSISM 3-C ICT 107 A",
+      "handwrittenIgnored": [
+        ","
+      ],
+      "minWordConfidence": 89.0,
+      "subject": "ELECT 2 (SC BSISM 3-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 80.3,
+      "bbox": [
+        532,
+        1654,
+        976,
+        1744
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "room-prefix-check"
+      ],
+      "courseTitle": "ISM 6",
+      "section": "SC BSISM 1-A",
+      "room": "ICT 101",
+      "rawText": "ISM 6 SC BSISM 1-A ICT 101A",
+      "minWordConfidence": 64.0,
+      "subject": "ISM 6 (SC BSISM 1-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "09:30",
+      "endTime": "11:30",
+      "confidence": 81.1,
+      "bbox": [
+        976,
+        1032,
+        1450,
+        1224
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "room-prefix-check"
+      ],
+      "courseTitle": "LICT 3",
+      "section": "SC BLIS 2-B",
+      "room": "ICT 301 (LAB)",
+      "rawText": "LICT 3 SC BLIS 2-B a ICT 301 (LAB) L",
+      "minWordConfidence": 88.0,
+      "subject": "LICT 3 (SC BLIS 2-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "confidence": 72.9,
+      "bbox": [
+        976,
+        1365,
+        1450,
+        1500
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "low-confidence"
+      ],
+      "courseTitle": "ELECT 2",
+      "section": "SC BSISM 3-C",
+      "room": "IICT 104",
+      "rawText": "ELECT 2 _ SC BSISM 3-C liCT 104 A",
+      "handwrittenIgnored": [
+        "4"
+      ],
+      "minWordConfidence": 90.0,
+      "subject": "ELECT 2 (SC BSISM 3-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "15:00",
+      "endTime": "17:00",
+      "confidence": 89.9,
+      "bbox": [
+        976,
+        1564,
+        1450,
+        1744
+      ],
+      "flags": [],
+      "courseTitle": "SPT 6",
+      "section": "SC BLIS 3-A",
+      "room": "TBA (LAB",
+      "rawText": "SPT 6 SC BLIS 3-A TBA (LAB",
+      "handwrittenIgnored": [
+        "7"
+      ],
+      "minWordConfidence": 79.0,
+      "subject": "SPT 6 (SC BLIS 3-A)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "08:00",
+      "endTime": "10:00",
+      "confidence": 73.0,
+      "bbox": [
+        1450,
+        896,
+        1952,
+        1080
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "room-prefix-check",
+        "low-confidence"
+      ],
+      "courseTitle": "ICT 1",
+      "section": "SC BSCD 1-C",
+      "room": "ICT 101",
+      "rawText": "ICT 1 SC BSCD 1-C ICT 101A",
+      "handwrittenIgnored": [
+        "7",
+        "2"
+      ],
+      "minWordConfidence": 57.0,
+      "subject": "ICT 1 (SC BSCD 1-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "confidence": 91.7,
+      "bbox": [
+        1450,
+        1080,
+        1952,
+        1170
+      ],
+      "flags": [],
+      "courseTitle": "SPT 6",
+      "section": "SC BLIS 3-A",
+      "room": "TBA",
+      "rawText": "SPT 6 SC BLIS 3-A \\ TBA",
+      "minWordConfidence": 84.0,
+      "subject": "SPT 6 (SC BLIS 3-A)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "confidence": 54.5,
+      "bbox": [
+        1450,
+        1365,
+        1952,
+        1500
+      ],
+      "flags": [
+        "room-prefix-check",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "LICT 3",
+      "section": "SCBLIS2A",
+      "room": "ICT 309 (LAB) se",
+      "rawText": "LICT 3 SCBLIS2A | ICT 309 (LAB) se",
+      "handwrittenIgnored": [
+        ","
+      ],
+      "minWordConfidence": 15.0,
+      "subject": "LICT 3 (SCBLIS2A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "14:30",
+      "endTime": "15:30",
+      "confidence": 75.8,
+      "bbox": [
+        1450,
+        1500,
+        1952,
+        1610
+      ],
+      "flags": [
+        "room-not-read",
+        "uncertain-characters"
+      ],
+      "courseTitle": "ELECT 2",
+      "section": "SC BSISM 3-C CT 104A",
+      "room": null,
+      "rawText": "ELECT 2 SC BSISM 3-C CT 104A |",
+      "minWordConfidence": 0.0,
+      "subject": "ELECT 2 (SC BSISM 3-C CT 104A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 73.1,
+      "bbox": [
+        1450,
+        1654,
+        1952,
+        1744
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "room-prefix-check",
+        "low-confidence"
+      ],
+      "courseTitle": "iSM6",
+      "section": "SC BSISM 1-A",
+      "room": "ICT 101",
+      "rawText": "iSM6 SC BSISM 1-A ) ICT 101A",
+      "minWordConfidence": 69.0,
+      "subject": "iSM6 (SC BSISM 1-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "09:00",
+      "endTime": "11:30",
+      "confidence": 58.7,
+      "bbox": [
+        1952,
+        986,
+        2456,
+        1224
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "low-confidence"
+      ],
+      "courseTitle": "LICT 3",
+      "section": "SC BLIS 2-B",
+      "room": "IICT 301 (LAB)",
+      "rawText": "LICT 3 SC BLIS 2-B \") C liCT 301 (LAB) s",
+      "minWordConfidence": 79.0,
+      "subject": "LICT 3 (SC BLIS 2-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "confidence": 74.1,
+      "bbox": [
+        1952,
+        1365,
+        2456,
+        1500
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "room-prefix-check",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "ELECT 2",
+      "section": "SC BSISM 3-C",
+      "room": "ICT 104",
+      "rawText": "ELECT 2 SC BSISM 3-C 1S ICT 104A",
+      "minWordConfidence": 0.0,
+      "subject": "ELECT 2 (SC BSISM 3-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "15:00",
+      "endTime": "17:00",
+      "confidence": 81.8,
+      "bbox": [
+        1952,
+        1564,
+        2456,
+        1744
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "room-prefix-check"
+      ],
+      "courseTitle": "LIS 11",
+      "section": "SC BLIS 3-A",
+      "room": "ICT 301 (LAB",
+      "rawText": "LIS 11 SC BLIS 3-A ICT 301 (LAB Z.",
+      "minWordConfidence": 88.0,
+      "subject": "LIS 11 (SC BLIS 3-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "08:30",
+      "endTime": "10:30",
+      "confidence": 56.0,
+      "bbox": [
+        2456,
+        942,
+        2930,
+        1126
+      ],
+      "flags": [
+        "unrecognised-cell-layout",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "ICT 1",
+      "section": null,
+      "room": null,
+      "rawText": "ICT 1 SCBSCD1.C _, ICT 101A ZL",
+      "minWordConfidence": 9.0,
+      "subject": "ICT 1",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "13:00",
+      "endTime": "15:00",
+      "confidence": 79.5,
+      "bbox": [
+        2456,
+        1365,
+        2930,
+        1564
+      ],
+      "flags": [
+        "room-prefix-check"
+      ],
+      "courseTitle": "LICT 3",
+      "section": "SC BLIS 2-A",
+      "room": "ICT 309 (LAB)",
+      "rawText": "LICT 3 SC BLIS 2-A ‘) ICT 309 (LAB) =",
+      "minWordConfidence": 90.0,
+      "subject": "LICT 3 (SC BLIS 2-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 79.2,
+      "bbox": [
+        2456,
+        1654,
+        2930,
+        1744
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "room-prefix-check"
+      ],
+      "courseTitle": "ISM 6",
+      "section": "SC BSISM 1-A",
+      "room": "ICT 101",
+      "rawText": "ISM 6 SC BSISM 1-A ICT 101 A",
+      "minWordConfidence": 74.0,
+      "subject": "ISM 6 (SC BSISM 1-A)",
+      "needsReview": true
+    }
+  ],
+  "consultationHours": [],
+  "warnings": [
+    {
+      "code": "rows-after-7pm",
+      "message": "the sheet has 1 row(s) after 7:00 PM; anything written there is flagged because classes must end by 7:00 PM"
+    },
+    {
+      "code": "low-confidence",
+      "field": "header",
+      "message": "header OCR confidence 55%"
+    },
+    {
+      "code": "faculty-name-needs-review",
+      "message": "printed faculty name missing, low-confidence or covered by a signature; identity must be verified by a person before confirmation"
+    },
+    {
+      "code": "ignored-marks",
+      "message": "Left out because they are not classes (handwritten numbers or marks): Mon 17:30-18:00: ly; Tue 17:30-18:00: C-; Wed 18:00-18:30: <2; Thu 18:00-18:30: [.; Sat 19:00-19:30: a~ \\"
+    }
+  ]
+}
