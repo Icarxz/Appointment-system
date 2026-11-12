@@ -4,19 +4,22 @@ import {
   ModalHeader, ModalOverlay, Select, Spinner, Table, TableContainer, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useToast,
 } from '@chakra-ui/react';
 import { DeleteIcon } from '@chakra-ui/icons';
+import ConfirmAction from './ConfirmAction';
+import type { ConfirmConfig } from './ConfirmAction';
 import { authFetch } from './authFetch';
 import { DAY_LONG, CONSULTATION_DAYS, CLASS_DAYS } from '../utils/daySettings';
 
 const API = import.meta.env.VITE_API_URL;
 
-// Faculty Schedule PDF Importer (phases 4-5): upload the scanned PDF, REVIEW and CHECK the draft. It never changes a schedule: a draft that
-// passes is only "ready to confirm" (activation is a later phase). Used from three places: Admin > Class Schedules, Admin > Provision Account
+// Faculty Schedule PDF Importer (phases 4-6): upload the scanned PDF, REVIEW and CHECK the draft, then CONFIRM it. Only the final confirm
+// (after an "Are you sure?") changes anything: it replaces the class schedule and official consultation hours, or stages them for a future
+// effectivity date. The server checks everything again; the previous schedule is kept in the import history and can be undone. Used from three places: Admin > Class Schedules, Admin > Provision Account
 // and Faculty > Master Schedule. Admins can also load a draft JSON written by ocr/schedule_ocr.py (fallback while OCR hosting is undecided).
 
 interface Row { id: string; dayOfWeek: number; startTime: string; endTime: string; needsReview: boolean; reviewReasons: string[]; rawText?: string;
   subject?: string; section?: string; room?: string; label?: string }
 interface Issue { code: string; message: string; ref: { type: 'class' | 'consult'; id: string } | null }
-interface Report { ok: boolean; errors: Issue[]; warnings: Issue[]; summary: { weeklyConsultationMinutes: number }; identity?: { status: 'match' | 'mismatch' | 'unreadable'; read: string } }
+interface Report { scheduleFingerprint?: string; ok: boolean; errors: Issue[]; warnings: Issue[]; summary: { weeklyConsultationMinutes: number }; identity?: { status: 'match' | 'mismatch' | 'unreadable'; read: string } }
 interface Parsed { metadata: { term: string; academicYear: string; effectivityDate: string; facultyName: string; facultyNameConfidence: number | null; facultyNameNeedsReview: boolean };
   workload: { lectureHours: number | null; laboratoryHours: number | null };
   classes: Row[]; consultationHours: Row[]; warnings: Issue[]; excludedWeekendConsultations: number }
@@ -25,10 +28,13 @@ interface Parsed { metadata: { term: string; academicYear: string; effectivityDa
 const TIMES = Array.from({ length: 25 }, (_, i) => { const m = 420 + i * 30; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; });
 const t12 = (t: string) => { const [h, m] = t.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
-interface Props { facultyId: string; facultyName: string; mode: 'admin' | 'faculty'; isOpen: boolean; onClose: () => void }
+interface Outcome { status: 'ACTIVE' | 'SCHEDULED'; effectivityDate: string; counts?: { classes: number; hours: number } }
+interface HistoryItem { id: string; status: string; effectivityDate: string; term: string; academicYear: string; confirmedAt: string; failureReason: string; classBlocks: number; consultationBlocks: number }
+
+interface Props { facultyId: string; facultyName: string; mode: 'admin' | 'faculty'; isOpen: boolean; onClose: () => void; onApplied?: () => void }
 const MAX_BYTES = 10 * 1024 * 1024;
 
-export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOpen, onClose }: Props) {
+export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOpen, onClose, onApplied }: Props) {
   const toast = useToast();
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const errBg = useColorModeValue('#fee2e2', '#4c1d1d');
@@ -43,8 +49,13 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
   const [reading, setReading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [fileHash, setFileHash] = useState('');
+  const [effDate, setEffDate] = useState('');
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[] | null>(null);
 
-  const reset = () => { setParsed(null); setClasses([]); setHours([]); setIdentity(false); setReport(null); setUploadError(''); setFileHash(''); };
+  const reset = () => { setOutcome(null); setEffDate(''); setParsed(null); setClasses([]); setHours([]); setIdentity(false); setReport(null); setUploadError(''); setFileHash(''); };
   const close = () => { reset(); onClose(); };
 
   // Step 1a: upload the scanned PDF; the server reads it with OCR and sends back editable rows
@@ -58,7 +69,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
       const res = await authFetch(`${API}/api/schedule-import/preview?facultyId=${encodeURIComponent(facultyId)}`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: file });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setUploadError(data.error || 'Could not read that PDF.'); return; }
-      setParsed(data); setClasses(data.classes); setHours(data.consultationHours); setReport(null); setIdentity(false); setFileHash(data.fileHash || '');
+      setParsed(data); setClasses(data.classes); setHours(data.consultationHours); setReport(null); setIdentity(false); setFileHash(data.fileHash || ''); setEffDate(data.metadata?.effectivityDate || '');
     } catch { setUploadError('Could not reach the server.'); }
     finally { setReading(false); }
   };
@@ -71,7 +82,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
       const res = await authFetch(`${API}/api/schedule-import/parse`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft }) });
       const data = await res.json();
       if (!res.ok) { toast({ title: 'Could not read the draft', description: data.error, status: 'error', duration: 5000 }); return; }
-      setParsed(data); setClasses(data.classes); setHours(data.consultationHours); setReport(null); setIdentity(false);
+      setParsed(data); setClasses(data.classes); setHours(data.consultationHours); setReport(null); setIdentity(false); setFileHash(''); setEffDate(data.metadata?.effectivityDate || '');
     } catch { toast({ title: 'That file is not a schedule draft', description: 'Choose the JSON file the OCR program wrote.', status: 'error', duration: 5000 }); }
   };
 
@@ -93,6 +104,58 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
     } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
     finally { setBusy(false); }
   };
+
+  // Step 3: confirm. The server validates everything again and refuses if the faculty's schedule changed since the check.
+  const confirm = async () => {
+    setConfirming(true);
+    try {
+      const res = await authFetch(`${API}/api/schedule-import/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ facultyId, classes, consultationHours: hours, metadata: parsed?.metadata, workload: parsed?.workload, identityConfirmed: identity,
+          effectivityDate: effDate, scheduleFingerprint: report?.scheduleFingerprint, fileHash }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setReport(null);   // the screen is out of date (stale or new problems): check again before trying again
+        toast({ title: 'The schedule was not applied', description: data.error || 'Please check the schedule again.', status: 'error', duration: 8000, isClosable: true });
+        return;
+      }
+      setOutcome({ status: data.status, effectivityDate: data.effectivityDate, counts: data.counts });
+      if (data.status === 'ACTIVE') onApplied?.();
+    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
+    finally { setConfirming(false); }
+  };
+  const askConfirm = () => {
+    const future = /^\d{4}-\d{2}-\d{2}$/.test(effDate) && effDate > new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+    setConfirmCfg({
+      title: future ? 'Schedule this class schedule?' : 'Replace the current schedule?',
+      body: future
+        ? <>The new schedule for <b>{facultyName}</b> will start on <b>{effDate}</b>. Until then the current schedule stays. It is checked again on that day.</>
+        : <>This replaces all of <b>{facultyName}</b>'s classes and official consultation hours with the {classes.length} class(es) and {hours.length} consultation block(s) shown here. The old schedule is kept in the import history and can be undone. Appointments are not changed.</>,
+      confirmLabel: future ? 'Schedule it' : 'Replace schedule', run: confirm,
+    });
+  };
+  const loadHistory = async () => {
+    try {
+      const res = await authFetch(`${API}/api/schedule-import/history/${encodeURIComponent(facultyId)}`);
+      const data = await res.json();
+      setHistory(res.ok ? data : []);
+      if (!res.ok) toast({ title: 'Could not load the history', description: data.error, status: 'error', duration: 4000 });
+    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
+  };
+  const act = async (id: string, what: 'rollback' | 'cancel') => {
+    try {
+      const res = await authFetch(`${API}/api/schedule-import/${id}/${what}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast({ title: what === 'rollback' ? 'Could not undo' : 'Could not cancel', description: data.error, status: 'error', duration: 7000, isClosable: true }); return; }
+      toast({ title: what === 'rollback' ? 'Previous schedule restored' : 'Scheduled import cancelled', status: 'success', duration: 3000 });
+      if (what === 'rollback') onApplied?.();
+      loadHistory();
+    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
+  };
+  const askAct = (it: HistoryItem, what: 'rollback' | 'cancel') => setConfirmCfg({
+    title: what === 'rollback' ? 'Undo this import?' : 'Cancel this scheduled import?',
+    body: what === 'rollback' ? <>The schedule that this import replaced goes back. This only works if nothing changed the schedule since.</> : <>It will not be applied on {it.effectivityDate}.</>,
+    confirmLabel: what === 'rollback' ? 'Undo import' : 'Cancel import', run: () => act(it.id, what),
+  });
 
   const issuesOf = useMemo(() => {
     const by = (list: Issue[]) => { const m: Record<string, Issue[]> = {}; list.forEach(i => { if (i.ref) (m[`${i.ref.type}:${i.ref.id}`] ||= []).push(i); }); return m; };
@@ -127,7 +190,16 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
         <ModalHeader>Import schedule PDF: {facultyName}</ModalHeader>
         <ModalCloseButton />
         <ModalBody pb={6}>
-          {!parsed ? (
+          {outcome ? (
+            <VStack align="stretch" spacing={3}>
+              <Alert status="success" borderRadius="md"><AlertIcon />
+                <Text fontSize="sm">{outcome.status === 'ACTIVE'
+                  ? <><b>Schedule applied.</b> {facultyName}'s class schedule and official consultation hours were replaced{outcome.counts ? ` (${outcome.counts.classes} class(es), ${outcome.counts.hours} consultation block(s))` : ''}. The previous schedule is in the import history.</>
+                  : <><b>Schedule scheduled.</b> It will be applied on {outcome.effectivityDate} after one more check. The current schedule stays until then.</>}</Text>
+              </Alert>
+              <HStack justify="flex-end"><Button colorScheme="blue" onClick={close}>Done</Button></HStack>
+            </VStack>
+          ) : !parsed ? (
             <VStack align="stretch" spacing={3}>
               <Alert status="info" borderRadius="md"><AlertIcon />
                 <Text fontSize="sm">Upload the scanned Faculty Individual Load form (PDF, up to 10 MB). It is read automatically, then you correct and check it here. Nothing is saved or changed yet.</Text>
@@ -141,6 +213,18 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                   <Input type="file" accept="application/json,.json" size="sm" pt={1} onChange={e => loadFile(e.target.files?.[0])} aria-label="Schedule draft file" />
                 </Box>
               )}
+              <Box borderTopWidth="1px" pt={3}>
+                <Button size="xs" variant="ghost" onClick={loadHistory}>{history ? 'Refresh import history' : 'Show import history'}</Button>
+                {history && (history.length === 0 ? <Text fontSize="xs" color={muted} mt={1}>No imports yet for {facultyName}.</Text> : (
+                  <TableContainer mt={1}><Table size="sm"><Thead><Tr><Th>Status</Th><Th>Effective</Th><Th>Term</Th><Th>Blocks</Th><Th /></Tr></Thead>
+                    <Tbody>{history.map(h => (
+                      <Tr key={h.id}>
+                        <Td><Badge colorScheme={h.status === 'ACTIVE' ? 'green' : h.status === 'SCHEDULED' ? 'blue' : h.status === 'FAILED' ? 'red' : 'gray'}>{h.status.replace('_', ' ')}</Badge>{h.failureReason && <Text fontSize="xs" color={muted} whiteSpace="normal">{h.failureReason}</Text>}</Td>
+                        <Td>{h.effectivityDate}</Td><Td>{[h.term, h.academicYear].filter(Boolean).join(' ')}</Td><Td>{h.classBlocks} classes, {h.consultationBlocks} consult</Td>
+                        <Td>{h.status === 'ACTIVE' && <Button size="xs" variant="outline" onClick={() => askAct(h, 'rollback')}>Undo</Button>}{h.status === 'SCHEDULED' && <Button size="xs" variant="outline" onClick={() => askAct(h, 'cancel')}>Cancel</Button>}</Td>
+                      </Tr>))}</Tbody></Table></TableContainer>
+                ))}
+              </Box>
             </VStack>
           ) : (
             <VStack align="stretch" spacing={5}>
@@ -216,11 +300,22 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
               {report && (
                 <VStack align="stretch" spacing={2}>
                   {report.ok
-                    ? <Alert status="success" borderRadius="md"><AlertIcon /><Text fontSize="sm"><b>Ready to confirm.</b> No blocking problems{report.warnings.length ? `, ${report.warnings.length} warning(s) to look at` : ''}. Nothing has been changed: activating a schedule comes in a later step.</Text></Alert>
+                    ? <Alert status="success" borderRadius="md"><AlertIcon /><Text fontSize="sm"><b>Ready to confirm.</b> No blocking problems{report.warnings.length ? `, ${report.warnings.length} warning(s) to look at` : ''}. Nothing has been changed yet: set the effectivity date and press Confirm.</Text></Alert>
                     : <Alert status="error" borderRadius="md"><AlertIcon /><Text fontSize="sm"><b>{report.errors.length} problem(s) to fix</b> before this schedule could be confirmed.</Text></Alert>}
                   {report.errors.filter(e => !e.ref).map((e, i) => <Alert key={i} status="error" variant="left-accent" py={2}><AlertIcon /><Text fontSize="sm">{e.message}</Text></Alert>)}
                   {report.warnings.filter(w => !w.ref).map((w, i) => <Alert key={i} status="warning" variant="left-accent" py={2}><AlertIcon /><Text fontSize="sm">{w.message}</Text></Alert>)}
                 </VStack>
+              )}
+
+              {report?.ok && (
+                <HStack borderWidth="1px" borderRadius="md" p={3} spacing={3} align="end" wrap="wrap">
+                  <Box>
+                    <Text fontSize="sm" fontWeight={600} mb={1}>Effectivity date</Text>
+                    <Input type="date" size="sm" value={effDate} onChange={e => setEffDate(e.target.value)} aria-label="Effectivity date" maxW="190px" />
+                  </Box>
+                  <Text fontSize="xs" color={muted} flex="1" minW="220px">Today or earlier: applied right away. A later date: kept until that day, then checked again and applied.{!parsed?.metadata.effectivityDate && ' The date was not read from the document: enter it.'}</Text>
+                  <Button colorScheme="green" onClick={askConfirm} isDisabled={!effDate} isLoading={confirming}>Confirm schedule</Button>
+                </HStack>
               )}
 
               <HStack justify="space-between">
@@ -231,6 +326,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
           )}
         </ModalBody>
       </ModalContent>
+      <ConfirmAction config={confirmCfg} onClose={() => setConfirmCfg(null)} />
     </Modal>
   );
 }
