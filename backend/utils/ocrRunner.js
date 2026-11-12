@@ -10,6 +10,10 @@ class OcrError extends Error {
   constructor(code, message) { super(message); this.code = code; }
 }
 
+// The OCR program reports a missing tool the same way as an unreadable PDF ({status:'FAILED', error}). Tell them apart: a missing program is
+// the server's problem, not the file's, and must not blame the PDF.
+const MISSING_TOOL = /tesseract is not installed|not in your path|no module named|pdftoppm|poppler|cannot import|command not found/i;
+
 let running = false;
 const isBusy = () => running;
 
@@ -46,6 +50,9 @@ function runOcr(buf, opts = {}) {
         if (!json || typeof json !== 'object') return finish(reject, new OcrError(code === 0 ? 'OCR_BAD_OUTPUT' : 'OCR_FAILED', 'The schedule reader could not read this PDF.'));
         // The program reports an unsupported layout as { status: 'FAILED', error } with exit code 2: pass it on, the reader turns it into a message
         if (code !== 0 && json.status !== 'FAILED') return finish(reject, new OcrError('OCR_FAILED', 'The schedule reader could not read this PDF.'));
+        if (json.status === 'FAILED' && MISSING_TOOL.test(String(json.error || ''))) {
+          return finish(reject, new OcrError('OCR_UNAVAILABLE', 'The schedule reader is not fully installed on this server (it needs Tesseract and poppler or PyMuPDF). See ocr/README.md.'));
+        }
         finish(resolve, json);
       });
     } catch (e) { finish(reject, new OcrError('OCR_FAILED', 'The schedule reader could not start.')); }

@@ -66,6 +66,8 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
   // Step 1b (admin fallback): read the draft file and let the server clean it up (weekend consultations are left out with a warning)
   const loadFile = async (file: File | undefined) => {
     if (!file) return;
+    setUploadError('');
+    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') { setUploadError('That is a PDF. Use the PDF upload box above. This box is only for the JSON draft file the OCR program writes.'); return; }
     try {
       const draft = JSON.parse(await file.text());
       const res = await authFetch(`${API}/api/schedule-import/parse`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft }) });

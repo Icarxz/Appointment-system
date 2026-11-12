@@ -12,6 +12,7 @@ const ok = script('ok.js', `const fs=require('fs');const p=process.argv[2];conso
 const bad = script('bad.js', `console.log('not json');`);
 const crash = script('crash.js', `process.exit(1);`);
 const failed = script('failed.js', `console.log(JSON.stringify({status:'FAILED',error:'layout'}));process.exit(2);`);
+const noTess = script('notess.js', `console.log(JSON.stringify({status:'FAILED',error:"tesseract is not installed or it's not in your PATH. See README file for more information."}));process.exit(2);`);
 const slow = script('slow.js', `setTimeout(()=>{},60000);`);
 const opts = s => ({ python: process.execPath, script: s });
 const tmpLeft = () => fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('sched-ocr-'));
@@ -33,6 +34,9 @@ test('typed errors: bad output, crash, missing interpreter', async () => {
 test('a FAILED draft (unsupported layout) is passed through, not thrown', async () => {
   const out = await runOcr(Buffer.from('x'), opts(failed));
   assert.strictEqual(out.status, 'FAILED');
+});
+test('a missing OCR tool is reported as OCR_UNAVAILABLE, not as a bad PDF', async () => {
+  await assert.rejects(runOcr(Buffer.from('x'), opts(noTess)), e => e.code === 'OCR_UNAVAILABLE' && /not fully installed/.test(e.message) && !/could not read this PDF|could not be read/.test(e.message));
 });
 test('timeout kills the program and cleans up', async () => {
   await assert.rejects(runOcr(Buffer.from('x'), { ...opts(slow), timeoutMs: 300 }), { code: 'OCR_TIMEOUT' });
