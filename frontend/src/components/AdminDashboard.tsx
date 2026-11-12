@@ -130,8 +130,8 @@ export default function AdminDashboard() {
     'Program Head (BS COMSCI)',
     'Program Head (BLIS)',
     'Dean',
-    'System Admin',
   ];
+  const [role, setRole] = useState('FACULTY');
   const [emailTouched, setEmailTouched] = useState(false); // true once the admin types in the email box themselves
   const SCHOOL_EMAIL_DOMAIN = 'antiquespride.edu.ph';
   // "Mark Xedrick V. Darakan" -> mark.darakan@antiquespride.edu.ph (drops middle initials / single letters)
@@ -147,9 +147,6 @@ export default function AdminDashboard() {
     setName(value);
     if (!emailTouched) setEmail(emailFromName(value));
   };
-  // Access level now follows the chosen Program & Position
-  const roleFromPosition = (position: string) =>
-    position === 'Dean' ? 'DEAN' : position === 'System Admin' ? 'ADMIN' : 'FACULTY';
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
@@ -251,7 +248,7 @@ export default function AdminDashboard() {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/add`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, programPosition, role: roleFromPosition(programPosition) })
+        body: JSON.stringify({ name, email, programPosition, role })
       });
       const data = await response.json();
       if (response.ok) {
@@ -419,11 +416,22 @@ export default function AdminDashboard() {
                       <Input type="email" value={email} onChange={(e) => { setEmailTouched(true); setEmail(e.target.value.trim().toLowerCase()); }} color={textColor} borderColor={borderColor} placeholder={`name@${SCHOOL_EMAIL_DOMAIN}`}/>
                     </FormControl>
 
-                    <FormControl isRequired>
-                      <FormLabel color={textColor}>Program & Position</FormLabel>
-                      <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
-                        options={provisionPositionOptions.map(position => ({ value: position, label: position }))} />
-                    </FormControl>
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
+                      <FormControl isRequired>
+                        <FormLabel color={textColor}>Access Level</FormLabel>
+                        <Select value={role} onChange={(e) => setRole(e.target.value)} color={textColor} borderColor={borderColor}>
+                          <option value="FACULTY">Faculty Member</option>
+                          <option value="DEAN">College Dean</option>
+                          <option value="ADMIN">System Admin</option>
+                        </Select>
+                      </FormControl>
+
+                      <FormControl isRequired>
+                        <FormLabel color={textColor}>Program & Position</FormLabel>
+                        <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
+                          options={provisionPositionOptions.map(position => ({ value: position, label: position }))} />
+                      </FormControl>
+                    </SimpleGrid>
 
                     <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={loading}>Generate Account</ChakraButton>
                   </VStack>
