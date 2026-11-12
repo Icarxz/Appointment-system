@@ -1,6 +1,6 @@
 # Faculty Schedule PDF Importer: status
 
-Last updated: Phase 5 (upload + entry points). Read this before touching the importer.
+Last updated: 2026-11-12, after Phase 5 (PR #63, open, not merged). Read this before touching the importer.
 
 ## What the importer is for
 A Faculty member or an Admin uploads a scanned **Faculty Individual Load (VAA-FM-061)** PDF. The system reads it (OCR), shows an
@@ -15,7 +15,7 @@ official consultation hours. OCR output is never trusted as final: a human revie
 | 2 | Weekend policy + central day settings (`daySettings`), consultation limits | #59 (replaces the old `importer-phase2-sunday-consultation` branch, now obsolete) | merged |
 | 3 | OCR prototype `ocr/schedule_ocr.py`, fixture, schema | #61 | merged |
 | 4 | Draft reader, validator, review screen (read-only) | #60 | merged |
-| 5 | PDF upload, OCR runner, three entry points | this PR | in review |
+| 5 | PDF upload, OCR runner, three entry points | #63 | open, waiting for "merge" |
 | 6 | Confirm / activate: `ScheduleImport` model, history, effectivity date, atomic replacement | none | NOT built |
 
 Closed without merging: #58 (older OCR attempt, schema superseded by #61) and #62 (parallel-session validator: wrongly blocked the
@@ -46,7 +46,7 @@ consultationHours[]{dayOfWeek, startTime, endTime, label, ...}, warnings[]`.
 `fromOcrDraft()` normalizes it (stable row ids `c1..`/`h1..`, `reviewReasons`, 200-row cap). `validateDraft()` returns blocking errors
 and warnings. Real fixture: `ocr/fixtures/percy.extracted.json` (the scanned PDF is deliberately not committed: it has signatures).
 
-## Phase 5 (this PR)
+## Phase 5 (PR #63)
 - `POST /api/schedule-import/preview?facultyId=<id>`: body is the raw PDF (`Content-Type: application/pdf`, <= 10 MB). Checks access,
   verifies it really is a PDF, runs the OCR program, returns the same rows as `/parse` plus `fileHash` (SHA-256). Rate limited; one OCR at a time (others get 429 "busy").
 - `backend/utils/pdfUpload.js` (validation, hash), `backend/utils/ocrRunner.js` (runs Python without a shell, temp folder deleted
@@ -55,6 +55,20 @@ and warnings. Real fixture: `ocr/fixtures/percy.extracted.json` (the scanned PDF
   Entry points: Admin > Class Schedules ("Import Schedule PDF"), Admin > Provision Account (only after a FACULTY account is created),
   Faculty > Master Schedule (button under the calendar, own account only).
 - Admin-only fallback "load a draft JSON instead" stays, because OCR hosting is undecided (below).
+
+### Phase 5 test results
+- 221 backend tests pass (new: `pdfUpload.test.js`, `ocrRunner.test.js`, a FAILED-read test in `scheduleDraft.test.js`); frontend build clean.
+- HTTP check of `/preview`: Admin and own-Faculty 200; other Faculty 403; Dean 403; unknown faculty 404; missing id 400; non-PDF 400;
+  real Python OCR on a non-form PDF 422 ("could not be read as a Faculty Individual Load form"); missing Python 503 `OCR_UNAVAILABLE`.
+- Browser check of the upload step: wrong file type, 422 and 503 messages, rows loaded from a PDF response, JSON fallback shown to Admin only.
+- NOT tested: a real scan uploaded end-to-end (the Percy PDF is not in the repo). Do this once after merge, on a machine with the OCR tools.
+- Fixed on the way: a failed OCR read used to report "not a schedule draft"; it now says the PDF was not recognised.
+
+## Next: Phase 6 (confirm and activate), not started
+First change to real data, so the riskiest phase. To settle in a design note before coding: `ScheduleImport` record (who, when, file hash,
+the confirmed rows, previous schedule snapshot), effectivity date, atomic replacement of classes + official consultation hours (all or
+nothing), what happens to already-APPROVED/PENDING appointments that the new schedule conflicts with, undo/rollback, and an audit
+history screen. Re-validate on the server at confirm time (never trust the browser's "ready" state).
 
 ## Open decisions (need a human)
 1. **Where does OCR run?** It needs Python, OpenCV, Tesseract and poppler. Most free Node hosts do not have them. Options: a small
