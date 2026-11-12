@@ -30,6 +30,7 @@ import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { visibleDays } from '../utils/daySettings';
 import ExportBar from './ExportBar';
 import SearchableSelect from './SearchableSelect';
+import SchedulePdfImporter from './SchedulePdfImporter';
 import { cohortConfig } from '../data/cohortConfig';
 import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
 import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
@@ -181,6 +182,7 @@ export default function FacultyDashboard() {
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
   const { aptId, closeApt } = useDeepLink<Page>(["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [importOpen, setImportOpen] = useState(false); // Master Schedule: import my schedule from a scanned PDF
   const [showWeekend, setShowWeekend] = useState(false); // display preference: reveal empty Saturday / Sunday columns
   // Phones open on one day at a time; the 7-column week grid needs a wider screen.
   const [viewMode,   setViewMode]   = useState<ViewMode>(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "day" : "week"));
@@ -1003,6 +1005,13 @@ const saveConsultationHours = async () => {
                 </div>
 
               </Flex>
+
+              {userId && (
+                <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "flex-end" }}>
+                  <button className="touch-target" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF and review it. Nothing is saved yet." style={{ ...btnBase, padding: "8px 14px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "12px" }}>Import Schedule PDF</button>
+                  <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} />
+                </div>
+              )}
 
             </div>
           </Box>
