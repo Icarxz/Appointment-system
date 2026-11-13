@@ -358,7 +358,7 @@ export default function AdminDashboard() {
       extras={<><ProfileGate role="ADMIN" /><FacultyScheduleModal faculty={scheduleOf} isOpen={!!scheduleOf} onClose={() => setScheduleOf(null)} /></>}
       nav={[
         { key: 'appointments', section: 'Operations', icon: 'inbox', label: 'Appointments', badge: appointments.filter(a => a.status === 'PENDING').length, active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
-        { key: 'home', section: 'Operations', icon: 'grid', label: 'Class Schedules', active: activePage === 'home', onClick: () => setActivePage('home') },
+        { key: 'home', section: 'Operations', icon: 'grid', label: 'Faculty Schedule', active: activePage === 'home', onClick: () => setActivePage('home') },
         { key: 'provision', section: 'People', icon: 'userPlus', label: 'Provision Account', active: activePage === 'provision', onClick: () => setActivePage('provision') },
         { key: 'faculty', section: 'People', icon: 'users', label: `Faculty (${allUsers.filter(u => u.role === 'FACULTY').length || facultyList.length})`, active: activePage === 'users' && userTab === 'faculty', onClick: () => { setUserTab('faculty'); setActivePage('users'); } },
         { key: 'students', section: 'People', icon: 'graduation', label: `Students (${allUsers.filter(u => u.role === 'STUDENT').length})`, active: activePage === 'users' && userTab === 'students', onClick: () => { setUserTab('students'); setActivePage('users'); } },
@@ -371,7 +371,7 @@ export default function AdminDashboard() {
       <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
         {/* The analytics page has no title (the menu already says where you are), like the faculty analytics. */}
         {activePage !== 'analytics' && <PageTitle>
-          {activePage === 'home' && "Class Schedules"}
+          {activePage === 'home' && "Faculty Schedule"}
           {activePage === 'provision' && "Provision Account"}
           {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : "Student Management")}
           {activePage === 'appointments' && "Appointments"}
@@ -443,7 +443,7 @@ export default function AdminDashboard() {
                 newAccount?.role === 'FACULTY' && newAccount.id ? (
                   <>
                     <Heading size="sm" color="green.500" mb={1}>Account created for {newFacultyName}</Heading>
-                    <Text fontSize="sm" color={mutedText} mb={4}>Add their classes below (optional). You can change them later under Class Schedules.</Text>
+                    <Text fontSize="sm" color={mutedText} mb={4}>Add their classes below (optional). You can change them later under Faculty Schedule.</Text>
                     <HStack mb={3} justify="flex-end">
                       <ChakraButton size="sm" variant="outline" onClick={() => setProvisionImportOpen(true)} title="Upload a scanned Faculty Load PDF and review it. Nothing is saved yet.">Import Schedule PDF</ChakraButton>
                       <SchedulePdfImporter key={`p${newAccount.id}`} mode="admin" facultyId={newAccount.id} facultyName={newFacultyName} isOpen={provisionImportOpen} onClose={() => setProvisionImportOpen(false)} />
