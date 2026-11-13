@@ -76,6 +76,15 @@ and warnings. Real fixture: `ocr/fixtures/percy.extracted.json` (the scanned PDF
   (confirm, stale, future date, undo, cancel, 403/400/422 cases).
 - NOT verified: a real MongoDB, a browser run of the confirm UI, `npm run build`, the hourly job with a real clock. Do these on the first local test.
 
+## Third print of the form: Silva (OCR PR after #65)
+Silva's scan failed on current main with "found 10 vertical grid lines" (#65 only drops a shadow that is longer than the table; here it is shorter
+and starts at the page top). The OCR now also requires lines to start where the table starts, accepts sheets that stop before 7 PM (>= 12 rows),
+finds time labels with a stray leading digit, and reads the "<section> - <room>" layout. Measured against the scan by eye: 15/15 day+time, 2 consultation
+blocks (Tue/Thu 12:30-2:30 PM), sections 15/15, rooms 14/15 (wrong one flagged), hours 22 = 22. Fixture `ocr/fixtures/silva.extracted.json`.
+- Not regression-run on the Percy and Fortaleza PDFs (not in the repo): re-upload both after pulling.
+- The Windows renderer (PyMuPDF) reads one extra phantom class (Wed 5:00-5:30 PM, handwriting); it is flagged and a workload-mismatch warning appears. Delete it in review.
+- Silva's printed name is garbled by the signature, so the identity checkbox is the ONLY guard against uploading her sheet for the wrong faculty.
+
 ## Open decisions (need a human)
 1. **Where does OCR run?** It needs Python, OpenCV, Tesseract and poppler. Most free Node hosts do not have them. Options: a small
    Docker worker (Render / Railway / a VM), or run OCR on a school machine. Until decided, `/preview` answers `OCR_UNAVAILABLE`

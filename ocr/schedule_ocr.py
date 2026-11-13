@@ -26,7 +26,8 @@ SHEET_DAY_TO_DB = [1, 2, 3, 4, 5, 6, 0]       # sheet column -> stored dayOfWeek
 DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 FIRST_ROW_MIN = 7 * 60                          # 07:00
-ROWS = 24                                       # 07:00 .. 19:00 in 30-minute rows
+ROWS = 24                                       # 07:00 .. 19:00 in 30-minute rows (the most a class may use)
+MIN_ROWS = 12                                   # a sheet may stop earlier (Silva's ends 5:30 PM = 21 rows); fewer than this is not the form
 WORD_CONF = 50.0                                # any printed word below this inside a cell => that cell is flagged
 CELL_SCALE = float(os.environ.get('OCR_CELL_SCALE', 3.5))                                # small print: enlarge cells before OCR (measured: 1.5x read 6/19 of the Fortaleza cells exactly, 3.5x about twice as many)
 LOW_CONF = 75.0                                 # Tesseract word confidence below this => review
@@ -91,6 +92,7 @@ def cluster(idx, gap=5):
 
 # ---------- 3. grid ----------
 TIME_LABEL_RE = re.compile(r'^\s*(\d{1,2}):(\d{2})\s*[-~]\s*(\d{1,2}):(\d{2})')
+TIME_LABEL_SEARCH_RE = re.compile(r'(\d{1,2}):(\d{2})\s*[-~]\s*(\d{1,2}):(\d{2})')
 
 
 def vertical_extent(vmask, x):
@@ -104,7 +106,9 @@ def read_time_label(gray, xs, y0, y1):
         return None
     crop = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     txt = pytesseract.image_to_string(crop, config='--psm 7 -c tessedit_char_whitelist=0123456789:-')
-    return TIME_LABEL_RE.match(txt) and txt.strip()
+    # A cell border can leak a stray digit in front ("410:30-11:00"): search for the label instead of requiring it at the start.
+    m = TIME_LABEL_SEARCH_RE.search(txt)
+    return m.group(0) if m else None
 
 
 def find_grid(binary, gray, dpi):
@@ -119,7 +123,11 @@ def find_grid(binary, gray, dpi):
     ext = {x: vertical_extent(v, x) for x in cand}
     spans = sorted(e[1] - e[0] for e in ext.values())
     typical = spans[len(spans) // 2] if spans else 0
-    vx = [x for x in cand if ext[x][1] - ext[x][0] <= typical * 1.25]
+    starts = sorted(e[0] for e in ext.values())
+    top = starts[len(starts) // 2] if starts else 0
+    # Table lines all begin where the table begins and are not much longer than the typical one. A scan-edge line (page border, fold, shadow)
+    # fails one of the two: it can be longer (right edge) or start far from the table top (left edge of a scan, seen on the Silva sheet).
+    vx = [x for x in cand if ext[x][1] - ext[x][0] <= typical * 1.25 and abs(ext[x][0] - top) <= 60 * s]
     if len(vx) != 9:
         raise ValueError(f'expected 9 vertical grid lines (time + 7 days), found {len(vx)}: template not recognised')
     band = h[:, vx[0] + 10:vx[1] - 10]                      # the TIME column: every row has its own line
@@ -133,8 +141,8 @@ def find_grid(binary, gray, dpi):
         if not lab:
             break
         labels.append(lab); n += 1
-    if n < ROWS:
-        raise ValueError(f'expected at least {ROWS} time-labelled rows, read {n}: template not recognised')
+    if n < MIN_ROWS:
+        raise ValueError(f'expected at least {MIN_ROWS} time-labelled rows, read {n}: template not recognised')
     return vx, edges[:n + 1], h, header_top, labels
 
 
@@ -200,6 +208,11 @@ ROOM_RE = re.compile(r'((?:I{1,2}CT|ICT|LAB|NEW|OLD)\s*[A-Za-z]*\s*\d{0,3}\s*[A-
 SECTION_RE = re.compile(r'\b((?:[A-Z]{1,3}\s+)?[A-Z]{2,6}\s*\d-[A-Z])\b')   # BSIT 3-D, SC BSCD 1-C
 
 
+# Third layout (Silva sheet): the title wraps over one or two lines and the LAST line is "<section> - <room>", e.g. "BSCS 3B-SE - IICT 106".
+# The room must start like a real room (I/II/lII + CT, TBA, ...Library) so the section-only and "|" layouts can never be taken for it.
+SECTION_DASH_RE = re.compile(r'((?:[A-Z]{2,6}\s+)?[A-Z]{2,6}\s*\d[A-Z]?(?:-[A-Z]{1,4})?)\s*[-\u2013\u2014]\s*((?:[lLiI1|!]{1,3}CT\b|TBA\b|[A-Za-z ]*Library\b).*)$')
+
+
 def tidy(t):
     """Drop stray symbols (a speck or border piece read as a character) from the ends of a printed line."""
     return re.sub(r"^[^A-Za-z0-9(]+|[^A-Za-z0-9)]+$", '', re.sub(r'\s[^A-Za-z0-9(]{1,3}(?=\s|$)', '', t)).strip()
@@ -232,6 +245,12 @@ def parse_teaching(text):
     if len(lines) < 2:
         return {'courseTitle': clean(text), 'section': None, 'room': None}, ['unrecognised-cell-layout']
     title = lines[0]
+    m3 = SECTION_DASH_RE.search(lines[-1])        # a stray "|" from a cell border may be in the text: the strict room prefix is the guard
+    if m3:
+        room, rflags = clean_room(m3.group(2))
+        title = tidy(' '.join(lines[:-1]))
+        title = re.sub(r'(?<=[A-Za-z])(?=\d+$)', ' ', title)          # "ENGINEERING2" -> "ENGINEERING 2" (spacing only)
+        return {'courseTitle': title, 'section': re.sub(r'\s+', ' ', m3.group(1)), 'room': room}, rflags
     if len(lines) >= 3 and '|' not in ' '.join(lines):
         # second layout: title / section / room on three separate lines (no "|"). Stray marks around the printed words are dropped.
         m = SECTION_RE.search(lines[1])
@@ -375,7 +394,13 @@ def extract(pdf_path, dpi=300, debug_dir=None):
         hh = hh + 12 if hh < 7 else hh
         if hh == 7 and r >= 12:
             hh = 19                                          # the second "7:00" of the sheet is 7 PM
-        if hh * 60 + int(m.group(2)) != FIRST_ROW_MIN + r * 30:
+        eh = int(m.group(3)) % 12
+        eh = eh + 12 if eh < 7 else eh
+        if eh == 7 and r >= 12:
+            eh = 19
+        expected = FIRST_ROW_MIN + r * 30
+        # a stray border digit can ruin the start ("41:30-12:00"); the label is still corroborated when its END is the expected one
+        if hh * 60 + int(m.group(2)) != expected and eh * 60 + int(m.group(4)) != expected + 30:
             warnings.append({'code': 'time-axis-unverified', 'row': r, 'message': f'time label of row {r} read as {lab!r}; row-to-time mapping assumed from position'})
     if len(ys) - 1 > ROWS:
         warnings.append({'code': 'rows-after-7pm', 'message': f'the sheet has {len(ys) - 1 - ROWS} row(s) after 7:00 PM; anything written there is flagged because classes must end by 7:00 PM'})
