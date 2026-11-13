@@ -116,3 +116,50 @@ test('Fortaleza: every extracted block passes the existing class validation', ()
     ok.push(b);
   }
 });
+
+// ---- Third sheet: Silva (sarah mae), another print of the same form: a left-edge shadow that is SHORTER than the table (so the "longer than
+// typical" rule of the Fortaleza fix missed it), a sheet that stops at 5:30 PM (21 rows), titles that wrap and end in "<section> - <room>",
+// handwritten hour counts, a signature across the name. The expected blocks below were read off the scan by eye, not taken from the OCR. ----
+const silva = require('../../ocr/fixtures/silva.extracted.json');
+const SILVA_CLASSES = [
+  [1, '08:30', '10:30', 'BSCS 3B-SE', 'IICT 106'],
+  [2, '07:00', '08:30', 'BS INFO 3C', 'IICT 305'], [2, '08:30', '10:00', 'BS INFO 3B', 'IICT 305'], [2, '10:00', '11:30', 'BS INFO 3D', 'IICT 305'], [2, '14:30', '16:00', 'BS INFO 3A', 'IICT 108'],
+  [3, '08:00', '09:30', 'BSCS 3A-INS', 'IICT 201'], [3, '09:30', '11:00', 'BSCS 3B-SE', 'IICT 201'], [3, '11:00', '12:00', 'BSCS 3A-INS', 'IICT 106'],
+  [4, '07:00', '08:30', 'BS INFO 3C', 'IICT 305'], [4, '08:30', '10:00', 'BS INFO 3B', 'IICT 305'], [4, '10:00', '11:30', 'BS INFO 3D', 'IICT 305'], [4, '14:30', '16:00', 'BS INFO 3A', 'IICT 108'],
+  [5, '08:00', '09:30', 'BSCS 3A-INS', 'IICT 201'], [5, '09:30', '11:00', 'BSCS 3B-SE', 'IICT 201'], [5, '11:00', '12:00', 'BSCS 3A-INS', 'IICT 106'],
+].map(([dayOfWeek, startTime, endTime, section, room]) => ({ dayOfWeek, startTime, endTime, section, room }));
+
+test('Silva: the sheet is recognised (it used to fail with "found 10 vertical grid lines") and all 15 classes have the exact day, start and end', () => {
+  assert.strictEqual(silva.status, 'DRAFT_NEEDS_REVIEW');
+  assert.deepStrictEqual(silva.classes.slice().sort(sortKey).map(key), SILVA_CLASSES.slice().sort(sortKey).map(key));
+});
+
+test('Silva: the Tuesday and Thursday consultation blocks are read (12:30-2:30 PM, 4 hours in all) and the shorter sheet is accepted', () => {
+  assert.deepStrictEqual(silva.consultationHours.map(key).sort(), ['2 12:30-14:30', '4 12:30-14:30']);
+  assert.ok(silva.classes.every(c => c.endTime <= '19:00'));
+});
+
+test('Silva: header and workload are read, and the extracted hours reconcile with the sheet (22 = 16 lecture + 6 laboratory)', () => {
+  assert.deepStrictEqual([silva.metadata.term, silva.metadata.academicYear, silva.metadata.effectivityDate], ['Second Semester', '2025-2026', '2026-02-02']);
+  assert.strictEqual(silva.workload.totalHours, 22);
+  assert.strictEqual(silva.workload.extractedTeachingHours, 22);
+  assert.strictEqual(silva.metadata.facultyNameNeedsReview, true);   // the signature covers the printed name
+  assert.ok(silva.warnings.some(w => w.code === 'ignored-marks'));   // handwritten hour counts are left out, never classes
+});
+
+test('Silva: sections are read from the "<section> - <room>" line, and EVERY wrong room is flagged for review (no silent errors)', () => {
+  const want = SILVA_CLASSES.slice().sort(sortKey);
+  silva.classes.slice().sort(sortKey).forEach((b, i) => {
+    assert.strictEqual(norm(b.section), want[i].section, `${key(b)} section`);
+    if (norm(b.room) !== want[i].room) assert.ok(b.needsReview, `${key(b)} room ${b.room} is wrong and not flagged`);
+  });
+});
+
+test('Silva: every extracted block passes the existing class validation', () => {
+  const ok = [];
+  for (const b of silva.classes) {
+    const r = validateClassBlock({ dayOfWeek: b.dayOfWeek, subject: b.subject, room: b.room || 'x', startTime: b.startTime, endTime: b.endTime }, ok);
+    assert.ok(!r.error, `${key(b)}: ${r.error}`);
+    ok.push(b);
+  }
+});
