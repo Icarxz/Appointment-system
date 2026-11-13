@@ -6,14 +6,14 @@ const mailer = require('./mailer');
 const { sendEmailCopies } = require('./emailDispatch');
 
 // No real email is ever sent here: a fake transport records what would have been sent.
-const KEYS = ['EMAIL_USER', 'EMAIL_APP_PASSWORD', 'EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_SECURE', 'EMAIL_NOTIFICATIONS', 'FRONTEND_URL', 'NODE_ENV'];
+const KEYS = ['EMAIL_USER', 'EMAIL_APP_PASSWORD', 'EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_SECURE', 'EMAIL_NOTIFICATIONS', 'FRONTEND_URL', 'NODE_ENV', 'BREVO_API_KEY', 'BREVO_SENDER_EMAIL', 'BREVO_SENDER_NAME'];
 function withEnv(env, fn) {
   const saved = {};
   for (const k of KEYS) { saved[k] = process.env[k]; delete process.env[k]; }
   Object.assign(process.env, env);
   return Promise.resolve().then(fn).finally(() => {
     for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
-    mailer._setTransportForTests(undefined);
+    mailer._setTransportForTests(undefined); mailer._setFetchForTests(undefined);
   });
 }
 const fake = (over = {}) => {
@@ -168,3 +168,60 @@ test('dispatch: a Dean broadcast to many people is sent one at a time', async ()
   const r = await sendEmailCopies(many, map, async () => { running += 1; peak = Math.max(peak, running); await new Promise((res) => setImmediate(res)); running -= 1; }, { log: quiet() });
   assert.equal(r.sent, 5); assert.equal(peak, 1);
 });
+
+// ---- Optional Brevo HTTPS API (for hosts that block SMTP). Nothing real is sent: fetch is replaced by a recorder. ----
+const BREVO_ENV = { BREVO_API_KEY: 'xkeysib-SECRET-123', BREVO_SENDER_EMAIL: 'mxvdarakan@antiquespride.edu.ph', FRONTEND_URL: 'https://consult.example.edu', NODE_ENV: 'production' };
+const fakeFetch = (status = 201, body = { messageId: '<m1@brevo>' }) => {
+  const calls = [];
+  const fn = async (url, opts) => { calls.push({ url, opts, json: JSON.parse(opts.body) }); return { ok: status < 300, status, json: async () => body }; };
+  fn.calls = calls; return fn;
+};
+
+test('Brevo: one HTTPS call with the key in a header, the verified sender, recipient, subject, html and text', () => withEnv(BREVO_ENV, async () => {
+  const f = fakeFetch(); mailer._setFetchForTests(f);
+  const out = await mailer.sendNotificationEmail('student@antiquespride.edu.ph', { title: 'Consultation approved', message: 'See you at 2 PM.', link: null });
+  assert.deepEqual(out, { preview: false, messageId: '<m1@brevo>' });
+  assert.equal(f.calls.length, 1);
+  const c = f.calls[0];
+  assert.equal(c.url, 'https://api.brevo.com/v3/smtp/email');
+  assert.equal(c.opts.method, 'POST');
+  assert.equal(c.opts.headers['api-key'], 'xkeysib-SECRET-123');
+  assert.deepEqual(c.json.sender, { name: 'CCIS Sync', email: 'mxvdarakan@antiquespride.edu.ph' });
+  assert.deepEqual(c.json.to, [{ email: 'student@antiquespride.edu.ph' }]);
+  assert.equal(c.json.subject, 'CCIS Sync: Consultation approved');
+  assert.match(c.json.htmlContent, /See you at 2 PM/);
+  assert.match(c.json.textContent, /See you at 2 PM/);
+  assert.ok(!c.opts.body.includes('xkeysib'));            // the key is never in the body
+}));
+
+test('Brevo wins over SMTP when both are set, and a missing sender means Brevo is NOT used', () => withEnv({ ...OK_ENV, ...BREVO_ENV }, async () => {
+  const smtp = fake(); mailer._setTransportForTests(smtp);
+  const f = fakeFetch(); mailer._setFetchForTests(f);
+  await mailer.sendMail({ to: 'a@b.c', subject: 's', html: '<p>x</p>' });
+  assert.equal(f.calls.length, 1); assert.equal(smtp.calls.length, 0);
+  delete process.env.BREVO_SENDER_EMAIL;                  // key alone is not enough
+  await mailer.sendMail({ to: 'a@b.c', subject: 's', html: '<p>x</p>' });
+  assert.equal(f.calls.length, 1); assert.equal(smtp.calls.length, 1);
+}));
+
+test('Brevo status never exposes the key, and verifyMailer says it is untested instead of pretending', () => withEnv(BREVO_ENV, async () => {
+  const st = mailer.mailerStatus();
+  assert.equal(st.provider, 'brevo'); assert.equal(st.configured, true);
+  assert.ok(!JSON.stringify(st).includes('xkeysib'));
+  assert.deepEqual(await mailer.verifyMailer(), { ok: true, configured: true, provider: 'brevo', untested: true });
+}));
+
+test('Brevo errors explain themselves and never contain the key', () => withEnv(BREVO_ENV, async () => {
+  for (const [status, body, re] of [[401, { message: 'Key not found' }, /rejected the API key/], [400, { message: 'Sender is not valid' }, /verify it in Brevo/], [429, {}, /300 emails a day/], [500, {}, /HTTP 500/]]) {
+    mailer._setFetchForTests(fakeFetch(status, body));
+    await assert.rejects(() => mailer.sendMail({ to: 'a@b.c', subject: 's', html: 'x' }), (e) => { assert.match(e.message, re); assert.ok(!e.message.includes('xkeysib')); return true; });
+  }
+  mailer._setFetchForTests(async () => { const e = new Error('network down'); e.name = 'TypeError'; throw e; });
+  await assert.rejects(() => mailer.sendMail({ to: 'a@b.c', subject: 's', html: 'x' }), /Cannot reach Brevo/);
+}));
+
+test('with only Brevo set in production nothing is previewed or printed: the email really goes out', () => withEnv(BREVO_ENV, async () => {
+  const f = fakeFetch(); mailer._setFetchForTests(f);
+  const out = await mailer.sendMail({ to: 'a@b.c', subject: 's', html: '<p>x</p>' });
+  assert.equal(out.preview, false); assert.equal(f.calls.length, 1);
+}));

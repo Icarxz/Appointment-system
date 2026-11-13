@@ -14,6 +14,57 @@ const { emailLink } = require('./notifyLink');
 //   EMAIL_NOTIFICATIONS=off   stop emailing notifications (in-app ones are unaffected)
 let transport; // undefined = not built yet
 
+// OPTIONAL: send through Brevo's HTTPS API instead of SMTP. Hosts such as Render's free tier block the SMTP ports (25, 465, 587)
+// but allow HTTPS, so this is the way to email from there. It uses Node's built-in fetch (no extra package) and wins over SMTP
+// when both are set. Nothing changes for a setup that only has EMAIL_USER / EMAIL_APP_PASSWORD.
+//   BREVO_API_KEY        a Brevo API key whose only permission is "Transactional email: All"
+//   BREVO_SENDER_EMAIL   a sender address that is VERIFIED in Brevo (Settings > Senders, domains, IPs > Senders)
+//   BREVO_SENDER_NAME    optional, default "CCIS Sync"
+let brevoFetch = (...args) => fetch(...args);
+const BREVO_URL = 'https://api.brevo.com/v3/smtp/email';
+
+function brevoConfig() {
+  return {
+    key: String(process.env.BREVO_API_KEY || '').trim(),
+    email: String(process.env.BREVO_SENDER_EMAIL || '').trim(),
+    name: String(process.env.BREVO_SENDER_NAME || 'CCIS Sync').trim() || 'CCIS Sync',
+  };
+}
+const brevoReady = (c = brevoConfig()) => !!(c.key && c.email);
+
+// Never includes the API key.
+function explainBrevoError(status, body) {
+  const detail = body && body.message ? String(body.message) : '';
+  if (status === 401) return `Brevo rejected the API key (401). Create a new key in Brevo (SMTP & API) with Transactional email set to All, and put it in BREVO_API_KEY. ${detail}`.trim();
+  if (status === 403) return `Brevo refused this request (403): the key may lack the Transactional email permission, or the account/IP is restricted. ${detail}`.trim();
+  if (status === 400 && /sender/i.test(detail)) return `Brevo does not accept the sender ${brevoConfig().email}: verify it in Brevo (Settings > Senders, domains, IPs). ${detail}`.trim();
+  if (status === 429) return `Brevo says the sending limit was reached (429). The free plan allows 300 emails a day. ${detail}`.trim();
+  return `Brevo could not send the email (HTTP ${status}). ${detail}`.trim();
+}
+
+async function sendViaBrevo({ to, subject, html, text }) {
+  const c = brevoConfig();
+  const payload = { sender: { name: c.name, email: c.email }, to: [{ email: to }], subject, htmlContent: html };
+  if (text) payload.textContent = text;
+  let res;
+  try {
+    res = await brevoFetch(BREVO_URL, {
+      method: 'POST',
+      headers: { 'api-key': c.key, 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),   // never hang a request or a cron run
+    });
+  } catch (err) {
+    const e = new Error(`Cannot reach Brevo (${err && err.name === 'TimeoutError' ? 'timed out after 15 s' : (err && err.message) || err}). Check the server's internet connection.`);
+    e.cause = err;
+    throw e;
+  }
+  let body = null;
+  try { body = await res.json(); } catch (_) { /* some errors have no JSON body */ }
+  if (!res.ok) { const e = new Error(explainBrevoError(res.status, body)); e.status = res.status; throw e; }
+  return { preview: false, messageId: body && body.messageId };
+}
+
 function mailConfig() {
   const port = Number(process.env.EMAIL_PORT) || 465;
   const secureEnv = String(process.env.EMAIL_SECURE || '').trim().toLowerCase();
@@ -61,11 +112,12 @@ function explainMailError(err) {
 
 // With no SMTP credentials (and not in production) nothing is emailed. sendMail() then returns
 // { preview: true } so the calling route can hand the link to the page to show in a window.
-const isLocalPreview = () => !isConfigured() && process.env.NODE_ENV !== 'production';
+const isLocalPreview = () => !isConfigured() && !brevoReady() && process.env.NODE_ENV !== 'production';
 
 let warnedUnconfigured = false;
 
 async function sendMail({ to, subject, html, text }) {
+  if (brevoReady()) return sendViaBrevo({ to, subject, html, text });
   const t = getTransport();
   if (!t) {
     if (!warnedUnconfigured) {
@@ -90,14 +142,19 @@ async function sendMail({ to, subject, html, text }) {
 // A safe summary of the settings (the password is never shown, only how long it is).
 function mailerStatus() {
   const c = mailConfig();
+  const b = brevoConfig();
   return {
-    configured: isConfigured(c), user: c.user, host: c.host, port: c.port, secure: c.secure,
+    provider: brevoReady(b) ? 'brevo' : isConfigured(c) ? 'smtp' : 'none',
+    brevo: { configured: brevoReady(b), senderEmail: b.email, keyLength: b.key.length },   // the key itself is never exposed
+    configured: isConfigured(c) || brevoReady(b), user: c.user, host: c.host, port: c.port, secure: c.secure,
     passwordLength: c.pass.length, notificationsOff: process.env.EMAIL_NOTIFICATIONS === 'off',
   };
 }
 
 // Ask the mail server whether these settings work (logs in, sends nothing).
 async function verifyMailer() {
+  // Brevo: there is no free "login check" for a key limited to Transactional email, so the first real message is the test.
+  if (brevoReady()) return { ok: true, configured: true, provider: 'brevo', untested: true };
   if (!isConfigured()) return { ok: false, configured: false, reason: 'EMAIL_USER / EMAIL_APP_PASSWORD are not set.' };
   try {
     await getTransport().verify();
@@ -112,6 +169,7 @@ async function logMailerStatus() {
   const st = mailerStatus();
   if (st.notificationsOff) return console.warn('[email] EMAIL_NOTIFICATIONS=off: notifications are in-app only, no emails are sent.');
   const r = await verifyMailer();
+  if (r.ok && r.provider === 'brevo') return console.log(`[email] Brevo API configured: sending as ${st.brevo.senderEmail} (checked only when the first email is sent).`);
   if (r.ok) console.log(`[email] ready: sending as ${st.user} through ${st.host}:${st.port}.`);
   else if (!r.configured) console.warn(`[email] NOT configured: ${r.reason} Emails will only be printed in this console.`);
   else console.error(`[email] NOT working: ${r.reason}`);
@@ -119,6 +177,7 @@ async function logMailerStatus() {
 
 // For the tests only: put a fake transport in place (undefined puts the real, lazy one back).
 function _setTransportForTests(t) { transport = t; warnedUnconfigured = false; }
+function _setFetchForTests(f) { brevoFetch = f || ((...args) => fetch(...args)); }
 
 async function sendVerificationEmail(to, link) {
   return sendMail({
@@ -174,4 +233,4 @@ async function sendNotificationEmail(to, { title, message, link }) {
   });
 }
 
-module.exports = { sendMail, sendVerificationEmail, sendApprovedEmail, sendResetEmail, sendNotificationEmail, mailerStatus, verifyMailer, logMailerStatus, _setTransportForTests };
+module.exports = { sendMail, sendVerificationEmail, sendApprovedEmail, sendResetEmail, sendNotificationEmail, mailerStatus, verifyMailer, logMailerStatus, _setTransportForTests, _setFetchForTests };

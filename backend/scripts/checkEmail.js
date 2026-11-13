@@ -10,7 +10,9 @@ const { mailerStatus, verifyMailer, sendNotificationEmail } = require('../utils/
 
 async function main() {
   const st = mailerStatus();
-  console.log('--- Email settings (password hidden) ---');
+  console.log('--- Email settings (secrets hidden) ---');
+  console.log(`Provider             : ${st.provider === 'brevo' ? 'Brevo API (HTTPS), wins over SMTP' : st.provider === 'smtp' ? 'Gmail/SMTP' : '(none configured)'}`);
+  if (st.brevo.configured) console.log(`BREVO_SENDER_EMAIL   : ${st.brevo.senderEmail}   (BREVO_API_KEY set, ${st.brevo.keyLength} characters)`);
   console.log(`EMAIL_USER           : ${st.user || '(not set)'}`);
   console.log(`EMAIL_APP_PASSWORD   : ${st.passwordLength ? `set, ${st.passwordLength} characters` : '(not set)'}${st.passwordLength && st.passwordLength !== 16 ? '   <-- a Gmail app password is 16 characters (spaces ignored)' : ''}`);
   console.log(`Server               : ${st.host}:${st.port} (${st.secure ? 'TLS from the start' : 'STARTTLS'})`);
@@ -24,7 +26,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.log('OK: the mail server accepted the login.');
+  console.log(r.untested ? 'Brevo is configured. It cannot be checked without sending: add an address below to send a real test.' : 'OK: the mail server accepted the login.');
 
   const to = process.argv[2];
   if (!to) { console.log('\nNo address given, so no message was sent. Add one to send a test:  node scripts/checkEmail.js you@example.com'); return; }
