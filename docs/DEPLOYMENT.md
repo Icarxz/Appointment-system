@@ -13,12 +13,12 @@ Decided with the owner: the PDF importer's OCR runs **only on the owner's laptop
 |---|---|
 | Sleeps after 15 minutes without traffic; waking takes about a minute | First request after idle is slow. The app's `node-cron` jobs (status updater, pending-request expiry, reminders, schedule-import activation) **do not run while it sleeps**. |
 | 750 free instance hours per month | One always-on service (about 744 h/month) fits, but only one. |
-| **Outbound ports 25, 465 and 587 are blocked** | **Gmail email (SMTP) will not send from Render free.** In-app notifications still work. Emails fall back to failing in the log. |
+| **Outbound ports 25, 465 and 587 are blocked** | **Gmail email (SMTP) will not send from Render free** (HTTPS APIs such as Brevo do). In-app notifications still work. |
 | Ephemeral filesystem | Nothing is stored on disk by the app (the importer deletes temp files), so this is fine. |
 | No Python/Tesseract | OCR import unavailable on the hosted server (by decision). |
 
 Fixes: (a) keep it awake with a free uptime monitor pinging the backend URL every 5 minutes (UptimeRobot or similar; the root route `/` answers);
-(b) for emails either demo them from your laptop backend, set `EMAIL_NOTIFICATIONS=off` on Render, or move the backend to a host that allows SMTP.
+(b) for emails use the Brevo HTTPS API (the two `BREVO_*` variables below; 300 emails/day on the free plan), or demo emails from your laptop backend, or set `EMAIL_NOTIFICATIONS=off`.
 Run `npm run check-email` locally to see what works on your own machine.
 
 ## 1. Database (MongoDB Atlas)
@@ -43,7 +43,9 @@ Run `npm run check-email` locally to see what works on your own machine.
 | `ALLOWED_EMAIL_DOMAIN` | `antiquespride.edu.ph` |
 | `ADMIN_EMAILS` | the admin school address(es) |
 | `NODE_ENV` | `production` |
-| `EMAIL_NOTIFICATIONS` | `off` on Render free (SMTP is blocked); leave `EMAIL_USER` / `EMAIL_APP_PASSWORD` unset or set them if you move hosts |
+| `BREVO_API_KEY` | Brevo API key (permission: Transactional email = All only). Needs the Brevo mailer PR (#67) merged |
+| `BREVO_SENDER_EMAIL` | an address verified in Brevo (Settings > Senders, domains, IPs). Try the school address and the Gmail one; check spam |
+| `EMAIL_NOTIFICATIONS` | `off` only if you do NOT set up Brevo (SMTP is blocked on Render free) |
 
 Render sets `PORT` itself; the server already uses it. After deploy open `https://<your-service>.onrender.com/`: it should answer.
 
@@ -60,7 +62,7 @@ add the Vercel URL under **Authorized JavaScript origins** (keep `http://localho
 ## 5. Smoke test after every deploy (about 15 minutes)
 Use real browsers, a phone too. Test with accounts for each role.
 1. Landing page loads; refresh on `/faculty-dashboard` does not give a 404.
-2. Sign in with a school Google account (Student). A non-school email is refused.
+2. Run `npm run check-email -- <your school address>` locally with the same Brevo values, and check inbox + spam. Then sign in with a school Google account (Student). A non-school email is refused.
 3. Student: Faculty list > a faculty > book a slot > the request appears under My Requests.
 4. Faculty (second account): the request shows up (alerts bell); approve with a time; the student sees it.
 5. Faculty: Master Schedule shows classes; Consultation Log and Analytics open; Print / Save as PDF works.
