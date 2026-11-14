@@ -163,3 +163,111 @@ test('Silva: every extracted block passes the existing class validation', () => 
     ok.push(b);
   }
 });
+
+// ---- Saylo, Niego, Egualan: three more prints that used to fail ("found 3/8 ... labels", "found 8 vertical grid lines", times 30 min off).
+// Expected values are in ocrGroundTruth.js (read off the scans by eye). Measured: day/start/end 60/60 exact, consultation blocks exact,
+// and not one wrong section or room that is not flagged. ----
+const { SAYLO, NIEGO, EGUALAN } = require('./ocrGroundTruth');
+const SHEETS = [['Saylo', SAYLO, require('../../ocr/fixtures/saylo.extracted.json')], ['Niego', NIEGO, require('../../ocr/fixtures/niego.extracted.json')], ['Egualan', EGUALAN, require('../../ocr/fixtures/egualan.extracted.json')]];
+
+for (const [name, truth, fx] of SHEETS) {
+  test(`${name}: every block has the exact day, start and end, and the consultation hours are exact`, () => {
+    assert.strictEqual(fx.status, 'DRAFT_NEEDS_REVIEW');
+    assert.deepStrictEqual(fx.classes.map(key).sort(), truth.classes.map(key).sort());
+    assert.deepStrictEqual(fx.consultationHours.map(key).sort(), truth.consultation.slice().sort());
+  });
+  test(`${name}: the time axis is read from the printed labels (first row ${truth.firstRow}, ${truth.rows} rows) and the hours reconcile with the sheet`, () => {
+    assert.deepStrictEqual([fx.source.timeAxis.firstRow, fx.source.timeAxis.rows], [truth.firstRow, truth.rows]);
+    assert.strictEqual(fx.workload.lectureHours, truth.lecture);
+    assert.strictEqual(fx.workload.laboratoryHours, truth.laboratory);
+    assert.strictEqual(fx.workload.reconciles, true);
+    assert.strictEqual(fx.workload.extractedTeachingHours, truth.total);
+    assert.strictEqual(fx.metadata.effectivityDate, truth.effectivity);
+    assert.strictEqual(fx.metadata.facultyNameNeedsReview, true);        // a signature covers the printed name on every sheet seen so far
+  });
+  test(`${name}: every wrong section or room is flagged for review (no silent errors)`, () => {
+    const want = Object.fromEntries(truth.classes.map(c => [key(c), c]));
+    for (const b of fx.classes) {
+      const w = want[key(b)];
+      if (looseNorm(b.section) !== looseNorm(w.section) || looseNorm(b.room) !== looseNorm(w.room)) {
+        assert.ok(b.needsReview, `${key(b)} reads "${b.section} | ${b.room}", the sheet says "${w.section} | ${w.room}", and it is not flagged`);
+      }
+    }
+  });
+  test(`${name}: every extracted block passes the existing class validation`, () => {
+    const ok = [];
+    for (const b of fx.classes) {
+      const r = validateClassBlock({ dayOfWeek: b.dayOfWeek, subject: b.subject, room: b.room || 'x', startTime: b.startTime, endTime: b.endTime }, ok);
+      assert.ok(!r.error, `${key(b)}: ${r.error}`);
+      ok.push(b);
+    }
+  });
+}
+
+test('Saylo: rows printed after 7 PM are reported, and handwriting in them never becomes a class', () => {
+  assert.ok(SHEETS[0][2].warnings.some(w => w.code === 'rows-after-7pm'));
+  assert.ok(SHEETS[0][2].classes.every(c => c.endTime <= '19:00'));
+});
+
+// ---- The Python itself (skipped where Python or its packages are not installed) ----
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+const SCRIPT = path.join(__dirname, '..', '..', 'ocr', 'schedule_ocr.py');
+const hasPy = spawnSync('python3', ['-c', 'import cv2, numpy, pytesseract'], { encoding: 'utf8' }).status === 0;
+const py = code => {
+  const r = spawnSync('python3', ['-W', 'ignore', '-c', `import runpy, json, sys; sys.modules['fitz'] = None\nm = runpy.run_path(${JSON.stringify(SCRIPT)}, run_name='lib')\n${code}`], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout);
+};
+const labels = (first, n, garbled = []) => Array.from({ length: n }, (_, i) => {   // the printed start of row i, as the label reader would return it
+  if (garbled.includes(i)) return [];
+  const m = first + 30 * i; const h = Math.floor(m / 60) % 12 || 12;
+  return [[h, m % 60]];
+});
+const axis = (cands) => py(`
+try:
+    print(json.dumps({'ok': m['vote_time_axis'](${JSON.stringify(cands)})}))
+except ValueError as e:
+    print(json.dumps({'error': str(e)}))`);
+
+test('time axis: a sheet starting at 7:00 and one starting at 7:30 are both read from the labels', { skip: !hasPy }, () => {
+  assert.deepStrictEqual(axis(labels(7 * 60, 24)).ok, [420, 24]);
+  assert.deepStrictEqual(axis(labels(7 * 60 + 30, 21)).ok, [450, 21]);        // Egualan: times were 30 minutes early when 7:00 was assumed
+});
+test('time axis: garbled labels lose the vote, they do not break it', { skip: !hasPy }, () => {
+  assert.strictEqual(axis(labels(420, 27, [4, 9, 10, 26])).ok[0], 420);
+});
+test('time axis: a MISSED ROW LINE (labels shift by one row from the middle on) is refused, never guessed', { skip: !hasPy }, () => {
+  // what happened to Saylo under another renderer: the line between rows 2 and 3 was lost, so rows 3.. are one index early
+  const shifted = labels(420, 27).map((c, i) => (i >= 2 ? labels(420, 27)[i + 1] || [] : c)).slice(0, 26);
+  assert.match(axis(shifted).error, /row line was probably missed/);
+});
+test('time axis: too few readable labels is refused', { skip: !hasPy }, () => {
+  assert.match(axis(labels(420, 24, Array.from({ length: 21 }, (_, i) => i))).error, /could not read the time column/);
+});
+
+const cell = text => py(`print(json.dumps(m['parse_teaching'](${JSON.stringify(text)})))`);
+test('cell text: room printed BEFORE the section (Niego), wrapped titles and noisy dashes', { skip: !hasPy }, () => {
+  let [p] = cell('ICT 1 – ICT FUNDAMENTALS\nIICT 103 (LEC)\nBSCD 1 – A');
+  assert.deepStrictEqual([p.section, p.room], ['BSCD 1-A', 'IICT 103 (LEC)']);
+  assert.match(p.courseTitle, /FUNDAMENTALS/);
+  [p] = cell('CPROG 3 – OBJECT-ORIENTED\nPROGRAMMING\nIICT 303 (LAB)\nBSINFO 2 – D');
+  assert.deepStrictEqual([p.section, p.room], ['BSINFO 2-D', 'IICT 303 (LAB)']);
+  assert.match(p.courseTitle, /PROGRAMMING/);
+  [p] = cell('INFOE 3 (NAS 3) – IT SECURITY\nIICT 306 (LEC)\nBS INFO3~-B A');       // "~-" for the dash, a handwritten mark after
+  assert.deepStrictEqual([p.section, p.room], ['BS INFO 3-B', 'IICT 306 (LEC)']);
+});
+test('cell text: the layouts that already worked still give the same answer', { skip: !hasPy }, () => {
+  let [p] = cell('COMPE 6 – Software Engineering 6\nBSCS 4-B IICT 308 (LEC)');               // Egualan: section and room share a line
+  assert.deepStrictEqual([p.section, p.room], ['BSCS 4-B', 'IICT 308 (LEC)']);
+  [p] = cell('INFOT 6\nSC BSINFO 3-B\nIICT 304 (LAB)');                                       // Saylo: title / section / room
+  assert.deepStrictEqual([p.section, p.room], ['SC BSINFO 3-B', 'IICT 304 (LAB)']);
+  [p] = cell('COMSC 9 SOFTWARE\nENGINEERING 2\nBSCS 3B-SE – IICT 106');                     // Silva: title wraps, last line "<section> - <room>"
+  assert.deepStrictEqual([p.section, p.room], ['BSCS 3B-SE', 'IICT 106']);
+});
+test('cell text: a title that looks a little like a section is never taken for one, and nothing is invented', { skip: !hasPy }, () => {
+  const [p, flags] = cell('ICT 1 – ICT FUNDAMENTALS\nCT 305 (LAB)');                          // no readable room (the I was lost), no section line
+  assert.strictEqual(p.section, null);
+  assert.strictEqual(p.room, null);
+  assert.ok(flags.length > 0);
+});
