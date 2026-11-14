@@ -6,7 +6,7 @@ const mailer = require('./mailer');
 const { sendEmailCopies } = require('./emailDispatch');
 
 // No real email is ever sent here: a fake transport records what would have been sent.
-const KEYS = ['EMAIL_USER', 'EMAIL_APP_PASSWORD', 'EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_SECURE', 'EMAIL_NOTIFICATIONS', 'FRONTEND_URL', 'NODE_ENV'];
+const KEYS = ['BREVO_API_KEY', 'BREVO_SENDER_EMAIL', 'BREVO_SENDER_NAME', 'EMAIL_USER', 'EMAIL_APP_PASSWORD', 'EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_SECURE', 'EMAIL_NOTIFICATIONS', 'FRONTEND_URL', 'NODE_ENV'];
 function withEnv(env, fn) {
   const saved = {};
   for (const k of KEYS) { saved[k] = process.env[k]; delete process.env[k]; }
@@ -168,3 +168,74 @@ test('dispatch: a Dean broadcast to many people is sent one at a time', async ()
   const r = await sendEmailCopies(many, map, async () => { running += 1; peak = Math.max(peak, running); await new Promise((res) => setImmediate(res)); running -= 1; }, { log: quiet() });
   assert.equal(r.sent, 5); assert.equal(peak, 1);
 });
+
+// ---- Brevo HTTP API (for hosts that block SMTP). fetch is replaced by a fake: nothing is ever sent. ----
+const BREVO_ENV = { BREVO_API_KEY: 'xkeysib-SECRET-123', BREVO_SENDER_EMAIL: 'sender@school.edu.ph', BREVO_SENDER_NAME: 'University of Antique' };
+function withFetch(reply, fn) {
+  const real = globalThis.fetch; const calls = [];
+  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return typeof reply === 'function' ? reply(url, init) : reply; };
+  return Promise.resolve().then(() => fn(calls)).finally(() => { globalThis.fetch = real; });
+}
+const jsonRes = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+
+test('Brevo: a message is POSTed to the transactional endpoint with the api-key header and the verified sender', () => withEnv(BREVO_ENV, () =>
+  withFetch(jsonRes(201, { messageId: '<m1@brevo>' }), async (calls) => {
+    const out = await mailer.sendMail({ to: 'student@antiquespride.edu.ph', subject: 'Hi', html: '<p>x</p>', text: 'x' });
+    assert.deepEqual(out, { preview: false, messageId: '<m1@brevo>' });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://api.brevo.com/v3/smtp/email');
+    assert.equal(calls[0].init.method, 'POST');
+    assert.equal(calls[0].init.headers['api-key'], 'xkeysib-SECRET-123');
+    const body = JSON.parse(calls[0].init.body);
+    assert.deepEqual(body, { sender: { name: 'University of Antique', email: 'sender@school.edu.ph' }, to: [{ email: 'student@antiquespride.edu.ph' }], subject: 'Hi', htmlContent: '<p>x</p>', textContent: 'x' });
+  })));
+
+test('Brevo: text is left out when there is none, and Brevo wins over Gmail when both are set', () => withEnv({ ...OK_ENV, ...BREVO_ENV }, () =>
+  withFetch(jsonRes(201, {}), async (calls) => {
+    const t = fake(); mailer._setTransportForTests(t);
+    await mailer.sendMail({ to: 'a@b.c', subject: 's', html: '<p>x</p>' });
+    assert.equal(calls.length, 1);
+    assert.ok(!('textContent' in JSON.parse(calls[0].init.body)));
+    assert.equal(t.calls.length, 0);                                  // SMTP was not used
+  })));
+
+test('Brevo: only half a configuration (key without sender) falls back to Gmail, and the status never shows the key', () => withEnv({ ...OK_ENV, BREVO_API_KEY: 'xkeysib-SECRET-123' }, () => {
+  assert.equal(mailer.mailerStatus().provider, 'smtp');
+  process.env.BREVO_SENDER_EMAIL = 'sender@school.edu.ph';
+  const st = mailer.mailerStatus();
+  assert.equal(st.provider, 'brevo');
+  assert.equal(st.brevoSender, 'sender@school.edu.ph');
+  assert.ok(!JSON.stringify(st).includes('SECRET'));
+}));
+
+test('Brevo: failures become actionable messages and never contain the API key', () => withEnv(BREVO_ENV, async () => {
+  const cases = [
+    [401, { message: 'Key not found' }, /rejected the API key/],
+    [403, {}, /Transactional email permission/],
+    [400, { message: 'Sender is invalid / not validated' }, /Verify it in Brevo/],
+    [429, {}, /limit/],
+    [500, {}, /HTTP 500/],
+  ];
+  for (const [status, body, re] of cases) {
+    await withFetch(jsonRes(status, body), async () => {
+      await assert.rejects(() => mailer.sendMail({ to: 'a@b.c', subject: 's', html: 'x' }), (e) => { assert.match(e.message, re); assert.ok(!e.message.includes('SECRET')); assert.equal(e.code, `BREVO_${status}`); return true; });
+    });
+  }
+  await withFetch(() => { throw new TypeError('fetch failed'); }, async () => {
+    await assert.rejects(() => mailer.sendMail({ to: 'a@b.c', subject: 's', html: 'x' }), (e) => e.code === 'BREVO_UNREACHABLE' && !e.message.includes('SECRET'));
+  });
+}));
+
+test('Brevo: configured, so nothing is only printed and a local run is not a preview', () => withEnv(BREVO_ENV, () =>
+  withFetch(jsonRes(201, {}), async () => {
+    assert.equal((await mailer.sendMail({ to: 'a@b.c', subject: 's', html: 'x' })).preview, false);
+  })));
+
+test('Brevo: notification emails go through the same path (title, message and link are included)', () => withEnv({ ...BREVO_ENV, FRONTEND_URL: 'https://consult.example.edu' }, () =>
+  withFetch(jsonRes(201, {}), async (calls) => {
+    await mailer.sendNotificationEmail('s@x.edu', { title: 'Consultation approved', message: 'See you <soon>', link: `/student-dashboard?page=requests&apt=${ID}` });
+    const body = JSON.parse(calls[0].init.body);
+    assert.equal(body.subject, 'CCIS Sync: Consultation approved');
+    assert.match(body.htmlContent, /See you &lt;soon&gt;/);
+    assert.match(body.htmlContent, /consult\.example\.edu/);
+  })));
