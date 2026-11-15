@@ -132,7 +132,6 @@ export default function AdminDashboard() {
     'Program Head (BLIS)',
     'Dean',
   ];
-  const [room, setRoom] = useState('');
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
@@ -235,14 +234,14 @@ export default function AdminDashboard() {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/add`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, programPosition, room, role })
+        body: JSON.stringify({ name, email, programPosition, role })
       });
       const data = await response.json();
       if (response.ok) {
         toast({ title: data.message, status: 'success' });
         setNewFacultyName(data.facultyName);
         setNewAccount({ id: data.userId, role: data.role });
-        setName(''); setEmail(''); setProgramPosition(''); setRoom('');
+        setName(''); setEmail(''); setProgramPosition('');
         fetchAllData();
       } else { toast({ title: data.error, status: 'error' }); }
     } catch (error) { }
@@ -398,12 +397,12 @@ export default function AdminDashboard() {
                       <Input value={name} onChange={(e) => setName(e.target.value)} color={textColor} borderColor={borderColor}/>
                     </FormControl>
 
-                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
-                      <FormControl isRequired>
-                        <FormLabel color={textColor}>Email</FormLabel>
-                        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} color={textColor} borderColor={borderColor}/>
-                      </FormControl>
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Email</FormLabel>
+                      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} color={textColor} borderColor={borderColor}/>
+                    </FormControl>
 
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Access Level</FormLabel>
                         <Select value={role} onChange={(e) => setRole(e.target.value)} color={textColor} borderColor={borderColor}>
@@ -412,17 +411,11 @@ export default function AdminDashboard() {
                           <option value="ADMIN">System Admin</option>
                         </Select>
                       </FormControl>
-                    </SimpleGrid>
 
-                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Program & Position</FormLabel>
                         <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
                           options={provisionPositionOptions.map(position => ({ value: position, label: position }))} />
-                      </FormControl>
-                      <FormControl isRequired>
-                        <FormLabel color={textColor}>Room / Office</FormLabel>
-                        <Input value={room} onChange={(e) => setRoom(e.target.value)} color={textColor} placeholder="e.g. Dean's Office" borderColor={borderColor}/>
                       </FormControl>
                     </SimpleGrid>
 
