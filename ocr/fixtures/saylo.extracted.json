@@ -1,0 +1,564 @@
+{
+  "parserVersion": "vaa-fm-061/0.1.0",
+  "template": "VAA-FM-061",
+  "status": "DRAFT_NEEDS_REVIEW",
+  "source": {
+    "sha256": "5c960cb4c0743fb82f95858ef365e5e93819bf7cdbbfa929e87e48377c7214c1",
+    "pages": 1,
+    "dpi": 300,
+    "renderer": "pdftoppm",
+    "deskewDegrees": 0.178,
+    "timeAxis": {
+      "firstRow": "07:00",
+      "rows": 27,
+      "labelsAgreeing": 26
+    }
+  },
+  "metadata": {
+    "formId": "VAA-FM-061",
+    "term": "Second Semester",
+    "academicYear": "2025-2026",
+    "effectivityDate": "2026-03-03",
+    "facultyName": null,
+    "facultyNameConfidence": null,
+    "facultyNameSource": "printed_text",
+    "facultyNameNeedsReview": true,
+    "facultyNameCandidates": [],
+    "headerConfidence": 88.2
+  },
+  "workload": {
+    "lectureHours": 11.0,
+    "laboratoryHours": 12.0,
+    "totalHours": 23.0,
+    "preparations": 5.0,
+    "overload": null,
+    "extractedTeachingHours": 23.0,
+    "reconciles": true
+  },
+  "classes": [
+    {
+      "dayOfWeek": 1,
+      "startTime": "09:30",
+      "endTime": "10:30",
+      "confidence": 64.9,
+      "bbox": [
+        555,
+        906,
+        1016,
+        1010
+      ],
+      "flags": [
+        "unrecognised-cell-layout",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOT 6",
+      "section": null,
+      "room": null,
+      "rawText": "INFOT 6 SC BSINFO 3-8 ICT 304 (LAB) sd)",
+      "minWordConfidence": 12.0,
+      "subject": "INFOT 6",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "15:30",
+      "endTime": "16:30",
+      "confidence": 82.1,
+      "bbox": [
+        555,
+        1461,
+        1016,
+        1564
+      ],
+      "flags": [
+        "room-prefix-check"
+      ],
+      "courseTitle": "DBSYS 1",
+      "section": "SC BSINFO 2-C",
+      "room": "ICT 305 (LAB)",
+      "rawText": "DBSYS 1 SC BSINFO 2-C ICT 305 (LAB)",
+      "minWordConfidence": 86.0,
+      "subject": "DBSYS 1 (SC BSINFO 2-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "16:30",
+      "endTime": "17:30",
+      "confidence": 81.9,
+      "bbox": [
+        555,
+        1564,
+        1016,
+        1666
+      ],
+      "flags": [
+        "room-not-read"
+      ],
+      "courseTitle": "INFOE 4",
+      "section": "SC BSINFO 3-C CT 305 (LAB)",
+      "room": null,
+      "rawText": "INFOE 4 SC BSINFO 3-C CT 305 (LAB) |",
+      "minWordConfidence": 50.0,
+      "subject": "INFOE 4 (SC BSINFO 3-C CT 305 (LAB))",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "17:30",
+      "endTime": "18:30",
+      "confidence": 88.9,
+      "bbox": [
+        555,
+        1666,
+        1016,
+        1770
+      ],
+      "flags": [
+        "room-prefix-check"
+      ],
+      "courseTitle": "INFOE 4",
+      "section": "SC BSINFO 3-C",
+      "room": "ICT 305 (LAB)",
+      "rawText": "INFOE 4 SC BSINFO 3-C ICT 305 (LAB)",
+      "minWordConfidence": 88.0,
+      "subject": "INFOE 4 (SC BSINFO 3-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "11:30",
+      "endTime": "12:30",
+      "confidence": 69.4,
+      "bbox": [
+        1016,
+        1086,
+        1477,
+        1204
+      ],
+      "flags": [
+        "room-prefix-check",
+        "low-confidence"
+      ],
+      "courseTitle": "INFOT 6",
+      "section": "SC BSINFO 3-B",
+      "room": "ICT 302 (LAB)",
+      "rawText": "INFOT 6 SC BSINFO 3-B ICT 302 (LAB) _-‘}",
+      "minWordConfidence": 62.0,
+      "subject": "INFOT 6 (SC BSINFO 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "confidence": 71.1,
+      "bbox": [
+        1016,
+        1252,
+        1477,
+        1371
+      ],
+      "flags": [
+        "room-prefix-check",
+        "low-confidence"
+      ],
+      "courseTitle": "DBSYS 1",
+      "section": "SC BSINFO 2-C",
+      "room": "ICT 305 (LAB)",
+      "rawText": "DBSYS 1 SC BSINFO 2-C ICT 305 (LAB) }.¢",
+      "minWordConfidence": 56.0,
+      "subject": "DBSYS 1 (SC BSINFO 2-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "14:30",
+      "endTime": "16:00",
+      "confidence": 75.2,
+      "bbox": [
+        1016,
+        1371,
+        1477,
+        1514
+      ],
+      "flags": [
+        "trailing-marks-removed",
+        "room-prefix-check",
+        "uncertain-characters"
+      ],
+      "courseTitle": "PROFI 1",
+      "section": "SC BSINFO 2-C",
+      "room": "ICT 305 (LAB)",
+      "rawText": "PROFI 1 SC BSINFO 2-C ICT 305 (LAB) Io",
+      "minWordConfidence": 21.0,
+      "subject": "PROFI 1 (SC BSINFO 2-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "16:00",
+      "endTime": "17:30",
+      "confidence": 59.3,
+      "bbox": [
+        1016,
+        1514,
+        1477,
+        1666
+      ],
+      "flags": [
+        "unrecognised-cell-layout",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3",
+      "section": null,
+      "room": null,
+      "rawText": "INFOE 3 SCBSINFO2B ICT 201 (LAB) \\*S",
+      "minWordConfidence": 47.0,
+      "subject": "INFOE 3",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "17:30",
+      "endTime": "18:30",
+      "confidence": 82.7,
+      "bbox": [
+        1016,
+        1666,
+        1477,
+        1770
+      ],
+      "flags": [
+        "room-check",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3",
+      "section": "SC BSINFO 3-C",
+      "room": "CT 307 (LAB)",
+      "rawText": "INFOE 3 SC BSINFO 3-C CT 307 (LAB) \\",
+      "minWordConfidence": 7.0,
+      "subject": "INFOE 3 (SC BSINFO 3-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "09:00",
+      "endTime": "10:00",
+      "confidence": 83.4,
+      "bbox": [
+        1477,
+        866,
+        1938,
+        970
+      ],
+      "flags": [
+        "room-prefix-check"
+      ],
+      "courseTitle": "INFOT 6",
+      "section": "SC BSINFO 3-B",
+      "room": "ICT 304 (LAB)",
+      "rawText": "INFOT 6 SC BSINFO 3-B ICT 304 (LAB) [",
+      "minWordConfidence": 88.0,
+      "subject": "INFOT 6 (SC BSINFO 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "confidence": 81.1,
+      "bbox": [
+        1477,
+        1412,
+        1938,
+        1514
+      ],
+      "flags": [
+        "room-prefix-check"
+      ],
+      "courseTitle": "DBSYS 1",
+      "section": "SC BSINFO 2-C",
+      "room": "ICT 305 (LAB)",
+      "rawText": "DBSYS 1 SC BSINFO 2-C ICT 305 (LAB)",
+      "minWordConfidence": 90.0,
+      "subject": "DBSYS 1 (SC BSINFO 2-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 82.9,
+      "bbox": [
+        1477,
+        1514,
+        1938,
+        1618
+      ],
+      "flags": [
+        "room-check",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 4",
+      "section": "SC BSINFO 3-C",
+      "room": "HCT 305 (LAB)",
+      "rawText": "INFOE 4 SC BSINFO 3-C HCT 305 (LAB)",
+      "minWordConfidence": 18.0,
+      "subject": "INFOE 4 (SC BSINFO 3-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "17:00",
+      "endTime": "18:00",
+      "confidence": 64.8,
+      "bbox": [
+        1477,
+        1618,
+        1938,
+        1720
+      ],
+      "flags": [
+        "unrecognised-cell-layout",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 4",
+      "section": null,
+      "room": null,
+      "rawText": "INFOE 4 SCBSINFO3-C ICT 305 (LAB)",
+      "minWordConfidence": 10.0,
+      "subject": "INFOE 4",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "11:30",
+      "endTime": "12:30",
+      "confidence": 89.1,
+      "bbox": [
+        1938,
+        1086,
+        2397,
+        1204
+      ],
+      "flags": [
+        "room-check"
+      ],
+      "courseTitle": "INFOT 6",
+      "section": "SC BSINFO 3-B",
+      "room": "HCT 302 (LAB)",
+      "rawText": "INFOT 6 SC BSINFO 3-B HCT 302 (LAB) \\",
+      "minWordConfidence": 62.0,
+      "subject": "INFOT 6 (SC BSINFO 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "confidence": 70.1,
+      "bbox": [
+        1938,
+        1252,
+        2397,
+        1371
+      ],
+      "flags": [
+        "low-confidence"
+      ],
+      "courseTitle": "DBSYS 1",
+      "section": "SC BSINFO 2-C ICT 305 (LAB) =",
+      "room": "°C",
+      "rawText": "DBSYS 1 SC BSINFO 2-C ICT 305 (LAB) =| °C",
+      "minWordConfidence": 61.0,
+      "subject": "DBSYS 1 (SC BSINFO 2-C ICT 305 (LAB) =)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "14:30",
+      "endTime": "16:00",
+      "confidence": 70.7,
+      "bbox": [
+        1938,
+        1371,
+        2397,
+        1514
+      ],
+      "flags": [
+        "room-check",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "PROFI 1",
+      "section": "SC BSINFO 2-C",
+      "room": "CT 305 (LAB)",
+      "rawText": "PROFI 1 SC BSINFO 2-C CT 305 (LAB) ),¢",
+      "minWordConfidence": 34.0,
+      "subject": "PROFI 1 (SC BSINFO 2-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "16:00",
+      "endTime": "17:30",
+      "confidence": 73.3,
+      "bbox": [
+        1938,
+        1514,
+        2397,
+        1666
+      ],
+      "flags": [
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3",
+      "section": "SC BSINFO3-C",
+      "room": "CT 307 (LAB) |:",
+      "rawText": "INFOE 3 SC BSINFO3-C | CT 307 (LAB) |:",
+      "minWordConfidence": 42.0,
+      "subject": "INFOE 3 (SC BSINFO3-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "17:30",
+      "endTime": "18:30",
+      "confidence": 78.0,
+      "bbox": [
+        1938,
+        1666,
+        2397,
+        1770
+      ],
+      "flags": [
+        "room-not-read",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3",
+      "section": "SC BSINFO 3-C CT 307 (LAB)",
+      "room": null,
+      "rawText": "INFOE 3 SC BSINFO 3-C CT 307 (LAB) |",
+      "minWordConfidence": 0.0,
+      "subject": "INFOE 3 (SC BSINFO 3-C CT 307 (LAB))",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "09:00",
+      "endTime": "10:00",
+      "confidence": 77.1,
+      "bbox": [
+        2397,
+        866,
+        2858,
+        970
+      ],
+      "flags": [
+        "room-prefix-check",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOT 6",
+      "section": "SC BSINFO 3-B",
+      "room": "ICT 304 (LAB)",
+      "rawText": "INFOT 6 SC BSINFO 3-B {ICT 304 (LAB)",
+      "minWordConfidence": 10.0,
+      "subject": "INFOT 6 (SC BSINFO 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 76.8,
+      "bbox": [
+        2397,
+        1514,
+        2858,
+        1618
+      ],
+      "flags": [
+        "room-prefix-check"
+      ],
+      "courseTitle": "INFOE 4",
+      "section": "SC BSINFO 3-C",
+      "room": "ICT 305 (LAB)",
+      "rawText": "INFOE 4 SC BSINFO 3-C (ICT 305(LAB) _-‘([",
+      "minWordConfidence": 76.0,
+      "subject": "INFOE 4 (SC BSINFO 3-C)",
+      "needsReview": true
+    }
+  ],
+  "consultationHours": [
+    {
+      "dayOfWeek": 1,
+      "startTime": "12:30",
+      "endTime": "13:30",
+      "confidence": 95.5,
+      "bbox": [
+        555,
+        1204,
+        1016,
+        1286
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "12:30",
+      "endTime": "13:30",
+      "confidence": 95.0,
+      "bbox": [
+        1477,
+        1204,
+        1938,
+        1286
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "12:30",
+      "endTime": "13:30",
+      "confidence": 95.5,
+      "bbox": [
+        2397,
+        1204,
+        2858,
+        1286
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "time-labels-unverified",
+      "message": "1 of 27 printed time labels could not be read; the times come from the other labels (the sheet starts at 07:00, every row is 30 minutes). Check the times against the scan."
+    },
+    {
+      "code": "rows-after-7pm",
+      "message": "the sheet has rows until 20:30; anything written after 7:00 PM is flagged because classes must end by 7:00 PM"
+    },
+    {
+      "code": "metadata-missing",
+      "field": "facultyName",
+      "message": "facultyName was not read from the document; enter or confirm it manually"
+    },
+    {
+      "code": "faculty-name-needs-review",
+      "message": "printed faculty name missing, low-confidence or covered by a signature; identity must be verified by a person before confirmation"
+    },
+    {
+      "code": "ignored-marks",
+      "message": "Left out because they are not classes (handwritten numbers or marks): Mon 19:00-19:30: L\\; Tue 19:30-20:00: ige¢>; Thu 19:00-19:30: micah; Thu 19:30-20:00: ln *N; Fri 18:30-19:00: WL"
+    }
+  ]
+}

@@ -1,0 +1,576 @@
+{
+  "parserVersion": "vaa-fm-061/0.1.0",
+  "template": "VAA-FM-061",
+  "status": "DRAFT_NEEDS_REVIEW",
+  "source": {
+    "sha256": "541e7a7681668beb8cdbeb617d4894ba6b57295266b5e5b1207b1f51896f8529",
+    "pages": 1,
+    "dpi": 300,
+    "renderer": "pdftoppm",
+    "deskewDegrees": 0.484,
+    "timeAxis": {
+      "firstRow": "07:30",
+      "rows": 21,
+      "labelsAgreeing": 19
+    }
+  },
+  "metadata": {
+    "formId": "VAA-FM-061",
+    "term": "Second Semester",
+    "academicYear": "2025-2026",
+    "effectivityDate": "2026-02-02",
+    "facultyName": null,
+    "facultyNameConfidence": null,
+    "facultyNameSource": "printed_text",
+    "facultyNameNeedsReview": true,
+    "facultyNameCandidates": [],
+    "headerConfidence": 93.2
+  },
+  "workload": {
+    "lectureHours": 12.0,
+    "laboratoryHours": 15.0,
+    "totalHours": null,
+    "preparations": null,
+    "overload": null,
+    "extractedTeachingHours": 27.0,
+    "reconciles": true
+  },
+  "classes": [
+    {
+      "dayOfWeek": 1,
+      "startTime": "08:30",
+      "endTime": "10:30",
+      "confidence": 76.4,
+      "bbox": [
+        266,
+        998,
+        886,
+        1140
+      ],
+      "flags": [
+        "section-not-read",
+        "room-not-read"
+      ],
+      "courseTitle": "COMPE 6 - Software Engineering 6",
+      "section": null,
+      "room": null,
+      "rawText": "COMPE 6 - Software Engineering 6 '$ BSCS 4-6 lICT 308 (LEC)",
+      "minWordConfidence": 52.0,
+      "subject": "COMPE 6 - Software Engineering 6",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "10:30",
+      "endTime": "11:30",
+      "confidence": 85.5,
+      "bbox": [
+        266,
+        1140,
+        886,
+        1211
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 7 -Integ. Programming and Technologies 2",
+      "section": "BSIT 3-D",
+      "room": "IICT 307 (LEC)",
+      "rawText": "INFOT 7 -Integ. Programming and Technologies 2 BSIT 3-D lICT 307 (LEC)",
+      "minWordConfidence": 55.0,
+      "subject": "INFOT 7 -Integ. Programming and Technologies 2 (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "11:30",
+      "endTime": "12:30",
+      "confidence": 87.3,
+      "bbox": [
+        266,
+        1211,
+        886,
+        1281
+      ],
+      "flags": [],
+      "courseTitle": "ARCOR 1 - Comp. Organization and Architecture",
+      "section": "BSCS 3-A",
+      "room": "IICT 308 (LAB)",
+      "rawText": "ARCOR 1 - Comp. Organization and Architecture BSCS 3-A IICT 308 (LAB)",
+      "minWordConfidence": 86.0,
+      "subject": "ARCOR 1 - Comp. Organization and Architecture (BSCS 3-A)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "17:00",
+      "endTime": "18:00",
+      "confidence": 86.7,
+      "bbox": [
+        266,
+        1600,
+        886,
+        1672
+      ],
+      "flags": [],
+      "courseTitle": "ARCOR 1 - Comp. Organization and Architecture",
+      "section": "BSCS 3-A",
+      "room": "IICT 308 (LAB)",
+      "rawText": "ARCOR 1 - Comp. Organization and Architecture } BSCS 3-A lICT 308 (LAB)",
+      "minWordConfidence": 86.0,
+      "subject": "ARCOR 1 - Comp. Organization and Architecture (BSCS 3-A)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "07:30",
+      "endTime": "08:30",
+      "confidence": 80.6,
+      "bbox": [
+        886,
+        926,
+        1510,
+        998
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 7 - integ. Programming and Technologies 2",
+      "section": "BSIT 3-D",
+      "room": "IICT 307 (LEC)",
+      "rawText": "INFOT 7 - integ. Programming and Technologies 2 \\- BSIT 3-D lICT 307 (LEC)",
+      "minWordConfidence": 78.0,
+      "subject": "INFOT 7 - integ. Programming and Technologies 2 (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "08:30",
+      "endTime": "10:00",
+      "confidence": 83.7,
+      "bbox": [
+        886,
+        998,
+        1510,
+        1104
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 7 - Integ. Programming and Technologies 2",
+      "section": "BSIT 3-C",
+      "room": "IICT 307 (LEC)",
+      "rawText": "INFOT 7 - Integ. Programming and Technologies 2 \\.> BSIT 3-C lIICT 307 (LEC)",
+      "minWordConfidence": 60.0,
+      "subject": "INFOT 7 - Integ. Programming and Technologies 2 (BSIT 3-C)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "10:00",
+      "endTime": "11:30",
+      "confidence": 78.0,
+      "bbox": [
+        886,
+        1104,
+        1510,
+        1211
+      ],
+      "flags": [
+        "uncertain-characters"
+      ],
+      "courseTitle": "ARCOR 1 ~ Comp. Organization and Architecture",
+      "section": "BSCS 3-A",
+      "room": "IICT 106 (LEC)",
+      "rawText": "ARCOR 1 ~ Comp. Organization and Architecture \\-> BSCS 3-A IICT 106 (LEC)",
+      "minWordConfidence": 37.0,
+      "subject": "ARCOR 1 ~ Comp. Organization and Architecture (BSCS 3-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "11:30",
+      "endTime": "13:00",
+      "confidence": 74.5,
+      "bbox": [
+        886,
+        1211,
+        1510,
+        1316
+      ],
+      "flags": [
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "ARCOR 1 - Comp. Organization and Architecture",
+      "section": "BSCS 3-B",
+      "room": "IICT 106 (LEC)",
+      "rawText": "ARCOR 1 - Comp. Organization and Architecture 1-o BSCS 3-B IICT 106 (LEC)",
+      "minWordConfidence": 6.0,
+      "subject": "ARCOR 1 - Comp. Organization and Architecture (BSCS 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "14:30",
+      "endTime": "16:00",
+      "confidence": 77.8,
+      "bbox": [
+        886,
+        1423,
+        1510,
+        1529
+      ],
+      "flags": [
+        "section-not-read",
+        "room-not-read",
+        "uncertain-characters"
+      ],
+      "courseTitle": "ARCOR 1 - Comp. Organization and Architecture",
+      "section": null,
+      "room": null,
+      "rawText": "ARCOR 1 - Comp. Organization and Architecture yy BSCS 3B JICT 308 (LAB}",
+      "minWordConfidence": 26.0,
+      "subject": "ARCOR 1 - Comp. Organization and Architecture",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "08:00",
+      "endTime": "10:00",
+      "confidence": 90.7,
+      "bbox": [
+        1510,
+        962,
+        2132,
+        1104
+      ],
+      "flags": [],
+      "courseTitle": "COMPE 6 - Software Engineering 6",
+      "section": "BSCS 4-B",
+      "room": "IICT 308 (LAB)",
+      "rawText": "COMPE 6 - Software Engineering 6 a BSCS 4-B lICT 308 (LAB)",
+      "minWordConfidence": 89.0,
+      "subject": "COMPE 6 - Software Engineering 6 (BSCS 4-B)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "confidence": 82.4,
+      "bbox": [
+        1510,
+        1104,
+        2132,
+        1175
+      ],
+      "flags": [
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOT 7 - Integ. Programming and Technologies 2",
+      "section": "BSIT 3-D",
+      "room": "IICT 307 (LAB)",
+      "rawText": "INFOT 7 - Integ. Programming and Technologies 2 \\ BSIT 3-D lICT 307 (LAB)",
+      "minWordConfidence": 42.0,
+      "subject": "INFOT 7 - Integ. Programming and Technologies 2 (BSIT 3-D)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "confidence": 76.9,
+      "bbox": [
+        1510,
+        1458,
+        2132,
+        1529
+      ],
+      "flags": [
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOT 7 - Integ. Programming and Technologies 2",
+      "section": "BSIT 3-C",
+      "room": "IICT 307 (LEC)",
+      "rawText": "INFOT 7 - Integ. Programming and Technologies 2 ] BSIT 3-C lICT 307 (LEC)",
+      "minWordConfidence": 39.0,
+      "subject": "INFOT 7 - Integ. Programming and Technologies 2 (BSIT 3-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "17:00",
+      "endTime": "18:00",
+      "confidence": 86.0,
+      "bbox": [
+        1510,
+        1600,
+        2132,
+        1672
+      ],
+      "flags": [],
+      "courseTitle": "ARCOR 1 - Comp. Organization and Architecture",
+      "section": "BSCS 3-A",
+      "room": "IICT 308 (LAB)",
+      "rawText": "ARCOR 1 - Comp. Organization and Architecture } BSCS 3-A IICT 308 (LAB)",
+      "minWordConfidence": 91.0,
+      "subject": "ARCOR 1 - Comp. Organization and Architecture (BSCS 3-A)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "07:30",
+      "endTime": "08:30",
+      "confidence": 80.1,
+      "bbox": [
+        2132,
+        926,
+        2756,
+        998
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 7 - Integ. Programming and Technologies 2",
+      "section": "BSIT 3-D",
+      "room": "IICT 307 (LAB)",
+      "rawText": "INFOT 7 - Integ. Programming and Technologies 2 1 BSIT 3-D IICT 307 (LAB)",
+      "minWordConfidence": 51.0,
+      "subject": "INFOT 7 - Integ. Programming and Technologies 2 (BSIT 3-D)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "08:30",
+      "endTime": "10:00",
+      "confidence": 74.5,
+      "bbox": [
+        2132,
+        998,
+        2756,
+        1104
+      ],
+      "flags": [
+        "low-confidence"
+      ],
+      "courseTitle": "INFOT # -Integ. Programming and Technologies 2",
+      "section": "BSIT 3-C",
+      "room": "IICT 307 (LAB)",
+      "rawText": "INFOT # -Integ. Programming and Technologies 2 \\. o BSIT 3-C IICT 307 (LAB)",
+      "minWordConfidence": 50.0,
+      "subject": "INFOT # -Integ. Programming and Technologies 2 (BSIT 3-C)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "10:00",
+      "endTime": "11:30",
+      "confidence": 80.3,
+      "bbox": [
+        2132,
+        1104,
+        2756,
+        1211
+      ],
+      "flags": [
+        "uncertain-characters"
+      ],
+      "courseTitle": "ARCOR 1 -- Comp. Organization and Architecture",
+      "section": "BSCS 3-A",
+      "room": "IICT 106 (LEC)",
+      "rawText": "ARCOR 1 -- Comp. Organization and Architecture Bs BSCS 3-A IICT 106 (LEC)",
+      "minWordConfidence": 48.0,
+      "subject": "ARCOR 1 -- Comp. Organization and Architecture (BSCS 3-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "11:30",
+      "endTime": "13:00",
+      "confidence": 72.5,
+      "bbox": [
+        2132,
+        1211,
+        2756,
+        1316
+      ],
+      "flags": [
+        "section-not-read",
+        "room-not-read",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "ARCOR 1 - Comp. Organization and Architecture",
+      "section": null,
+      "room": null,
+      "rawText": "ARCOR 1 - Comp. Organization and Architecture - BSCS3-BIICTTOG (LEC) JY",
+      "minWordConfidence": 12.0,
+      "subject": "ARCOR 1 - Comp. Organization and Architecture",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "14:30",
+      "endTime": "16:00",
+      "confidence": 84.1,
+      "bbox": [
+        2132,
+        1423,
+        2756,
+        1529
+      ],
+      "flags": [
+        "uncertain-characters"
+      ],
+      "courseTitle": "ARCOR 1 - Comp. Organization and Architecture",
+      "section": "BSCS 3-B",
+      "room": "JICT 308 (LAB)",
+      "rawText": "ARCOR 1 - Comp. Organization and Architecture ae BSCS 3-B JICT 308 (LAB)",
+      "minWordConfidence": 32.0,
+      "subject": "ARCOR 1 - Comp. Organization and Architecture (BSCS 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "08:00",
+      "endTime": "09:00",
+      "confidence": 88.5,
+      "bbox": [
+        2756,
+        962,
+        3376,
+        1033
+      ],
+      "flags": [],
+      "courseTitle": "COMPE 6 - Software Engineering 6",
+      "section": "BSCS 4-B",
+      "room": "IICT 308 (LAB)",
+      "rawText": "COMPE 6 - Software Engineering 6 BSCS 4-B IICT 308 (LAB)",
+      "minWordConfidence": 89.0,
+      "subject": "COMPE 6 - Software Engineering 6 (BSCS 4-B)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "confidence": 81.2,
+      "bbox": [
+        2756,
+        1104,
+        3376,
+        1175
+      ],
+      "flags": [
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOT 7 -Integ. Programming and Technologies 2",
+      "section": "BSIT 3-D",
+      "room": "IICT 307 (LAB)",
+      "rawText": "INFOT 7 -Integ. Programming and Technologies 2 BSIT 3-D lIICT 307 (LAB)",
+      "minWordConfidence": 46.0,
+      "subject": "INFOT 7 -Integ. Programming and Technologies 2 (BSIT 3-D)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "confidence": 84.6,
+      "bbox": [
+        2756,
+        1458,
+        3376,
+        1529
+      ],
+      "flags": [],
+      "courseTitle": "INFOT 7 ~ Integ. Programming and Technologies 2",
+      "section": "BSIT 3-C",
+      "room": "IICT 307 (LEC)",
+      "rawText": "INFOT 7 ~ Integ. Programming and Technologies 2 BSIT 3-C IICT 307 (LEC)",
+      "minWordConfidence": 56.0,
+      "subject": "INFOT 7 ~ Integ. Programming and Technologies 2 (BSIT 3-C)",
+      "needsReview": false
+    }
+  ],
+  "consultationHours": [
+    {
+      "dayOfWeek": 1,
+      "startTime": "13:30",
+      "endTime": "14:30",
+      "confidence": 85.0,
+      "bbox": [
+        266,
+        1352,
+        886,
+        1423
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "13:30",
+      "endTime": "14:30",
+      "confidence": 10.0,
+      "bbox": [
+        886,
+        1352,
+        1510,
+        1423
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "13:30",
+      "endTime": "14:30",
+      "confidence": 95.0,
+      "bbox": [
+        1510,
+        1352,
+        2132,
+        1423
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "13:30",
+      "endTime": "14:30",
+      "confidence": 95.0,
+      "bbox": [
+        2132,
+        1352,
+        2756,
+        1423
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "13:30",
+      "endTime": "14:30",
+      "confidence": 31.0,
+      "bbox": [
+        2756,
+        1352,
+        3376,
+        1423
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "time-labels-unverified",
+      "message": "2 of 21 printed time labels could not be read; the times come from the other labels (the sheet starts at 07:30, every row is 30 minutes). Check the times against the scan."
+    },
+    {
+      "code": "metadata-missing",
+      "field": "facultyName",
+      "message": "facultyName was not read from the document; enter or confirm it manually"
+    },
+    {
+      "code": "faculty-name-needs-review",
+      "message": "printed faculty name missing, low-confidence or covered by a signature; identity must be verified by a person before confirmation"
+    }
+  ]
+}

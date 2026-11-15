@@ -7,7 +7,12 @@
     "pages": 1,
     "dpi": 300,
     "renderer": "pdftoppm",
-    "deskewDegrees": 0.09
+    "deskewDegrees": 0.09,
+    "timeAxis": {
+      "firstRow": "07:00",
+      "rows": 21,
+      "labelsAgreeing": 19
+    }
   },
   "metadata": {
     "formId": "VAA-FM-061",
@@ -46,7 +51,8 @@
     "totalHours": 22.0,
     "preparations": 2.0,
     "overload": null,
-    "extractedTeachingHours": 22.0
+    "extractedTeachingHours": 22.0,
+    "reconciles": true
   },
   "classes": [
     {
@@ -57,7 +63,7 @@
       "bbox": [
         412,
         988,
-        914,
+        913,
         1222
       ],
       "flags": [],
@@ -76,9 +82,9 @@
       "dayOfWeek": 2,
       "startTime": "07:00",
       "endTime": "08:30",
-      "confidence": 86.0,
+      "confidence": 82.1,
       "bbox": [
-        914,
+        913,
         810,
         1388,
         988
@@ -87,8 +93,8 @@
       "courseTitle": "INFOT 9-Capstone Project 1",
       "section": "BS INFO 3C",
       "room": "IICT 305",
-      "rawText": "INFOT 9-Capstone Project 1 }-$ BS INFO 3C - IICT 305",
-      "minWordConfidence": 81.0,
+      "rawText": "INFOT 9-Capstone Project 1 }-$ BS INFO 3C - lIICT 305",
+      "minWordConfidence": 77.0,
       "subject": "INFOT 9-Capstone Project 1 (BS INFO 3C)",
       "needsReview": false
     },
@@ -96,32 +102,29 @@
       "dayOfWeek": 2,
       "startTime": "08:30",
       "endTime": "10:00",
-      "confidence": 71.4,
+      "confidence": 81.0,
       "bbox": [
-        914,
+        913,
         988,
         1388,
         1174
       ],
-      "flags": [
-        "low-confidence",
-        "uncertain-characters"
-      ],
-      "courseTitle": "INFOT 9- Vapatone Project 1 S",
+      "flags": [],
+      "courseTitle": "INFOT 9 Capstone he Project 1 S",
       "section": "BS INFO 3B",
       "room": "IICT 305",
-      "rawText": "INFOT 9- Vapatone ‘ Project 1 S BS INFO 3B - IICT 305",
-      "minWordConfidence": 0.0,
-      "subject": "INFOT 9- Vapatone Project 1 S (BS INFO 3B)",
-      "needsReview": true
+      "rawText": "INFOT 9 - Capstone he Project 1 S BS INFO 3B - IICT 305",
+      "minWordConfidence": 72.0,
+      "subject": "INFOT 9 Capstone he Project 1 S (BS INFO 3B)",
+      "needsReview": false
     },
     {
       "dayOfWeek": 2,
       "startTime": "10:00",
       "endTime": "11:30",
-      "confidence": 65.6,
+      "confidence": 69.6,
       "bbox": [
-        914,
+        913,
         1174,
         1388,
         1328
@@ -130,21 +133,21 @@
         "low-confidence",
         "uncertain-characters"
       ],
-      "courseTitle": "INFOT 9- Capstone Project 1 iss",
+      "courseTitle": "INFOT 9- Capstone Project 1 Iss",
       "section": "BS INFO 3D",
       "room": "IICT 305",
-      "rawText": "INFOT 9- Capstone | _ Project 1 iss BS INFO 3D - lIICT 305",
+      "rawText": "INFOT 9- Capstone _ Project 1 Iss BS INFO 3D - lIICT 305",
       "minWordConfidence": 0.0,
-      "subject": "INFOT 9- Capstone Project 1 iss (BS INFO 3D)",
+      "subject": "INFOT 9- Capstone Project 1 Iss (BS INFO 3D)",
       "needsReview": true
     },
     {
       "dayOfWeek": 2,
       "startTime": "14:30",
       "endTime": "16:00",
-      "confidence": 71.7,
+      "confidence": 70.0,
       "bbox": [
-        914,
+        913,
         1672,
         1388,
         1848
@@ -153,12 +156,12 @@
         "low-confidence",
         "uncertain-characters"
       ],
-      "courseTitle": "INFOT 9-Capstone, Project 1 +s",
+      "courseTitle": "INFOT 9-Capstone, Project 1 Irs",
       "section": "BS INFO 3A",
       "room": "IICT 108",
-      "rawText": "INFOT 9-Capstone, | Project 1 +s BS INFO 3A - lIICT 108",
-      "minWordConfidence": 47.0,
-      "subject": "INFOT 9-Capstone, Project 1 +s (BS INFO 3A)",
+      "rawText": "INFOT 9-Capstone, _ Project 1 Irs BS INFO 3A - IICT 108",
+      "minWordConfidence": 22.0,
+      "subject": "INFOT 9-Capstone, Project 1 Irs (BS INFO 3A)",
       "needsReview": true
     },
     {
@@ -232,11 +235,11 @@
       "dayOfWeek": 4,
       "startTime": "07:00",
       "endTime": "08:30",
-      "confidence": 65.3,
+      "confidence": 66.2,
       "bbox": [
         1936,
         810,
-        2446,
+        2447,
         988
       ],
       "flags": [
@@ -247,8 +250,8 @@
       "courseTitle": "INFOT 9-Capstone Project 1 /1",
       "section": "BS INFO 3C",
       "room": "ICT 305",
-      "rawText": "INFOT 9-Capstone , - Project 1 /1 BS INFO 3C - ICT 305",
-      "minWordConfidence": 48.0,
+      "rawText": "INFOT 9-Capstone , | Project 1 /1 BS INFO 3C - ICT 305",
+      "minWordConfidence": 33.0,
       "subject": "INFOT 9-Capstone Project 1 /1 (BS INFO 3C)",
       "needsReview": true
     },
@@ -256,88 +259,83 @@
       "dayOfWeek": 4,
       "startTime": "08:30",
       "endTime": "10:00",
-      "confidence": 80.9,
+      "confidence": 82.2,
       "bbox": [
         1936,
         988,
-        2446,
+        2447,
         1174
       ],
       "flags": [
         "uncertain-characters"
       ],
-      "courseTitle": "INFOT 9 Capstone hii? Project 1 ‘“s",
+      "courseTitle": "INFOT 9 Capstone Ju Project 1 ‘“s",
       "section": "BS INFO 3B",
       "room": "IICT 305",
-      "rawText": "INFOT 9 - Capstone hii? Project 1 ‘“s BS INFO 3B - IICT 305",
-      "minWordConfidence": 30.0,
-      "subject": "INFOT 9 Capstone hii? Project 1 ‘“s (BS INFO 3B)",
+      "rawText": "INFOT 9 - Capstone Ju Project 1 ‘“s BS INFO 3B - IICT 305",
+      "minWordConfidence": 49.0,
+      "subject": "INFOT 9 Capstone Ju Project 1 ‘“s (BS INFO 3B)",
       "needsReview": true
     },
     {
       "dayOfWeek": 4,
       "startTime": "10:00",
       "endTime": "11:30",
-      "confidence": 81.6,
+      "confidence": 83.1,
       "bbox": [
         1936,
         1174,
-        2446,
+        2447,
         1328
       ],
-      "flags": [
-        "uncertain-characters"
-      ],
+      "flags": [],
       "courseTitle": "INFOT 9 Capstone y, Project 1 if",
       "section": "BS INFO 3D",
       "room": "IICT 305",
       "rawText": "INFOT 9 - Capstone y, Project 1 if BS INFO 3D - lIICT 305",
-      "minWordConfidence": 36.0,
+      "minWordConfidence": 57.0,
       "subject": "INFOT 9 Capstone y, Project 1 if (BS INFO 3D)",
-      "needsReview": true
+      "needsReview": false
     },
     {
       "dayOfWeek": 4,
       "startTime": "14:30",
       "endTime": "16:00",
-      "confidence": 81.9,
+      "confidence": 83.4,
       "bbox": [
         1936,
         1672,
-        2446,
+        2447,
         1848
       ],
-      "flags": [
-        "uncertain-characters"
-      ],
-      "courseTitle": "INFOT 9 Capstone Me Project 1",
+      "flags": [],
+      "courseTitle": "INFOT 9 Capstone Le Project 1",
       "section": "BS INFO 3A",
       "room": "IICT 108",
-      "rawText": "INFOT 9 - Capstone Me Project 1 : BS INFO 3A - IICT 108",
-      "minWordConfidence": 46.0,
-      "subject": "INFOT 9 Capstone Me Project 1 (BS INFO 3A)",
-      "needsReview": true
+      "rawText": "INFOT 9 - Capstone Le Project 1 : BS INFO 3A - IICT 108",
+      "minWordConfidence": 67.0,
+      "subject": "INFOT 9 Capstone Le Project 1 (BS INFO 3A)",
+      "needsReview": false
     },
     {
       "dayOfWeek": 5,
       "startTime": "08:00",
       "endTime": "09:30",
-      "confidence": 58.8,
+      "confidence": 64.8,
       "bbox": [
-        2446,
+        2447,
         931,
         2978,
         1111
       ],
       "flags": [
-        "low-confidence",
-        "uncertain-characters"
+        "low-confidence"
       ],
       "courseTitle": "COMSC 9- SOFTWARE ENGINEERING 2",
       "section": "BSCS 3A-INS",
       "room": "IICT 201",
       "rawText": "COMSC 9- SOFTWARE _ ENGINEERING 2 /«é BSCS 3A-INS - IICT 201",
-      "minWordConfidence": 0.0,
+      "minWordConfidence": 65.0,
       "subject": "COMSC 9- SOFTWARE ENGINEERING 2 (BSCS 3A-INS)",
       "needsReview": true
     },
@@ -345,22 +343,23 @@
       "dayOfWeek": 5,
       "startTime": "09:30",
       "endTime": "11:00",
-      "confidence": 68.4,
+      "confidence": 67.6,
       "bbox": [
-        2446,
+        2447,
         1111,
         2978,
         1270
       ],
       "flags": [
+        "room-prefix-check",
         "low-confidence",
         "uncertain-characters"
       ],
       "courseTitle": "COMSC 9- SOFTWARE, ENGINEERING 2/4",
       "section": "BSCS 3B-SE",
-      "room": "IICT 201",
-      "rawText": "COMSC 9- SOFTWARE, _ ENGINEERING 2/4 BSCS 3B-SE - IICT 201",
-      "minWordConfidence": 3.0,
+      "room": "ICT 201",
+      "rawText": "COMSC 9- SOFTWARE, _ ENGINEERING 2/4 BSCS 3B-SE - ICT 201",
+      "minWordConfidence": 20.0,
       "subject": "COMSC 9- SOFTWARE, ENGINEERING 2/4 (BSCS 3B-SE)",
       "needsReview": true
     },
@@ -368,9 +367,9 @@
       "dayOfWeek": 5,
       "startTime": "11:00",
       "endTime": "12:00",
-      "confidence": 72.8,
+      "confidence": 72.2,
       "bbox": [
-        2446,
+        2447,
         1270,
         2978,
         1398
@@ -383,7 +382,7 @@
       "section": "BSCS 3A-INS",
       "room": "IICT 106",
       "rawText": "COMSC 9 - SOFTWARE ENGINEERING 2! BSCS 3A-INS - lICT 106",
-      "minWordConfidence": 29.0,
+      "minWordConfidence": 17.0,
       "subject": "COMSC 9 SOFTWARE ENGINEERING 2 (BSCS 3A-INS)",
       "needsReview": true
     }
@@ -393,9 +392,9 @@
       "dayOfWeek": 2,
       "startTime": "12:30",
       "endTime": "14:30",
-      "confidence": 95.0,
+      "confidence": 95.5,
       "bbox": [
-        914,
+        913,
         1453,
         1388,
         1672
@@ -411,7 +410,7 @@
       "bbox": [
         1936,
         1453,
-        2446,
+        2447,
         1672
       ],
       "flags": [],
@@ -420,12 +419,16 @@
   ],
   "warnings": [
     {
+      "code": "time-labels-unverified",
+      "message": "2 of 21 printed time labels could not be read; the times come from the other labels (the sheet starts at 07:00, every row is 30 minutes). Check the times against the scan."
+    },
+    {
       "code": "faculty-name-needs-review",
       "message": "printed faculty name missing, low-confidence or covered by a signature; identity must be verified by a person before confirmation"
     },
     {
       "code": "ignored-marks",
-      "message": "Left out because they are not classes (handwritten numbers or marks): Mon 17:00-17:30: L; Tue 17:00-17:30: \\y; Wed 17:00-17:30: <i; Thu 17:00-17:30: le; Fri 17:00-17:30: Lh"
+      "message": "Left out because they are not classes (handwritten numbers or marks): Mon 17:00-17:30: L; Tue 17:00-17:30: \\y; Wed 17:00-17:30: <i; Thu 17:00-17:30: le; Fri 17:00-17:30: ft"
     }
   ]
 }

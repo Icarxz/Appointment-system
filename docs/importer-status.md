@@ -85,6 +85,16 @@ blocks (Tue/Thu 12:30-2:30 PM), sections 15/15, rooms 14/15 (wrong one flagged),
 - The Windows renderer (PyMuPDF) reads one extra phantom class (Wed 5:00-5:30 PM, handwriting); it is flagged and a workload-mismatch warning appears. Delete it in review.
 - Silva's printed name is garbled by the signature, so the identity checkbox is the ONLY guard against uploading her sheet for the wrong faculty.
 
+## General reader and three more sheets (Saylo, Niego, Egualan)
+Three more UA sheets could not be read (different start time 7:30, ending 6:30 / 8:30 PM, room before section, one "<section> <room>" line). Instead of a fourth
+special case the reader was made layout-adaptive (see `ocr/README.md`): row lines from the picture, times from the printed labels, section/room by shape.
+Measured against the scans by eye, with both renderers: day+time exact 20/20, 19/19, 21/21; consultation blocks exact; extracted hours = printed totals
+(23, 25, 27); no wrong cell unflagged. Text accuracy is only moderate (flagged rows: Saylo 19-20 of 20, Niego 17-18 of 19, Egualan 9-11 of 21), so expect a real review pass.
+- `ocr/check_sheets.py` re-reads PDFs and compares with the saved fixtures. **Run it on Percy, Fortaleza and Silva before merging** (those PDFs are not in the repo).
+- **Evidence for the four-hour rule decision (adviser):** official consultation hours per real sheet are Percy 4, Silva 4, Niego 4, Saylo 3 (part-time), Egualan 5, Fortaleza 0.
+  "Exactly 4 hours, blocking" rejects three of six real sheets. Decide: warn instead of block, or a range, or per-position rules.
+- No printed faculty name could be read on any of the sheets (a signature runs through it): the identity checkbox is the only guard against a wrong-faculty upload.
+
 ## Open decisions (need a human)
 1. **Where does OCR run?** It needs Python, OpenCV, Tesseract and poppler. Most free Node hosts do not have them. Options: a small
    Docker worker (Render / Railway / a VM), or run OCR on a school machine. Until decided, `/preview` answers `OCR_UNAVAILABLE`

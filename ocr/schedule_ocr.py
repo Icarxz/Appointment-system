@@ -25,9 +25,10 @@ SHEET_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'
 SHEET_DAY_TO_DB = [1, 2, 3, 4, 5, 6, 0]       # sheet column -> stored dayOfWeek
 DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-FIRST_ROW_MIN = 7 * 60                          # 07:00
-ROWS = 24                                       # 07:00 .. 19:00 in 30-minute rows (the most a class may use)
-MIN_ROWS = 12                                   # a sheet may stop earlier (Silva's ends 5:30 PM = 21 rows); fewer than this is not the form
+LATEST_END_MIN = 19 * 60                        # a class may not end after 7 PM (the sheet itself may print rows past that: Saylo goes to 8:30 PM)
+MAX_ROWS = 30                                   # 5:00 AM .. 8:00 PM would already be 30 rows; more means the footer was not recognised
+MIN_ROWS = 8                                    # sheets differ in length (Silva 21 rows, Egualan 23, Saylo 27); fewer than this is not the form
+FIRST_START_RANGE = (5 * 60, 11 * 60)           # the first printed row starts between 5:00 and 11:00 AM (7:00 on most sheets, 7:30 on Egualan's)
 WORD_CONF = 50.0                                # any printed word below this inside a cell => that cell is flagged
 CELL_SCALE = float(os.environ.get('OCR_CELL_SCALE', 3.5))                                # small print: enlarge cells before OCR (measured: 1.5x read 6/19 of the Fortaleza cells exactly, 3.5x about twice as many)
 LOW_CONF = 75.0                                 # Tesseract word confidence below this => review
@@ -91,8 +92,8 @@ def cluster(idx, gap=5):
 
 
 # ---------- 3. grid ----------
-TIME_LABEL_RE = re.compile(r'^\s*(\d{1,2}):(\d{2})\s*[-~]\s*(\d{1,2}):(\d{2})')
-TIME_LABEL_SEARCH_RE = re.compile(r'(\d{1,2}):(\d{2})\s*[-~]\s*(\d{1,2}):(\d{2})')
+# Nothing here assumes where the sheet starts or how long it is: the row lines come from the picture and the times from the printed labels.
+LABEL_START_RE = re.compile(r"\W*(\d{1,2})\s*[:;.'\u2019\u00b0]\s*(\d{2})(?!\d)")   # the START of "7:30 - 8:00" (a stray mark may replace the colon)
 
 
 def vertical_extent(vmask, x):
@@ -101,24 +102,58 @@ def vertical_extent(vmask, x):
 
 
 def read_time_label(gray, xs, y0, y1):
+    """Returns (free text, [candidate (hour, minute) of the label's start]). Two reads of the same cell: free text and digits only."""
     crop = gray[y0 + 6:y1 - 6, xs[0] + 8:xs[1] - 8]
     if crop.size == 0:
-        return None
+        return '', []
     crop = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    txt = pytesseract.image_to_string(crop, config='--psm 7 -c tessedit_char_whitelist=0123456789:-')
-    # A cell border can leak a stray digit in front ("410:30-11:00"): search for the label instead of requiring it at the start.
-    m = TIME_LABEL_SEARCH_RE.search(txt)
-    return m.group(0) if m else None
+    free = pytesseract.image_to_string(crop, config='--psm 7').strip()
+    digits = pytesseract.image_to_string(crop, config='--psm 7 -c tessedit_char_whitelist=0123456789:-').strip()
+    cands = []
+    for txt in (free, digits):
+        m = LABEL_START_RE.match(txt)
+        if m and 1 <= int(m.group(1)) <= 12 and int(m.group(2)) in (0, 30) and (int(m.group(1)), int(m.group(2))) not in cands:
+            cands.append((int(m.group(1)), int(m.group(2))))
+    return free, cands
+
+
+def vote_time_axis(label_cands):
+    """Every row is 30 minutes, so each readable label says where the FIRST row starts. A garbled label just loses the vote.
+    Returns (first row start in minutes, number of labels that agree). Refuses to guess when there is no clear winner, and when the labels
+    disagree in a way that means a row line was missed or doubled (then everything after it would be shifted by 30 minutes)."""
+    implied = []
+    for i, cands in enumerate(label_cands):
+        seen = set()
+        for h, m in cands:
+            for pm in (0, 12):
+                first = ((h % 12) + pm) * 60 + m - 30 * i
+                if FIRST_START_RANGE[0] <= first <= FIRST_START_RANGE[1] and first % 30 == 0:
+                    seen.add(first)
+        implied.append(seen)
+    votes = {}
+    for seen in implied:
+        for f in seen:
+            votes[f] = votes.get(f, 0) + 1
+    ranked = sorted(votes.items(), key=lambda kv: -kv[1])
+    n = len(label_cands)
+    if not ranked or ranked[0][1] < max(4, 0.35 * n) or (len(ranked) > 1 and ranked[0][1] - ranked[1][1] < 2):
+        raise ValueError(f'could not read the time column reliably ({sum(1 for c in label_cands if c)} of {n} labels readable): template not recognised')
+    win = ranked[0][0]
+    bad = [i for i, seen in enumerate(implied) if seen and win not in seen]
+    readable = sum(1 for seen in implied if seen)
+    if any(b + 1 in bad for b in bad) or len(bad) > max(2, 0.15 * readable):
+        raise ValueError('the time labels do not follow the row lines (a row line was probably missed): template not recognised')
+    return win, ranked[0][1]
 
 
 def find_grid(binary, gray, dpi):
-    """Returns (xs, ys, hmask, header_top, labels).
-    xs: 9 vertical edges (time + 7 days). ys: the row edges read from the TIME column (rows may differ in height, and the
-    number of rows is read from the printed time labels: 24 rows 07:00-19:00, or 25 when the sheet prints 7:00-7:30 PM too)."""
+    """Returns (xs, ys, hmask, header_top, first_start, axis) where xs are the 9 vertical edges (time + 7 days), ys the row edges
+    (rows may differ in height), first_start the minutes of the first row and axis a small dict about how the time column was read."""
     s = dpi / 300.0
     v = line_mask(binary, False, int(100 * s))
-    h = line_mask(binary, True, int(150 * s))
-    cand = cluster(np.where(v.sum(axis=0) / 255 > 600 * s)[0])
+    h = line_mask(binary, True, int(100 * s))                # short: a weekend column can be only ~140 px wide (Niego)
+    ink = v.sum(axis=0) / 255
+    cand = cluster(np.where(ink > 350 * s)[0])               # a faint table edge can have little ink (Niego's right edge: 581); noise is removed below
     # A page-edge shadow or a fold is also a long vertical line; table lines all start and end where the table does.
     ext = {x: vertical_extent(v, x) for x in cand}
     spans = sorted(e[1] - e[0] for e in ext.values())
@@ -127,23 +162,32 @@ def find_grid(binary, gray, dpi):
     top = starts[len(starts) // 2] if starts else 0
     # Table lines all begin where the table begins and are not much longer than the typical one. A scan-edge line (page border, fold, shadow)
     # fails one of the two: it can be longer (right edge) or start far from the table top (left edge of a scan, seen on the Silva sheet).
-    vx = [x for x in cand if ext[x][1] - ext[x][0] <= typical * 1.25 and abs(ext[x][0] - top) <= 60 * s]
+    vx = [x for x in cand if ext[x][1] - ext[x][0] <= typical * 1.25 and abs(ext[x][0] - top) <= 110 * s]     # a faint table edge can start a bit lower (Niego, 76 px); a page-edge shadow starts 250+ px away
     if len(vx) != 9:
         raise ValueError(f'expected 9 vertical grid lines (time + 7 days), found {len(vx)}: template not recognised')
     band = h[:, vx[0] + 10:vx[1] - 10]                      # the TIME column: every row has its own line
-    ys_all = [y for y in cluster(np.where(band.sum(axis=1) / 255 > 0.8 * (vx[1] - vx[0] - 20))[0]) if y > 20 * s]
+    ys_all = [y for y in cluster(np.where(band.sum(axis=1) / 255 > 0.55 * (vx[1] - vx[0] - 20))[0]) if y > 20 * s]   # 0.55: a row line can be partly hidden (Saylo's was at 0.80 under one renderer)
     if len(ys_all) < 4:
         raise ValueError('could not find the row lines of the time column: template not recognised')
-    header_top, edges = ys_all[0], ys_all[1:]                 # edges[0] is the bottom of the header row
-    labels, n = [], 0
-    for k in range(len(edges) - 1):                           # rows are the intervals that carry a time label; the footer rows do not
-        lab = read_time_label(gray, vx, edges[k], edges[k + 1])
-        if not lab:
+    header_top = ys_all[0]
+    edges = ys_all[1:]                                      # edges[0] is the bottom of the header row
+    # The time rows end where the footer starts ("Lecture Hours", "Additional ETU", "Prepared by": words, not times). Reading the footer text is
+    # sturdier than measuring a line: a handwritten number can break any one line (it cut Silva's TIME|MONDAY line three rows short).
+    reads = []
+    for k in range(len(edges) - 1):
+        free, cands = read_time_label(gray, vx, edges[k], edges[k + 1])
+        if len(re.findall(r'[A-Za-z]', free)) >= 4 and not cands:
             break
-        labels.append(lab); n += 1
-    if n < MIN_ROWS:
-        raise ValueError(f'expected at least {MIN_ROWS} time-labelled rows, read {n}: template not recognised')
-    return vx, edges[:n + 1], h, header_top, labels
+        reads.append((free, cands))
+        if len(reads) >= MAX_ROWS:
+            break
+    while reads and not reads[-1][1] and len(re.findall(r'[A-Za-z]', reads[-1][0])) >= 2:
+        reads.pop()                                           # a footer row whose words were only half read
+    if len(reads) < MIN_ROWS:
+        raise ValueError(f'expected at least {MIN_ROWS} time rows, found {len(reads)}: template not recognised')
+    first_start, agree = vote_time_axis([c for _, c in reads])
+    axis = {'firstRow': hhmm(first_start), 'rows': len(reads), 'labelsAgreeing': agree}
+    return vx, edges[:len(reads) + 1], h, header_top, first_start, axis
 
 
 def boundary_present(hmask, x0, x1, y, inset=0.12, tol=6):
@@ -218,16 +262,17 @@ def tidy(t):
     return re.sub(r"^[^A-Za-z0-9(]+|[^A-Za-z0-9)]+$", '', re.sub(r'\s[^A-Za-z0-9(]{1,3}(?=\s|$)', '', t)).strip()
 
 
-ROOM_SHAPE = re.compile(r'^(?:I{1,2}CT \d{3}(?: [A-Z])?(?: \(LAB\)?)?|TBA(?: \(LAB\)?)?|[A-Za-z ]*Library)$')
+ROOM_SHAPE = re.compile(r'^(?:I{1,2}CT \d{3}(?: [A-Z])?(?: \((?:LAB|LEC)\)?)?|TBA(?: \((?:LAB|LEC)\)?)?|[A-Za-z ]*Library)$')
 
 
 def clean_room(raw):
     """Normalise spacing only; never invent characters. Anything that is not a known room shape is flagged for review."""
     room = re.sub(r'^[lLiI1|!]{1,3}(?=CT\b)', lambda m: 'II' if len(m.group(0)) >= 2 else 'I', tidy(raw))   # every room prefix on the sheet is I or II
     room = re.sub(r'(?<=\d)(?=[A-Z]\b)', ' ', room)                 # 101A -> 101 A
+    room = re.sub(r'(?<=\d)(?=\()', ' ', room)                      # 305(LAB) -> 305 (LAB)
     room = re.sub(r'\s+', ' ', room).strip()
     flags = []
-    m = re.match(r'^((?:I{1,2}CT \d{3}(?: [A-Z])?(?: \(LAB\)?)?|TBA(?: \(LAB\)?)?))\s+\S{1,3}$', room)
+    m = re.match(r'^((?:I{1,2}CT \d{3}(?: [A-Z])?(?: \((?:LAB|LEC)\)?)?|TBA(?: \((?:LAB|LEC)\)?)?))\s+\S{1,3}$', room)
     if m:                                                            # a handwritten scribble right after a complete room
         room = m.group(1)
         flags.append('trailing-marks-removed')
@@ -238,8 +283,8 @@ def clean_room(raw):
     return (room or None), flags
 
 
-def parse_teaching(text):
-    """'INFOT 8 - Platform Technologies / BSIT 3-D | IICT 306' -> dict. Returns flags for unparsed parts."""
+def parse_teaching_layouts(text):
+    """The known printed layouts, decided by line position. 'INFOT 8 - Platform Technologies / BSIT 3-D | IICT 306' -> dict. Returns flags for unparsed parts."""
     lines = [clean(l) for l in text.split('\n') if clean(l)]
     flags = []
     if len(lines) < 2:
@@ -281,6 +326,56 @@ def parse_teaching(text):
     return {'courseTitle': title, 'section': section, 'room': room}, flags
 
 
+# Content-based reader, used only when the layouts above did not give BOTH a section and a room. It does not care on which line they are:
+# the room is the part that looks like a room (I/II/l + CT + 3 digits, or TBA), the section is a whole line that looks like a section.
+# Niego's sheet prints "title / room / section" (room first) and wraps long titles over several lines.
+ROOM_ANY = re.compile(r'(?<![A-Za-z])(?:[lLiI1|!]{1,3}CT\s*\d{3}[A-Za-z]?|TBA)(?:\s*\(\s*(?:LEC|LAB)\s*\)?)?')
+SECTION_LINE = re.compile(r'(?:[A-Z]{1,3}\s+)?[A-Z]{2,7}(?:\s+[A-Z]{2,6})?\s*\d[A-Z]?\s*[-\u2013\u2014~]{1,3}\s*[A-Z]{1,4}')   # "BSCD 1 - A", "BS INFO3~-B": the dash is often doubled or misread
+
+
+def tidy_section(t):
+    """Spacing and dash only: 'BS INFO3~-B' -> 'BS INFO 3-B'. No character is added or replaced by a guess."""
+    t = re.sub(r'\s*[-\u2013\u2014~]{1,3}\s*', '-', t)
+    t = re.sub(r'(?<=[A-Z])(?=\d)', ' ', t)
+    return re.sub(r'\s+', ' ', t).strip()
+
+
+def parse_generic(text):
+    lines = [clean(l) for l in text.split('\n') if clean(l)]
+    room, flags, section = None, [], None
+    for i in range(len(lines) - 1, -1, -1):                      # the last line that holds a room
+        found = list(ROOM_ANY.finditer(lines[i]))
+        if found:
+            m = found[-1]
+            room, flags = clean_room(m.group(0))
+            lines[i] = (lines[i][:m.start()] + ' ' + lines[i][m.end():]).strip()
+            break
+    keep = []
+    for i in range(len(lines) - 1, -1, -1):                      # the last remaining line that is a section and nothing else
+        t = re.sub(r"^[^A-Za-z0-9(]+|[^A-Za-z0-9)]+$", '', lines[i]).strip()      # ends only: tidy() would also delete the lone ' - ' of "BSCD 1 - A"
+        m = SECTION_LINE.match(t) if section is None and t else None
+        if m and len(t[m.end():].strip()) <= 4:                    # a short tail is a handwritten mark next to the section
+            section = tidy_section(m.group(0))
+            lines[i] = ''
+    keep = [l for l in lines if tidy(l)]
+    title = re.sub(r'(?<=[A-Za-z])(?=\d+$)', ' ', tidy(' '.join(keep)))
+    if not section:
+        flags.append('section-not-read')
+    if not room:
+        flags.append('room-not-read')
+    return {'courseTitle': title, 'section': section, 'room': room}, flags
+
+
+def parse_teaching(text):
+    parsed, flags = parse_teaching_layouts(text)
+    if parsed.get('section') and parsed.get('room') and not {'unrecognised-cell-layout', 'section-not-read', 'room-not-read', 'room-check'} & set(flags):
+        return parsed, flags
+    g, gflags = parse_generic(text)
+    if g['section'] and g['room'] and g['courseTitle']:
+        return g, gflags
+    return parsed, flags
+
+
 # ---------- 5. header / footer ----------
 MONTHS = {m: i for i, m in enumerate(['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'], 1)}
 
@@ -299,7 +394,7 @@ NAME_CONF_OK = 90.0
 def term_name(raw):
     """'SecondSemester' -> 'Second Semester'; '2nd Semester' printed with a superscript (read as 2\" or 2nd) -> 'Second Semester'."""
     t = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', raw.strip())
-    m = re.match(r'^([123])\W{0,2}(?:st|nd|rd|d)?\s*(Semester|Term)$', t, re.I)
+    m = re.match(r'^([123])\W{0,2}[a-z0-9]{0,2}\s*(Semester|Term)$', t, re.I)   # 2nd, 2"d, 2"4 (a superscript read as noise)
     if m:
         return f"{ {'1': 'First', '2': 'Second', '3': 'Third'}[m.group(1)] } {m.group(2).title()}"
     return t
@@ -347,12 +442,18 @@ def parse_metadata(gray, grid_top, grid_bottom, x_left, x_right):
     md = {'formId': None, 'term': None, 'academicYear': None, 'effectivityDate': None}
     m = re.search(r'VAA-FM-\d+', flat)
     md['formId'] = m.group(0) if m else None
-    m = re.search(r'Term:?\s*(.+?)\s+A\.?\s?Y\.?:?\s*(\d{4})\s*-\s*(\d{4})', flat, re.I)
+    m = re.search(r'Term:?\s*(.+?)\s+A\.?\s?Y\.?[\s:_.]*(\d{4})\s*[-\u2013]\s*(\d{4})', flat, re.I)
     if m:
         md['term'], md['academicYear'] = term_name(m.group(1)), f'{m.group(2)}-{m.group(3)}'
     m = re.search(r'Effectivity Date:?\s*([A-Za-z]+)\s+(\d{1,2}),?\s*(\d{4})', flat, re.I)
     if m and m.group(1).upper() in MONTHS:
         md['effectivityDate'] = f'{int(m.group(3)):04d}-{MONTHS[m.group(1).upper()]:02d}-{int(m.group(2)):02d}'
+    else:
+        m = re.search(r'Effectivity Date:?\s*(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{4})', flat, re.I)      # Egualan: 02/02/2026 (month/day/year)
+        if m and 1 <= int(m.group(1)) <= 12 and 1 <= int(m.group(2)) <= 31:
+            md['effectivityDate'] = f'{int(m.group(3)):04d}-{int(m.group(1)):02d}-{int(m.group(2)):02d}'
+            if int(m.group(1)) != int(m.group(2)) and int(m.group(2)) <= 12:
+                warnings.append({'code': 'date-format-assumed', 'message': f'effectivity date {m.group(0)[-10:]} was read as month/day/year; confirm it'})
     # the faculty name is the bold underlined line directly above "Faculty Member"
     md.update(read_faculty_name(gray, grid_bottom + 20, x_left, x_right))
     for k in ('formId', 'term', 'academicYear', 'effectivityDate', 'facultyName'):
@@ -383,27 +484,15 @@ def extract(pdf_path, dpi=300, debug_dir=None):
         gray = cv2.imread(png, cv2.IMREAD_GRAYSCALE)
     gray, angle = deskew(gray)
     binary = binarize(gray)
-    xs, ys, hmask, header_top, labels = find_grid(binary, gray, dpi)
+    xs, ys, hmask, header_top, first_start, axis = find_grid(binary, gray, dpi)
     warnings = []
     if pages > 1:
         warnings.append({'code': 'extra-pages', 'message': f'{pages} pages; only page 1 was read'})
-
-    for r, lab in enumerate(labels):                        # the printed labels carry no AM/PM: 1:00-6:30 are afternoon
-        m = TIME_LABEL_RE.match(lab)
-        hh = int(m.group(1)) % 12
-        hh = hh + 12 if hh < 7 else hh
-        if hh == 7 and r >= 12:
-            hh = 19                                          # the second "7:00" of the sheet is 7 PM
-        eh = int(m.group(3)) % 12
-        eh = eh + 12 if eh < 7 else eh
-        if eh == 7 and r >= 12:
-            eh = 19
-        expected = FIRST_ROW_MIN + r * 30
-        # a stray border digit can ruin the start ("41:30-12:00"); the label is still corroborated when its END is the expected one
-        if hh * 60 + int(m.group(2)) != expected and eh * 60 + int(m.group(4)) != expected + 30:
-            warnings.append({'code': 'time-axis-unverified', 'row': r, 'message': f'time label of row {r} read as {lab!r}; row-to-time mapping assumed from position'})
-    if len(ys) - 1 > ROWS:
-        warnings.append({'code': 'rows-after-7pm', 'message': f'the sheet has {len(ys) - 1 - ROWS} row(s) after 7:00 PM; anything written there is flagged because classes must end by 7:00 PM'})
+    if axis['labelsAgreeing'] < axis['rows']:
+        warnings.append({'code': 'time-labels-unverified', 'message': f"{axis['rows'] - axis['labelsAgreeing']} of {axis['rows']} printed time labels could not be read; the times come from the other labels (the sheet starts at {axis['firstRow']}, every row is 30 minutes). Check the times against the scan."})
+    last_end = first_start + (len(ys) - 1) * 30
+    if last_end > LATEST_END_MIN:
+        warnings.append({'code': 'rows-after-7pm', 'message': f'the sheet has rows until {hhmm(last_end)}; anything written after 7:00 PM is flagged because classes must end by 7:00 PM'})
     ignored = []
     classes, consults = [], []
     for col in range(1, 8):
@@ -414,13 +503,18 @@ def extract(pdf_path, dpi=300, debug_dir=None):
             if not has_ink(binary, hmask, x0, x1, y0, y1):
                 continue                                   # empty rows stay as gaps
             text, conf, nwords, hand, minconf = ocr_cell(gray, x0, x1, y0, y1)
-            start, end = FIRST_ROW_MIN + r0 * 30, FIRST_ROW_MIN + r1 * 30
+            start, end = first_start + r0 * 30, first_start + r1 * 30
             if not re.search(r'[A-Za-z]{3,}', text):
                 # only digits or marks: a handwritten hour count or a smudge, not a class. Reported, never silently dropped.
                 ignored.append(f'{DAY_LABELS[db_day]} {hhmm(start)}-{hhmm(end)}: {clean(text) or "marks"}')
                 continue
             base = {'dayOfWeek': db_day, 'startTime': hhmm(start), 'endTime': hhmm(end),
                     'confidence': round(conf, 1), 'bbox': [int(x0), int(y0), int(x1), int(y1)], 'flags': []}
+            if (end > LATEST_END_MIN or r1 - r0 == 1) and not re.search(r'consult', text, re.I) and not (re.search(r'(?<![A-Za-z])[lLiI1|!]{1,3}CT\s*\d{3}', text) or SECTION_LINE.search(clean(text))):
+                # after 7 PM nothing can be a class, and a single 30-minute row with neither a room nor a section is not one either: handwriting in the
+                # spare rows ("6.5", "ral", a tick). Reported in the ignored-marks warning, never silently dropped.
+                ignored.append(f'{DAY_LABELS[db_day]} {hhmm(start)}-{hhmm(end)}: {clean(text) or "marks"}')
+                continue
             if re.search(r'consult', text, re.I):
                 base['label'] = 'CONSULTATION HOURS'
                 consults.append(base)
@@ -431,7 +525,7 @@ def extract(pdf_path, dpi=300, debug_dir=None):
             base['rawText'] = clean(text)
             if hand:
                 base['handwrittenIgnored'] = hand
-            if end > 19 * 60:
+            if end > LATEST_END_MIN:
                 base['flags'].append('after-7pm')
             if conf < LOW_CONF:
                 base['flags'].append('low-confidence')
@@ -457,13 +551,14 @@ def extract(pdf_path, dpi=300, debug_dir=None):
         warnings.append({'code': 'ignored-marks', 'message': 'Left out because they are not classes (handwritten numbers or marks): ' + '; '.join(ignored)})
     hours = sum((int(c['endTime'][:2]) * 60 + int(c['endTime'][3:]) - int(c['startTime'][:2]) * 60 - int(c['startTime'][3:])) for c in classes) / 60
     workload['extractedTeachingHours'] = hours
-    if workload.get('lectureHours') is not None and workload.get('laboratoryHours') is not None:
-        workload['reconciles'] = abs(hours - (workload['lectureHours'] + workload['laboratoryHours'])) < 0.01
+    printed = (workload['lectureHours'] + workload['laboratoryHours']) if workload.get('lectureHours') is not None and workload.get('laboratoryHours') is not None else workload.get('totalHours')
+    if printed is not None:                                  # the sheet's own totals: lecture + laboratory, or "Total Hours" when one of them was not read
+        workload['reconciles'] = abs(hours - printed) < 0.01
         if not workload['reconciles']:
-            warnings.append({'code': 'workload-mismatch', 'message': f"extracted teaching hours {hours:g} != lecture+laboratory {workload['lectureHours'] + workload['laboratoryHours']:g}"})
+            warnings.append({'code': 'workload-mismatch', 'message': f"extracted teaching hours {hours:g} != hours printed on the sheet {printed:g}"})
     result = {
         'parserVersion': PARSER_VERSION, 'template': 'VAA-FM-061', 'status': 'DRAFT_NEEDS_REVIEW',
-        'source': {'sha256': hashlib.sha256(raw).hexdigest(), 'pages': pages, 'dpi': dpi, 'renderer': renderer, 'deskewDegrees': round(angle, 3)},
+        'source': {'sha256': hashlib.sha256(raw).hexdigest(), 'pages': pages, 'dpi': dpi, 'renderer': renderer, 'deskewDegrees': round(angle, 3), 'timeAxis': axis},
         'metadata': md, 'workload': workload,
         'classes': sorted(classes, key=lambda c: (c['dayOfWeek'] or 7, c['startTime'])),
         'consultationHours': sorted(consults, key=lambda c: (c['dayOfWeek'] or 7, c['startTime'])),

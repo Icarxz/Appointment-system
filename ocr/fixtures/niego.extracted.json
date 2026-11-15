@@ -1,0 +1,543 @@
+{
+  "parserVersion": "vaa-fm-061/0.1.0",
+  "template": "VAA-FM-061",
+  "status": "DRAFT_NEEDS_REVIEW",
+  "source": {
+    "sha256": "f3a4beee83bf5879a6c8bd9316dede158633671ae5ae95600aa4faf0f022cf03",
+    "pages": 1,
+    "dpi": 300,
+    "renderer": "pdftoppm",
+    "deskewDegrees": 0.376,
+    "timeAxis": {
+      "firstRow": "07:00",
+      "rows": 23,
+      "labelsAgreeing": 22
+    }
+  },
+  "metadata": {
+    "formId": "VAA-FM-061",
+    "term": "Second Semester",
+    "academicYear": "2025-2026",
+    "effectivityDate": "2026-02-02",
+    "facultyName": null,
+    "facultyNameConfidence": null,
+    "facultyNameSource": "printed_text",
+    "facultyNameNeedsReview": true,
+    "facultyNameCandidates": [],
+    "headerConfidence": 89.7
+  },
+  "workload": {
+    "lectureHours": 10.0,
+    "laboratoryHours": 15.0,
+    "totalHours": 25.0,
+    "preparations": 5.0,
+    "overload": null,
+    "extractedTeachingHours": 25.0,
+    "reconciles": true
+  },
+  "classes": [
+    {
+      "dayOfWeek": 1,
+      "startTime": "10:30",
+      "endTime": "11:30",
+      "confidence": 69.4,
+      "bbox": [
+        424,
+        995,
+        1028,
+        1108
+      ],
+      "flags": [
+        "room-prefix-check",
+        "low-confidence"
+      ],
+      "courseTitle": "ICT 1 ICT FUNDAMENTALS",
+      "section": "BSCD 1-A",
+      "room": "ICT 103 (LEC)",
+      "rawText": "ICT 1 ~ ICT FUNDAMENTALS ICT 103 (LEC) BSCD1-A A",
+      "minWordConfidence": 65.0,
+      "subject": "ICT 1 ICT FUNDAMENTALS (BSCD 1-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "12:30",
+      "endTime": "13:30",
+      "confidence": 78.9,
+      "bbox": [
+        424,
+        1202,
+        1028,
+        1315
+      ],
+      "flags": [
+        "room-prefix-check"
+      ],
+      "courseTitle": "COMPE 2 SOFTWARE DESIGN",
+      "section": "BSCS 3-B",
+      "room": "ICT 304 (LAB)",
+      "rawText": "COMPE 2 - SOFTWARE DESIGN ICT 304 (LAB) BSCS3-B +",
+      "minWordConfidence": 87.0,
+      "subject": "COMPE 2 SOFTWARE DESIGN (BSCS 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 1,
+      "startTime": "16:30",
+      "endTime": "18:30",
+      "confidence": 82.6,
+      "bbox": [
+        424,
+        1636,
+        1028,
+        1856
+      ],
+      "flags": [
+        "room-prefix-check",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3 (NAS 3)-IT SECURITY PROTECTION",
+      "section": "BS INFO 3-B",
+      "room": "ICT 306 (LEC)",
+      "rawText": "INFOE 3 (NAS 3)-IT SECURITY & PROTECTION ICT 306 (LEC) BS INFO3-~B",
+      "handwrittenIgnored": [
+        "2"
+      ],
+      "minWordConfidence": 46.0,
+      "subject": "INFOE 3 (NAS 3)-IT SECURITY PROTECTION (BS INFO 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "10:00",
+      "endTime": "11:30",
+      "confidence": 76.8,
+      "bbox": [
+        1028,
+        958,
+        1630,
+        1108
+      ],
+      "flags": [
+        "room-prefix-check",
+        "uncertain-characters"
+      ],
+      "courseTitle": "ICT 1 ~ICT FUNDAMENTALS",
+      "section": "BSCD 1-A",
+      "room": "ICT 107 (LAB)",
+      "rawText": "ICT 1 ~ICT FUNDAMENTALS ICT 107 (LAB) BSCD1-A ft",
+      "minWordConfidence": 42.0,
+      "subject": "ICT 1 ~ICT FUNDAMENTALS (BSCD 1-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "14:30",
+      "endTime": "16:00",
+      "confidence": 74.6,
+      "bbox": [
+        1028,
+        1428,
+        1630,
+        1585
+      ],
+      "flags": [
+        "room-prefix-check",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "CPROG 3 OBJECT-ORIENTED PROGRAMMING j. iy",
+      "section": "BSINFO 2-D",
+      "room": "ICT 303 (LAB)",
+      "rawText": "CPROG 3 ~ OBJECT-ORIENTED PROGRAMMING ICT 303 (LAB) j. iy BSINFO 2-D",
+      "minWordConfidence": 5.0,
+      "subject": "CPROG 3 OBJECT-ORIENTED PROGRAMMING j. iy (BSINFO 2-D)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "16:00",
+      "endTime": "17:30",
+      "confidence": 79.2,
+      "bbox": [
+        1028,
+        1585,
+        1630,
+        1740
+      ],
+      "flags": [
+        "unrecognised-cell-layout",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3 (HCI 3) APPLIED MACHINE",
+      "section": null,
+      "room": null,
+      "rawText": "INFOE 3 (HCI 3) - APPLIED MACHINE LEARNING HCT 305 (LAB) BS INFO3-A 1-S",
+      "minWordConfidence": 0.0,
+      "subject": "INFOE 3 (HCI 3) APPLIED MACHINE",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 2,
+      "startTime": "17:30",
+      "endTime": "18:30",
+      "confidence": 78.2,
+      "bbox": [
+        1028,
+        1740,
+        1630,
+        1856
+      ],
+      "flags": [
+        "unrecognised-cell-layout",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3 (HCI 3) APPLIED MACHINE",
+      "section": null,
+      "room": null,
+      "rawText": "INFOE 3 (HCI 3) - APPLIED MACHINE LEARNING ICT 308 (LEC) Re INEM? A",
+      "handwrittenIgnored": [
+        "4"
+      ],
+      "minWordConfidence": 0.0,
+      "subject": "INFOE 3 (HCI 3) APPLIED MACHINE",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "10:30",
+      "endTime": "11:30",
+      "confidence": 69.2,
+      "bbox": [
+        1630,
+        995,
+        2240,
+        1108
+      ],
+      "flags": [
+        "room-prefix-check",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "ICT 1 -ICT FUNDAMENTALS P",
+      "section": "BSCD 1-A",
+      "room": "ICT 104 (LEC)",
+      "rawText": "ICT 1 -ICT FUNDAMENTALS ICT 104 (LEC) P BSCD1-A us",
+      "minWordConfidence": 32.0,
+      "subject": "ICT 1 -ICT FUNDAMENTALS P (BSCD 1-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "confidence": 83.6,
+      "bbox": [
+        1630,
+        1146,
+        2240,
+        1258
+      ],
+      "flags": [],
+      "courseTitle": "COMPE 2 SOFTWARE DESIGN",
+      "section": "BSCS 3-B",
+      "room": "IICT 304 (LAB)",
+      "rawText": "COMPE 2 - SOFTWARE DESIGN liCT 304 (LAB) BSCS 3~B",
+      "handwrittenIgnored": [
+        "4"
+      ],
+      "minWordConfidence": 67.0,
+      "subject": "COMPE 2 SOFTWARE DESIGN (BSCS 3-B)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "confidence": 85.2,
+      "bbox": [
+        1630,
+        1480,
+        2240,
+        1585
+      ],
+      "flags": [],
+      "courseTitle": "COMPE 2 SOFTWARE DESIGN",
+      "section": "BSCS 3-B",
+      "room": "IICT 309 (LEC)",
+      "rawText": "COMPE 2 - SOFTWARE DESIGN liCT 309 (LEC) BSCS3-B",
+      "handwrittenIgnored": [
+        "4"
+      ],
+      "minWordConfidence": 65.0,
+      "subject": "COMPE 2 SOFTWARE DESIGN (BSCS 3-B)",
+      "needsReview": false
+    },
+    {
+      "dayOfWeek": 3,
+      "startTime": "16:00",
+      "endTime": "18:00",
+      "confidence": 79.8,
+      "bbox": [
+        1630,
+        1585,
+        2240,
+        1792
+      ],
+      "flags": [
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3 (NAS 3) -IT SECURITY PROTECTION",
+      "section": "BS INFO 3-B",
+      "room": "IICT 306 (LAB)",
+      "rawText": "INFOE 3 (NAS 3) -IT SECURITY & PROTECTION liCT 306 (LAB) BS INFO3-B",
+      "handwrittenIgnored": [
+        "2"
+      ],
+      "minWordConfidence": 40.0,
+      "subject": "INFOE 3 (NAS 3) -IT SECURITY PROTECTION (BS INFO 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "10:00",
+      "endTime": "11:30",
+      "confidence": 73.2,
+      "bbox": [
+        2240,
+        958,
+        2844,
+        1108
+      ],
+      "flags": [
+        "room-prefix-check",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "ICT 1 -ICT FUNDAMENTALS",
+      "section": "BSCD 1-A",
+      "room": "ICT 107 (LAB)",
+      "rawText": "ICT 1 -ICT FUNDAMENTALS ICT 107 (LAB) BSCD1~A Le,",
+      "minWordConfidence": 17.0,
+      "subject": "ICT 1 -ICT FUNDAMENTALS (BSCD 1-A)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "14:30",
+      "endTime": "16:00",
+      "confidence": 75.3,
+      "bbox": [
+        2240,
+        1428,
+        2844,
+        1585
+      ],
+      "flags": [
+        "room-prefix-check",
+        "uncertain-characters"
+      ],
+      "courseTitle": "CPROG 3 OBJECT-ORIENTED PROGRAMMING bal",
+      "section": "BSINFO 2-D",
+      "room": "ICT 303 (LAB)",
+      "rawText": "CPROG 3 - OBJECT-ORIENTED PROGRAMMING ICT 303 (LAB) bal BSINFO 2-D :",
+      "minWordConfidence": 35.0,
+      "subject": "CPROG 3 OBJECT-ORIENTED PROGRAMMING bal (BSINFO 2-D)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "16:00",
+      "endTime": "17:30",
+      "confidence": 62.8,
+      "bbox": [
+        2240,
+        1585,
+        2844,
+        1740
+      ],
+      "flags": [
+        "unrecognised-cell-layout",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3 (HCI 3) APPLIED MACHINE",
+      "section": null,
+      "room": null,
+      "rawText": "INFOE 3 (HCI 3) ~ APPLIED MACHINE LEARNING ICT 305 (LAB) ; 4",
+      "minWordConfidence": 31.0,
+      "subject": "INFOE 3 (HCI 3) APPLIED MACHINE",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "17:30",
+      "endTime": "18:30",
+      "confidence": 65.8,
+      "bbox": [
+        2240,
+        1740,
+        2844,
+        1856
+      ],
+      "flags": [
+        "unrecognised-cell-layout",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3 (HCI 3) APPLIED MACHINE",
+      "section": null,
+      "room": null,
+      "rawText": "INFOE 3 (HCI 3) -- APPLIED MACHINE LEARNING CT 305 (LEC) Ac INE”A 2. A",
+      "handwrittenIgnored": [
+        "1."
+      ],
+      "minWordConfidence": 13.0,
+      "subject": "INFOE 3 (HCI 3) APPLIED MACHINE",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "10:00",
+      "endTime": "12:00",
+      "confidence": 72.5,
+      "bbox": [
+        2844,
+        958,
+        3474,
+        1146
+      ],
+      "flags": [
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "CPROG 3 OBJECT-ORIENTED PROGRAMMING",
+      "section": "BSINFO 2-D",
+      "room": "IICT 303 (LEC)",
+      "rawText": "CPROG 3 -- OBJECT-ORIENTED PROGRAMMING liCT 303 (LEC) BSINFO 2--D fi",
+      "minWordConfidence": 32.0,
+      "subject": "CPROG 3 OBJECT-ORIENTED PROGRAMMING (BSINFO 2-D)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "confidence": 69.7,
+      "bbox": [
+        2844,
+        1146,
+        3474,
+        1258
+      ],
+      "flags": [
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "COMPE 2 SOFTWARE DESIGN A",
+      "section": "BSCS 3-B",
+      "room": "IICT 304 (LAB)",
+      "rawText": "COMPE 2 - SOFTWARE DESIGN liCT 304 (LAB) A BSCS 3~-B ~",
+      "minWordConfidence": 18.0,
+      "subject": "COMPE 2 SOFTWARE DESIGN A (BSCS 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "confidence": 71.8,
+      "bbox": [
+        2844,
+        1480,
+        3474,
+        1585
+      ],
+      "flags": [
+        "room-prefix-check",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "COMPE 2 SOFTWARE DESIGN A",
+      "section": "BSCS 3-B",
+      "room": "ICT 309 (LEC)",
+      "rawText": "COMPE 2 - SOFTWARE DESIGN ICT 309 (LEC) A BSCS 3-B mi J",
+      "minWordConfidence": 26.0,
+      "subject": "COMPE 2 SOFTWARE DESIGN A (BSCS 3-B)",
+      "needsReview": true
+    },
+    {
+      "dayOfWeek": 5,
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "confidence": 73.5,
+      "bbox": [
+        2844,
+        1585,
+        3474,
+        1688
+      ],
+      "flags": [
+        "room-prefix-check",
+        "low-confidence",
+        "uncertain-characters"
+      ],
+      "courseTitle": "INFOE 3 (NAS 3) ~IT SECURITY PROTECTION",
+      "section": "BS INFO 3-B",
+      "room": "ICT 306 (LAB)",
+      "rawText": "INFOE 3 (NAS 3) ~IT SECURITY & PROTECTION ICT 306 (LAB) BS INFO3-B a",
+      "minWordConfidence": 36.0,
+      "subject": "INFOE 3 (NAS 3) ~IT SECURITY PROTECTION (BS INFO 3-B)",
+      "needsReview": true
+    }
+  ],
+  "consultationHours": [
+    {
+      "dayOfWeek": 1,
+      "startTime": "14:00",
+      "endTime": "16:00",
+      "confidence": 96.0,
+      "bbox": [
+        424,
+        1372,
+        1028,
+        1585
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    },
+    {
+      "dayOfWeek": 4,
+      "startTime": "12:30",
+      "endTime": "14:30",
+      "confidence": 95.5,
+      "bbox": [
+        2240,
+        1202,
+        2844,
+        1428
+      ],
+      "flags": [],
+      "label": "CONSULTATION HOURS"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "time-labels-unverified",
+      "message": "1 of 23 printed time labels could not be read; the times come from the other labels (the sheet starts at 07:00, every row is 30 minutes). Check the times against the scan."
+    },
+    {
+      "code": "metadata-missing",
+      "field": "facultyName",
+      "message": "facultyName was not read from the document; enter or confirm it manually"
+    },
+    {
+      "code": "faculty-name-needs-review",
+      "message": "printed faculty name missing, low-confidence or covered by a signature; identity must be verified by a person before confirmation"
+    },
+    {
+      "code": "ignored-marks",
+      "message": "Left out because they are not classes (handwritten numbers or marks): Wed 18:00-18:30: x."
+    }
+  ]
+}
