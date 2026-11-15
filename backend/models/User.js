@@ -29,6 +29,10 @@ const UserSchema = new mongoose.Schema({
   resetPasswordToken: { type: String, select: false },
   resetPasswordExpires: { type: Date, select: false },
 
+  // Profile photo: a small (<= ~64 KB) square JPEG/PNG/WebP data URL set by the person in My Profile.
+  // select:false keeps it out of lists (users/all, faculty status); only /api/auth/me returns it.
+  avatar: { type: String, select: false },
+
   noIdYet: { type: Boolean, default: false }, // registered without a School/Faculty ID; an Admin adds it later in User Management
 
   schoolId: {

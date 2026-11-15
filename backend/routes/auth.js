@@ -95,12 +95,12 @@ router.post('/google', googleLimiter, async (req, res) => {
 router.get('/me', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']), async (req, res) => {
   try {
     const user = await User.findById(req.user.userId)
-      .select('name email role gender programPosition schoolId facultyId onboardingComplete privacyAcceptedAt');
+      .select('name email role gender programPosition schoolId facultyId onboardingComplete privacyAcceptedAt +avatar');
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({
       name: user.name, email: user.email, role: user.role, gender: user.gender || '',
       programPosition: user.programPosition || '', schoolId: user.schoolId || '', facultyId: user.facultyId || '',
-      privacyAcceptedAt: user.privacyAcceptedAt, profileComplete: isProfileComplete(user),
+      privacyAcceptedAt: user.privacyAcceptedAt, profileComplete: isProfileComplete(user), avatar: user.avatar || '',
     });
   } catch (error) {
     res.status(500).json({ error: 'Could not load your profile.' });
@@ -147,6 +147,67 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
     if (error.code === 11000) return res.status(409).json({ error: 'That ID is already registered to another account.' });
     console.error('Onboarding error:', error.message);
     res.status(500).json({ error: 'Could not save your details.' });
+  }
+});
+
+// PATCH /api/auth/profile — students and faculty edit their own profile.
+// Editable: name, gender (Male / Female), School/Faculty ID, profile photo.
+// NOT editable here (anything else in the body is ignored): email, role, program/section, academic position.
+// Send only the fields that changed. avatar: a data URL to set the photo, or null to remove it.
+const AVATAR_DATA_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const MAX_AVATAR_CHARS = 90000; // ~65 KB of image; the app resizes photos to 256x256 first (and stays under the default 100 KB JSON limit)
+
+router.patch('/profile', requireAuth(['STUDENT', 'FACULTY']), async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const { name, gender, idValue, avatar } = req.body || {};
+
+    if (name !== undefined) {
+      const clean = String(name).replace(/\s+/g, ' ').trim();
+      if (clean.length < 2 || clean.length > 100) return res.status(400).json({ error: 'Name must be 2 to 100 characters.' });
+      user.name = clean;
+    }
+
+    if (gender !== undefined) {
+      if (!['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female.' });
+      user.gender = gender;
+    }
+
+    if (idValue !== undefined) {
+      const isStudent = user.role === 'STUDENT';
+      const check = validateId(idValue, isStudent ? 'STUDENT' : 'EMPLOYEE');
+      if (!check.ok) return res.status(400).json({ error: check.error });
+      const field = isStudent ? 'schoolId' : 'facultyId';
+      const taken = await User.findOne({ [field]: check.id, _id: { $ne: user._id } }).select('_id');
+      if (taken) return res.status(409).json({ error: 'That ID is already registered to another account.' });
+      user[field] = check.id;
+      user.noIdYet = false;
+    }
+
+    if (avatar !== undefined) {
+      if (avatar === null || avatar === '') {
+        user.avatar = undefined; // remove the photo
+      } else {
+        if (typeof avatar !== 'string' || avatar.length > MAX_AVATAR_CHARS || !AVATAR_DATA_URL.test(avatar)) {
+          return res.status(400).json({ error: 'Use a JPEG, PNG or WebP photo (it is resized automatically).' });
+        }
+        user.avatar = avatar;
+      }
+    }
+
+    await user.save({ validateModifiedOnly: true });
+    res.json({
+      message: 'Profile saved.',
+      profile: {
+        name: user.name, gender: user.gender || '', schoolId: user.schoolId || '', facultyId: user.facultyId || '',
+        avatar: user.avatar || '', profileComplete: isProfileComplete(user)
+      }
+    });
+  } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ error: 'That ID is already registered to another account.' });
+    console.error('Profile update error:', error.message);
+    res.status(400).json({ error: error.message || 'Could not save your profile.' });
   }
 });
 

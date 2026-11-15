@@ -4,8 +4,10 @@ import { formatDate, formatDateTime } from './dateUtils';
 import { 
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
   useToast, Select, HStack, Flex, SimpleGrid, Avatar, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
-  Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
+  Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter,
+  InputGroup, InputRightAddon
 } from '@chakra-ui/react';
+import { IdTray, isIdComplete } from './IdTray';
 import { authFetch } from './authFetch';
 import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
 import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
@@ -49,9 +51,9 @@ function GenderBadge({ gender }: { gender?: string }) {
   return <Badge colorScheme={color} borderRadius="full" px={2}>{gender}</Badge>;
 }
 
-function PersonCell({ name, sub, onClick, title }: { name: string; sub?: string; onClick?: () => void; title?: string }) {
+function PersonCell({ name, sub, onClick, title, disabled }: { name: string; sub?: string; onClick?: () => void; title?: string; disabled?: boolean }) {
   return (
-    <HStack spacing={3} align="center">
+    <HStack spacing={3} align="center" opacity={disabled ? 0.6 : 1}>
       <Avatar size="sm" name={name} />
       <Box minW={0}>
         <Text
@@ -60,7 +62,7 @@ function PersonCell({ name, sub, onClick, title }: { name: string; sub?: string;
           color={onClick ? 'blue.500' : undefined}
           _hover={onClick ? { textDecoration: 'underline' } : undefined}
           onClick={onClick} title={title}
-        >{name}</Text>
+        >{name}{disabled && <Badge ml={2} colorScheme="red" borderRadius="full" px={2} verticalAlign="middle">Disabled</Badge>}</Text>
         {sub && <Text fontSize="xs" opacity={0.65} lineHeight="short">{sub}</Text>}
       </Box>
     </HStack>
@@ -91,6 +93,17 @@ function FilterPanel({ children, shown, total, noun, canClear, onClear }: {
     </Box>
   );
 }
+
+const SCHOOL_DOMAIN = 'antiquespride.edu.ph';
+
+// Disabled accounts have accountStatus RESTRICTED (the backend blocks sign-in and hides them from booking lists)
+const isAccountDisabled = (u: any) => u?.accountStatus === 'RESTRICTED';
+
+// "mx@antiquespride.edu.ph" -> "mx"; anything not on the school domain -> ''
+const emailLocalOf = (email?: string) => {
+  const e = (email || '').toLowerCase();
+  return e.endsWith('@' + SCHOOL_DOMAIN) ? e.slice(0, -(SCHOOL_DOMAIN.length + 1)) : '';
+};
 
 export const formatTime = (timeStr: string) => {
   if (!timeStr) return '';
@@ -150,6 +163,9 @@ export default function AdminDashboard() {
   const [idEdit, setIdEdit] = useState<any | null>(null);    // account whose School/Faculty ID is being added or edited
   const [idEditValue, setIdEditValue] = useState('');
   const [idSaving, setIdSaving] = useState(false);
+  const [emailDomainWarn, setEmailDomainWarn] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<any | null>(null); // account about to be disabled / re-enabled
+  const [statusSaving, setStatusSaving] = useState(false);
 
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
 
@@ -293,15 +309,19 @@ export default function AdminDashboard() {
     setNameSaving(false);
   };
 
-  const openEmailEdit = (u: any) => { setEmailEdit(u); setEmailEditValue(''); };
+  // emailEditValue holds only the part before @antiquespride.edu.ph
+  const openEmailEdit = (u: any) => { setEmailEdit(u); setEmailEditValue(emailLocalOf(u?.email)); setEmailDomainWarn(false); };
+  const newEmail = `${emailEditValue}@${SCHOOL_DOMAIN}`;
+  const emailValid = /^[a-z0-9._-]+$/.test(emailEditValue);
+  const emailUnchanged = !!emailEdit && newEmail === (emailEdit.email || '').toLowerCase();
   const saveEmail = async () => {
-    if (!emailEdit) return;
+    if (!emailEdit || !emailValid) return;
     setEmailSaving(true);
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/users/${emailEdit._id}/email`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailEditValue })
+        body: JSON.stringify({ email: newEmail })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
@@ -334,6 +354,28 @@ export default function AdminDashboard() {
       toast({ title: 'Could not save ID', description: error.message, status: 'error' });
     }
     setIdSaving(false);
+  };
+
+  // Disable / re-enable an account. A disabled account cannot sign in and is hidden from booking lists (enforced by the backend).
+  const saveStatus = async () => {
+    if (!statusTarget) return;
+    const disable = !isAccountDisabled(statusTarget);
+    setStatusSaving(true);
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/users/${statusTarget._id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ disabled: disable })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      toast({ title: disable ? 'Account disabled' : 'Account enabled', description: data.message, status: 'success' });
+      setStatusTarget(null);
+      fetchAllData();
+    } catch (error: any) {
+      toast({ title: 'Could not update account', description: error.message, status: 'error' });
+    }
+    setStatusSaving(false);
   };
 
   return (
@@ -485,7 +527,7 @@ export default function AdminDashboard() {
                 )}
                 {visibleFaculty.map(prof => (
                   <Tr key={prof._id} _hover={{ bg: hoverBg }}>
-                    <Td color={textColor}><PersonCell name={prof.name} sub={userById[prof._id]?.email} onClick={() => setScheduleOf(prof)} title="View schedule" /></Td>
+                    <Td color={textColor}><PersonCell name={prof.name} sub={userById[prof._id]?.email} onClick={() => setScheduleOf(prof)} title="View schedule" disabled={isAccountDisabled(userById[prof._id])} /></Td>
                     <Td color={textColor}>{prof.programPosition}</Td>
                     <Td><GenderBadge gender={prof.gender} /></Td>
                     <Td color={textColor}>{userById[prof._id]?.facultyId || (userById[prof._id]?.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
@@ -501,8 +543,11 @@ export default function AdminDashboard() {
                           <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(userById[prof._id])}>
                             {userById[prof._id]?.facultyId ? 'Edit ID' : 'Add ID'}
                           </ChakraButton>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(userById[prof._id])}>Change email</ChakraButton>
+                          <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(userById[prof._id])}>Edit email</ChakraButton>
                           <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(userById[prof._id])}>Edit name</ChakraButton>
+                          <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(userById[prof._id]) ? 'green' : 'red'} onClick={() => setStatusTarget(userById[prof._id])}>
+                            {isAccountDisabled(userById[prof._id]) ? 'Enable' : 'Disable'}
+                          </ChakraButton>
                         </HStack>
                       )}
                     </Td>
@@ -557,7 +602,7 @@ export default function AdminDashboard() {
                 )}
                 {visibleStudents.map(student => (
                   <Tr key={student._id} _hover={{ bg: hoverBg }}>
-                    <Td color={textColor}><PersonCell name={student.name} sub={student.email} /></Td>
+                    <Td color={textColor}><PersonCell name={student.name} sub={student.email} disabled={isAccountDisabled(student)} /></Td>
                     <Td color={textColor}>{student.schoolId || (student.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
                     <Td><GenderBadge gender={student.gender} /></Td>
                     <Td>{student.programPosition ? <Badge colorScheme="purple" variant="subtle" borderRadius="full" px={2}>{student.programPosition}</Badge> : '—'}</Td>
@@ -566,8 +611,11 @@ export default function AdminDashboard() {
                         <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(student)}>
                           {student.schoolId ? 'Edit ID' : 'Add ID'}
                         </ChakraButton>
-                        <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(student)}>Change email</ChakraButton>
+                        <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(student)}>Edit email</ChakraButton>
                         <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(student)}>Edit name</ChakraButton>
+                        <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(student) ? 'green' : 'red'} onClick={() => setStatusTarget(student)}>
+                          {isAccountDisabled(student) ? 'Enable' : 'Disable'}
+                        </ChakraButton>
                       </HStack>
                     </Td>
                   </Tr>
@@ -688,17 +736,30 @@ export default function AdminDashboard() {
         <Modal isOpen={!!emailEdit} onClose={() => setEmailEdit(null)} isCentered>
           <ModalOverlay />
           <ModalContent>
-            <ModalHeader>Change email — {emailEdit?.name}</ModalHeader>
+            <ModalHeader>Edit email — {emailEdit?.name}</ModalHeader>
             <ModalCloseButton />
             <ModalBody pb={6}>
               <Text fontSize="sm" mb={3} color={mutedText}>
-                Current: {emailEdit?.email}. Enter their school email so they can sign in with Google. Their appointments and ID stay with the account.
+                Current: {emailEdit?.email}. Use their @{SCHOOL_DOMAIN} account so they can sign in with Google. You can change it again any time; appointments and ID stay with the account.
               </Text>
-              <FormControl isRequired mb={4}>
+              <FormControl isRequired isInvalid={emailDomainWarn || (!!emailEditValue && !emailValid)} mb={4}>
                 <FormLabel>School email</FormLabel>
-                <Input placeholder="name@antiquespride.edu.ph" value={emailEditValue} onChange={(e) => setEmailEditValue(e.target.value.trim().toLowerCase())} />
+                <InputGroup>
+                  <Input
+                    placeholder="name"
+                    value={emailEditValue}
+                    onChange={(e) => {
+                      const [local, domain] = e.target.value.trim().toLowerCase().split('@');
+                      setEmailDomainWarn(domain !== undefined && domain !== '' && !SCHOOL_DOMAIN.startsWith(domain));
+                      setEmailEditValue(local);
+                    }}
+                  />
+                  <InputRightAddon>@{SCHOOL_DOMAIN}</InputRightAddon>
+                </InputGroup>
+                {emailDomainWarn && <Text fontSize="xs" color="red.500" mt={1}>Only @{SCHOOL_DOMAIN} accounts are allowed.</Text>}
+                {!emailDomainWarn && !!emailEditValue && !emailValid && <Text fontSize="xs" color="red.500" mt={1}>Use letters, numbers, dots, dashes or underscores only.</Text>}
               </FormControl>
-              <ChakraButton colorScheme="blue" w="100%" onClick={saveEmail} isLoading={emailSaving}>Save email</ChakraButton>
+              <ChakraButton colorScheme="blue" w="100%" onClick={saveEmail} isLoading={emailSaving} isDisabled={!emailValid || emailUnchanged}>Save email</ChakraButton>
             </ModalBody>
           </ModalContent>
         </Modal>
@@ -710,7 +771,7 @@ export default function AdminDashboard() {
             <ModalCloseButton />
             <ModalBody pb={6}>
               <Text fontSize="sm" mb={3} color={mutedText}>
-                Use this to fix a name copied wrongly from the Google account (e.g. "Last, First, M.I." order). Appointments stay linked to the account.
+                Use this to fix a name copied wrongly from the Google account. Appointments stay linked to the account.
               </Text>
               <FormControl isRequired mb={4}>
                 <FormLabel>Full name</FormLabel>
@@ -727,16 +788,35 @@ export default function AdminDashboard() {
             <ModalHeader>{idEdit?.role === 'STUDENT' ? 'School ID' : 'Faculty ID'} — {idEdit?.name}</ModalHeader>
             <ModalCloseButton />
             <ModalBody pb={6}>
-              <FormControl isRequired mb={4}>
-                <FormLabel>{idEdit?.role === 'STUDENT' ? 'School ID' : 'Faculty ID'}</FormLabel>
-                <Input
-                  placeholder={idEdit?.role === 'STUDENT' ? '2025-S00001 or 2025-1234-A' : '2025S-00001'}
-                  value={idEditValue}
-                  onChange={(e) => setIdEditValue(e.target.value.toUpperCase())}
-                />
-              </FormControl>
-              <ChakraButton colorScheme="blue" w="100%" onClick={saveId} isLoading={idSaving}>Save ID</ChakraButton>
+              <Box mb={5}>
+                <IdTray kind={idEdit?.role === 'STUDENT' ? 'STUDENT' : 'FACULTY'} value={idEditValue} onChange={setIdEditValue} />
+              </Box>
+              <ChakraButton
+                colorScheme="blue" w="100%" onClick={saveId} isLoading={idSaving}
+                isDisabled={!isIdComplete(idEdit?.role === 'STUDENT' ? 'STUDENT' : 'FACULTY', idEditValue)}
+              >Save ID</ChakraButton>
             </ModalBody>
+          </ModalContent>
+        </Modal>
+
+        <Modal isOpen={!!statusTarget} onClose={() => !statusSaving && setStatusTarget(null)} isCentered>
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>{isAccountDisabled(statusTarget) ? 'Enable account' : 'Disable account'} — {statusTarget?.name}</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody>
+              <Text fontSize="sm" color={mutedText}>
+                {isAccountDisabled(statusTarget)
+                  ? 'This account will be able to sign in again and will show up in booking lists.'
+                  : 'This account will not be able to sign in and will be hidden from booking lists. Their appointments, ID and records are kept, and you can enable it again any time.'}
+              </Text>
+            </ModalBody>
+            <ModalFooter gap={2}>
+              <ChakraButton variant="ghost" onClick={() => setStatusTarget(null)} isDisabled={statusSaving}>Cancel</ChakraButton>
+              <ChakraButton colorScheme={isAccountDisabled(statusTarget) ? 'green' : 'red'} onClick={saveStatus} isLoading={statusSaving}>
+                {isAccountDisabled(statusTarget) ? 'Enable account' : 'Disable account'}
+              </ChakraButton>
+            </ModalFooter>
           </ModalContent>
         </Modal>
       </Box>

@@ -155,7 +155,10 @@ router.post('/login', loginLimiter, async (req, res) => {
 // 1. GET ROUTE: Fetch all faculty members for the dashboard
 router.get('/status', requireAuth(ALL_ROLES), async (req, res) => {
   try {
-    const facultyList = await User.find({ role: 'FACULTY' })
+    // Disabled (RESTRICTED) / archived faculty are hidden from booking lists. Only the Admin still sees them (to re-enable).
+    const facultyFilter = { role: 'FACULTY' };
+    if (req.user.role !== 'ADMIN') facultyFilter.accountStatus = { $nin: ['RESTRICTED', 'ARCHIVED'] };
+    const facultyList = await User.find(facultyFilter)
       .select('name gender programPosition currentStatus currentLocation room statusUpdatedAt statusNote noticeMessage flaggedDate flaggedReason')
       .sort({ name: 1 });
 
@@ -454,8 +457,10 @@ async function loadSlots(facultyId, flaggedDate = '') {
 
 router.get('/slots/:facultyId', requireAuth(ALL_ROLES), async (req, res) => {
   try {
-    const faculty = await User.findOne({ _id: req.params.facultyId, role: 'FACULTY' }).select('flaggedDate');
-    if (!faculty) return res.status(404).json({ error: 'Faculty member not found.' });
+    const faculty = await User.findOne({ _id: req.params.facultyId, role: 'FACULTY' }).select('flaggedDate accountStatus');
+    if (!faculty || (req.user.role !== 'ADMIN' && ['RESTRICTED', 'ARCHIVED'].includes(faculty.accountStatus))) {
+      return res.status(404).json({ error: 'Faculty member not found.' });
+    }
     const { slots, busy } = await loadSlots(faculty._id, faculty.flaggedDate);
     res.json({ leadHours: BOOKING_LEAD_HOURS, slots, busy });
   } catch (error) {
@@ -547,8 +552,10 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
     // The request must match a real, open slot (consultation hours or a vacant hour, Mon-Fri 8 AM-5 PM): this covers
     // the 1-hour lead time, operating hours, classes, approved appointments and the faculty's
     // out-of-office date. The duration comes from the slot, not from the student.
-    const faculty = await User.findOne({ _id: facultyId, role: 'FACULTY' }).select('flaggedDate');
-    if (!faculty) return res.status(404).json({ error: 'Faculty member not found.' });
+    const faculty = await User.findOne({ _id: facultyId, role: 'FACULTY' }).select('flaggedDate accountStatus');
+    if (!faculty || ['RESTRICTED', 'ARCHIVED'].includes(faculty.accountStatus)) {
+      return res.status(404).json({ error: 'Faculty member not found.' });
+    }
     const slot = (await loadSlots(faculty._id, faculty.flaggedDate)).slots.find(x => x.date === date && x.start === time);
     if (!slot) {
       return res.status(400).json({ error: 'That time slot is not available. Please choose one from the faculty\'s consultation hours.' });
@@ -720,6 +727,41 @@ router.patch('/users/:id/email', requireAuth(['ADMIN']), async (req, res) => {
     res.json({ message: `${user.name} can now sign in with ${newEmail}.`, user: { _id: user._id, email: user.email } });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Could not change the email.' });
+  }
+});
+
+// ADMIN: disable / re-enable a student or faculty account.
+// Disabled = accountStatus RESTRICTED: they cannot sign in (password login, Google sign-in, or an
+// already-open session) and faculty are hidden from booking lists. Appointments, ID and records are kept.
+router.patch('/users/:id/status', requireAuth(['ADMIN']), async (req, res) => {
+  try {
+    if (typeof req.body.disabled !== 'boolean') {
+      return res.status(400).json({ error: 'Send { "disabled": true } or { "disabled": false }.' });
+    }
+    if (req.params.id === req.user.userId) {
+      return res.status(400).json({ error: 'You cannot disable your own account.' });
+    }
+    const user = await User.findById(req.params.id).select('name role accountStatus');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role !== 'STUDENT' && user.role !== 'FACULTY') {
+      return res.status(400).json({ error: 'Only student and faculty accounts can be disabled here.' });
+    }
+
+    if (req.body.disabled) {
+      if (user.accountStatus !== 'ACTIVE' && user.accountStatus !== 'RESTRICTED') {
+        return res.status(400).json({ error: 'Only active accounts can be disabled.' });
+      }
+      await User.updateOne({ _id: user._id }, { accountStatus: 'RESTRICTED' });
+      return res.json({ message: `${user.name}'s account is disabled.`, user: { _id: user._id, accountStatus: 'RESTRICTED' } });
+    }
+
+    if (user.accountStatus !== 'RESTRICTED') {
+      return res.status(400).json({ error: 'This account is not disabled.' });
+    }
+    await User.updateOne({ _id: user._id }, { accountStatus: 'ACTIVE' });
+    res.json({ message: `${user.name}'s account is enabled again.`, user: { _id: user._id, accountStatus: 'ACTIVE' } });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Could not update the account.' });
   }
 });
 
