@@ -5,7 +5,14 @@ export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}
   const headers = new Headers(init.headers);
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
-  const res = await fetch(input, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(input, { ...init, headers });
+  } catch (err) {
+    // The request never reached the server: ask the offline page to check the connection (see utils/useOnlineStatus.ts).
+    window.dispatchEvent(new Event('sync:network-error'));
+    throw err;
+  }
 
   // Missing, invalid or expired (8h) token -> back to the login page.
   // 403 (not allowed) is NOT a logout; the caller handles it.
