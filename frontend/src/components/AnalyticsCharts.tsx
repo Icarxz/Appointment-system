@@ -51,7 +51,7 @@ export function KpiTile({ label, value, sub, accent = '#2563eb', onClick, hint, 
   const body = (
     <Box
       bg={t.surface} p={dense ? 3 : 4} borderRadius="lg" borderWidth="1px" borderColor={t.border} borderTopWidth="3px" borderTopColor={accent}
-      textAlign="left" h="100%"
+      textAlign="left" h="100%" display="flex" flexDirection="column" justifyContent="flex-start" alignItems="stretch"   // same top alignment whether it is a button or not
       {...(onClick ? {
         as: 'button', cursor: 'pointer', onClick, w: '100%',
         _hover: { shadow: 'md', borderColor: accent }, _focusVisible: { outline: '2px solid', outlineColor: accent },
@@ -61,11 +61,11 @@ export function KpiTile({ label, value, sub, accent = '#2563eb', onClick, hint, 
       <Flex align={dense ? 'center' : 'stretch'} justify="space-between" gap={2} direction={dense ? 'row' : 'column'}>
         <Flex align="center" gap={2} color={t.muted} minH={dense ? undefined : '28px'} minW={0}>
           {icon && <Box color={accent} display="flex" fontSize="md">{icon}</Box>}
-          <Text fontSize={dense ? '13px' : icon ? 'sm' : 'xs'} fontWeight="600" whiteSpace={dense ? { base: 'normal', xl: 'nowrap' } : undefined} noOfLines={dense ? undefined : 1}>{label}{onClick ? ' ›' : ''}</Text>
+          <Text fontSize={dense ? '13px' : icon ? 'sm' : 'xs'} fontWeight="600" whiteSpace={dense ? 'normal' : undefined} noOfLines={dense ? undefined : 1}>{label}{onClick ? ' ›' : ''}</Text>
         </Flex>
         <Text flexShrink={0} fontSize={dense ? 'xl' : '3xl'} fontWeight="800" color={t.text} lineHeight="1.1">{value}</Text>
       </Flex>
-      {sub && <Text fontSize="11px" color={t.muted} mt={1} whiteSpace="pre-line" lineHeight="1.4" minH={dense ? undefined : '2.8em'}>{sub}</Text>}
+      {sub && <Text fontSize="11px" color={t.muted} mt={1} whiteSpace="pre-line" lineHeight="1.4" minH="2.8em">{sub}</Text>}
     </Box>
   );
   return hint ? <Tooltip label={hint} hasArrow openDelay={300}>{body}</Tooltip> : body;

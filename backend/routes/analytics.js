@@ -12,7 +12,7 @@ const { requireAuth } = require('../middleware/auth');
 const { manilaNow } = require('../utils/manilaTime');
 
 const STAFF = ['ADMIN', 'DEAN'];
-const APPOINTMENT_FIELDS = 'status date time studentId studentName studentSection facultyId reason appeal autoRejected';
+const APPOINTMENT_FIELDS = 'status date time studentId studentName studentSection facultyId reason appeal autoRejected createdAt';
 
 // GET /api/analytics/report — the shared Admin/Dean report, in one request.
 // All numbers come from pure functions in utils/reportMetrics.js. Account health is Admin-only.

@@ -35,7 +35,6 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
 
   const submit = async () => {
     setError('');
-    if (!gender) return setError('Please select your gender.');
     if (isStudent && !(program && year && section)) return setError('Please select your program, year and section.');
     if (!isStudent && !position) return setError('Please select your position.');
     if (needsId && !isValidId(idValue, idKind)) return setError(`Enter a valid ${isStudent ? 'Student' : 'Employee'} ID (${idHint(idKind)}).`);
@@ -72,9 +71,9 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
             <Text fontSize="sm" color="gray.600">
               Signed in as <b>{googleName ? `${googleName} (${email})` : email}</b>. Your name comes from your school account. We just need a few details Google doesn't provide.
             </Text>
-            <FormControl isRequired>
-              <FormLabel>Gender</FormLabel>
-              <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Gender" placeholder="Select" value={gender} onChange={setGender}
+            <FormControl>
+              <FormLabel>Gender <Text as="span" fontWeight="normal" opacity={0.6}>(optional)</Text></FormLabel>
+              <SearchableSelect portal searchable={false} ariaLabel="Gender" placeholder="Prefer not to answer" value={gender} onChange={setGender}
                 options={['Male', 'Female'].map(g => ({ value: g, label: g }))} />
             </FormControl>
             {isStudent ? (
