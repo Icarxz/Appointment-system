@@ -3,14 +3,13 @@ import {
   Avatar, Badge, Box, Button as ChakraButton, Flex, HStack, SimpleGrid, Text, useColorModeValue,
 } from '@chakra-ui/react';
 
-// Shared pieces for every list / filter page (Dean, Faculty, Student, request lists).
-// The Admin dashboard has its own copy of these, so nothing here changes it.
+// Shared pieces for every list / filter page (Admin, Dean, Faculty, Student, request lists).
 
+// The only choices offered anywhere in the app. Accounts that already hold another value (or none) keep it and are still listed;
+// they just cannot be picked in a dropdown. matchesGender below still understands 'Not provided' for any old saved filter.
 export const GENDER_OPTIONS = [
   { value: 'Male', label: 'Male' },
   { value: 'Female', label: 'Female' },
-  { value: 'Prefer not to say', label: 'Prefer not to say' },
-  { value: 'Not provided', label: 'Not provided' }, // accounts created before gender was collected
 ];
 
 export const matchesGender = (gender: string | undefined, filter: string) =>
@@ -28,9 +27,9 @@ export function GenderBadge({ gender }: { gender?: string }) {
   return <Badge colorScheme={color} borderRadius="full" px={2}>{gender}</Badge>;
 }
 
-export function PersonCell({ name, sub, onClick, title }: { name: string; sub?: string; onClick?: () => void; title?: string }) {
+export function PersonCell({ name, sub, onClick, title, disabled }: { name: string; sub?: string; onClick?: () => void; title?: string; disabled?: boolean }) {
   return (
-    <HStack spacing={3} align="center">
+    <HStack spacing={3} align="center" opacity={disabled ? 0.6 : 1}>
       <Avatar size="sm" name={name} />
       <Box minW={0}>
         <Text
@@ -40,7 +39,7 @@ export function PersonCell({ name, sub, onClick, title }: { name: string; sub?: 
           _hover={onClick ? { textDecoration: 'underline' } : undefined}
           onClick={onClick} title={title}
         >
-          {name}
+          {name}{disabled && <Badge ml={2} colorScheme="red" borderRadius="full" px={2} verticalAlign="middle">Disabled</Badge>}
         </Text>
         {sub && <Text fontSize="xs" opacity={0.65} lineHeight="short" fontWeight="normal">{sub}</Text>}
       </Box>
