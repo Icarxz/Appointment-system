@@ -16,10 +16,11 @@ interface ReportData {
   generatedAt: string;
   kpis: { requests: Window; completed: Window; missed: Window & { student: number; faculty: number }; completionRate: number | null; missedRate: number | null; activeFaculty: number };
   outcomes: {
-    requests: number; completed: number; upcoming: number; declined: number; expired: number; missedStudent: number; missedFaculty: number;
+    requests: number; pending: number; submitted: number; other: number; completed: number; upcoming: number; declined: number; expired: number; missedStudent: number; missedFaculty: number;
     cancelledStudent: number; cancelledFaculty: number;
   };
   weekly: LV[];
+  weeklyCreated: LV[];
   weeklyMissed: LV[];
   facultyLoad: { id: string; name: string; requests: number; completed: number }[];
   purposes: { total: number; items: { label: string; count: number; percent: number }[] };
@@ -39,11 +40,11 @@ interface ReportData {
   };
 }
 
-// Wide screens: the KPI tiles are a column on the left and the charts fill the rest (same as the faculty analytics).
-const TILE_COLUMNS = '230px minmax(0, 1fr)';
+// KPI tiles sit in a row across the top so the charts below get the full page width.
+const TILE_COLUMNS = 'minmax(0, 1fr)';
 const pctText = (n: number | null) => (n === null ? '—' : `${n}%`);
 const trend = (w: Window) => `${w.last4} in last 4 wks · ${w.prev4} before`; // same wording as the faculty analytics
-const ROLE_NAMES: Record<string, string> = { STUDENT: 'Students', FACULTY: 'Faculty', DEAN: 'Deans', ADMIN: 'Admins' };
+const ROLE_NAMES: Record<string, string> = { STUDENT: 'Students', FACULTY: 'Faculty', DEAN: 'Dean', ADMIN: 'Admins' };
 const OUTCOME_COLORS = { completed: '#16a34a', upcoming: '#2563eb', declined: '#dc2626', expired: '#ca8a04', missedStudent: '#f08a3c', missedFaculty: '#e11d48', cancelledStudent: '#94a3b8', cancelledFaculty: '#64748b' };
 
 // The Reports & Analytics page shared by Admin and Dean. Admin also gets an "Account health" tab.
@@ -107,9 +108,10 @@ export default function AnalyticsReport() {
 
   const overview = (
     <Grid templateColumns={{ base: '1fr', xl: TILE_COLUMNS }} gap={4} alignItems="start">
-      <SimpleGrid columns={{ base: 2, md: 3, xl: 1 }} spacing={3}>
+      <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing={3}>
         <KpiTile dense label="Requests" icon={<CheckCircleIcon />} value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="All requests that were reviewed or happened. Requests still waiting for an answer are not counted."
           onClick={() => open('Requests', data.drilldown.requests)} />
+        <KpiTile dense label="Pending" icon={<TimeIcon />} value={o.pending} sub="waiting for a faculty answer" accent="#0891b2" hint="Submitted but not answered yet. Pending requests are not included in Requests, Completed or any rate." />
         <KpiTile dense label="Completed" icon={<CheckCircleIcon />} value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
         <KpiTile dense label="Missed" icon={<WarningIcon />} value={k.missed.total} sub={`${k.missed.student} students · ${k.missed.faculty} faculty · ${pctText(k.missedRate)} missed rate`} accent="#f08a3c"
           hint={`Missed rate: ${pctText(k.missedRate)} = missed ÷ (completed + missed). Reasons given do not reduce this number.`}
@@ -120,12 +122,17 @@ export default function AnalyticsReport() {
       </SimpleGrid>
 
       <VStack align="stretch" spacing={4} minW={0}>
-      <ChartCard title="Requests per week" hint="Last 8 weeks, weeks start on Monday.">
-        <LineChart data={data.weekly} color="#2563eb" />
-      </ChartCard>
+      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
+        <ChartCard title="Requests submitted per week" hint="Counted on the day the student sent the request (Manila time), pending ones included. Last 8 weeks, weeks start on Monday.">
+          <LineChart data={data.weeklyCreated} color="#2563eb" />
+        </ChartCard>
+        <ChartCard title="Consultations scheduled per week" hint="Counted on the consultation date, pending requests left out. A request sent one week for the next appears in the next week. Last 8 weeks.">
+          <LineChart data={data.weekly} color="#0891b2" />
+        </ChartCard>
+      </SimpleGrid>
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
-        <ChartCard title="What happened to requests" hint="Share of each outcome.">
+        <ChartCard title="What happened to requests" hint={`Share of each outcome among the ${o.requests} requests that were answered or happened. ${o.pending} pending are not included.`}>
           <StackedBar segments={[
             { label: 'Completed', value: o.completed, color: OUTCOME_COLORS.completed },
             { label: 'Upcoming', value: o.upcoming, color: OUTCOME_COLORS.upcoming },
@@ -135,6 +142,7 @@ export default function AnalyticsReport() {
             { label: 'Missed (faculty)', value: o.missedFaculty, color: OUTCOME_COLORS.missedFaculty },
             { label: 'Cancelled (student)', value: o.cancelledStudent, color: OUTCOME_COLORS.cancelledStudent },
             { label: 'Cancelled (faculty)', value: o.cancelledFaculty, color: OUTCOME_COLORS.cancelledFaculty },
+            ...(o.other > 0 ? [{ label: 'Other / older status', value: o.other, color: '#a1a1aa' }] : []),
           ]} />
         </ChartCard>
         <ChartCard title="Faculty load" hint="Requests received per faculty member (completed in brackets).">
@@ -190,7 +198,7 @@ export default function AnalyticsReport() {
   const a = data.appeals.summary;
   const outcomes = (
     <Grid templateColumns={{ base: '1fr', xl: TILE_COLUMNS }} gap={4} alignItems="start">
-      <SimpleGrid columns={{ base: 2, md: 3, xl: 1 }} spacing={3}>
+      <SimpleGrid columns={{ base: 2, md: 4, xl: 4 }} spacing={3}>
         <KpiTile dense label="Reason rate" value={pctText(a.appealRate)} sub="missed consultations that got a reason" accent="#f08a3c" hint="Reasons given for 'Missed (student)' ÷ all 'Missed (student)'." />
         <KpiTile dense label="Student reasons" value={a.total} sub="given for a missed or cancelled consultation" accent="#16a34a" />
         <KpiTile dense label="Faculty reasons" value={a.faculty.made} sub="faculty gave to the Dean" accent="#8b5cf6" />

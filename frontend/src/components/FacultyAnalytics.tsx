@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Grid, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import { CheckCircleIcon, CheckIcon, CloseIcon, TimeIcon, WarningIcon } from '@chakra-ui/icons';
-import { ChartCard, HBarChart, KpiTile, PieChart } from './AnalyticsCharts';
+import { ChartCard, HBarChart, KpiTile, LineChart, PieChart } from './AnalyticsCharts';
 import type { HeatmapData, LV } from './AnalyticsCharts';
 import { AppealsByReason, CohortTable, DrilldownDrawer } from './AnalyticsTables';
 import type { AppealRow, CohortRow, Drilldown } from './AnalyticsTables';
@@ -14,10 +14,11 @@ interface Data {
   kpis: { requests: Window; completed: Window; approved: Window & { declined: number; expired: number }; missed: Window & { student: number; faculty: number }; cancelled: { student: number; faculty: number }; completionRate: number | null; missedRate: number | null };
   drilldown: { requests: Drilldown; completed: Drilldown; approved: Drilldown; missed: Drilldown; cancelled: Drilldown };
   outcomes: {
-    requests: number; completed: number; upcoming: number; declined: number; expired: number; studentNoShows: number; missedByFaculty: number;
+    requests: number; pending: number; other: number; completed: number; upcoming: number; declined: number; expired: number; studentNoShows: number; missedByFaculty: number;
     cancelledByStudent: number; cancelledByFaculty: number; completionRate: number | null; missedRate: number | null; approvalRate: number | null;
   };
   weekly: LV[];
+  weeklyCreated: LV[];
   monthly: LV[];
   heatmap: HeatmapData;
   appeals: { summary: { appealRate: number | null; total: number; faculty: { made: number } }; rows: AppealRow[]; reasons: string[] };
@@ -34,6 +35,9 @@ const OUTCOME_COLORS = {
   missedFaculty: '#E11D48',   // rose
   cancelledFaculty: '#64748B',// slate
   expired: '#7C3AED',         // violet
+  declined: '#DC2626',        // red
+  upcoming: '#2563EB',        // blue
+  other: '#A1A1AA',           // grey
 } as const;
 
 // A faculty member's own analytics. The server only ever returns the logged-in faculty's data.
@@ -61,12 +65,12 @@ export default function FacultyAnalytics() {
       {/* No page title and no export buttons here: the buttons live in the Welcome bar (FacultyDashboard). */}
       <Text className="print-only" fontSize="sm" color="black">Generated {new Date(data.generatedAt).toLocaleString()}</Text>
 
-      {/* Wide screens: the tiles are a column on the left and the charts fill the rest, so tiles and charts share one
-          screen. Narrower: the tiles are a grid above the charts. Completion rate is always the last tile. */}
-      <Grid templateColumns={{ base: '1fr', xl: '230px minmax(0, 1fr)' }} gap={4} alignItems="start">
-      <SimpleGrid columns={{ base: 2, md: 3, xl: 1 }} spacing={3}>
+      {/* The tiles sit in a row across the top; the charts below get the full page width. Completion rate is the last tile. */}
+      <Grid templateColumns="minmax(0, 1fr)" gap={4} alignItems="start">
+      <SimpleGrid columns={{ base: 2, md: 3, xl: 7 }} spacing={3}>
         <KpiTile dense label="Requests" icon={<CheckCircleIcon />} value={k.requests.total} sub={trend(k.requests)} accent="#2563eb" hint="Requests you reviewed or that happened. Requests still waiting for your answer are not counted."
           onClick={() => open('Requests', data.drilldown.requests)} />
+        <KpiTile dense label="Pending" icon={<TimeIcon />} value={o.pending} sub="waiting for your answer" accent="#0891b2" hint="Requests you have not answered yet. They are not included in Requests, Completed or any rate." />
         <KpiTile dense label="Completed" icon={<CheckCircleIcon />} value={k.completed.total} sub={trend(k.completed)} accent="#16a34a" onClick={() => open('Completed consultations', data.drilldown.completed)} />
         <KpiTile dense label="Missed" icon={<WarningIcon />} value={k.missed.total} sub={`${k.missed.student} students · ${k.missed.faculty} faculty · ${pctText(k.missedRate)} missed rate`} accent={OUTCOME_COLORS.missedStudent}
           hint="Missed rate = missed ÷ (completed + missed). Reasons given do not reduce this number." onClick={() => open('Missed consultations', data.drilldown.missed, ['Missed by students', 'Missed by me'])} />
@@ -79,14 +83,26 @@ export default function FacultyAnalytics() {
 
       <VStack align="stretch" spacing={4} minW={0}>
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
-        <ChartCard title="What happened to requests" hint="Finished and cancelled requests.">
+        <ChartCard title="Requests submitted per week" hint="Counted on the day the student sent the request (Manila time), pending ones included. Last 8 weeks, weeks start on Monday.">
+          <LineChart data={data.weeklyCreated} color="#2563eb" />
+        </ChartCard>
+        <ChartCard title="Consultations scheduled per week" hint="Counted on the consultation date, pending requests left out. Last 8 weeks.">
+          <LineChart data={data.weekly} color="#0891b2" />
+        </ChartCard>
+      </SimpleGrid>
+
+      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
+        <ChartCard title="What happened to requests" hint={`All ${o.requests} requests you answered or that happened. ${o.pending} pending are not included.`}>
           <PieChart segments={[
             { label: 'Completed', value: o.completed, color: OUTCOME_COLORS.completed },
             { label: 'Missed by students', value: o.studentNoShows, color: OUTCOME_COLORS.missedStudent },
             { label: 'Cancelled by students', value: o.cancelledByStudent, color: OUTCOME_COLORS.cancelledStudent },
             { label: 'Missed by me', value: o.missedByFaculty, color: OUTCOME_COLORS.missedFaculty },
             { label: 'Cancelled by me', value: o.cancelledByFaculty, color: OUTCOME_COLORS.cancelledFaculty },
+            { label: 'Declined by me', value: o.declined, color: OUTCOME_COLORS.declined },
             { label: 'Expired (no response)', value: o.expired, color: OUTCOME_COLORS.expired },
+            { label: 'Upcoming', value: o.upcoming, color: OUTCOME_COLORS.upcoming },
+            ...(o.other > 0 ? [{ label: 'Other / older status', value: o.other, color: OUTCOME_COLORS.other }] : []),
           ]} />
         </ChartCard>
         <ChartCard title="Students by year level and program" hint="Different students who asked you for a consultation.">
