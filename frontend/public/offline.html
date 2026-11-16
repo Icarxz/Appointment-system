@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>You’re offline · CCIS Sync</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <style>
+    /* Shown by the service worker (sw.js) when the page cannot be loaded at all. Self-contained on purpose: no app code,
+       no external files, so it still works with no connection. Same look as the in-app offline page. */
+    :root { --bg:#eef2f7; --card:#ffffff; --border:#dde3ec; --text:#0f2240; --muted:#5b6f8f; --accent:#2563eb; --accent-hover:#1d4ed8; --track:rgba(37,99,235,.18); --art:#c9d8f0; --line:#2563eb; --shadow:0 10px 30px rgba(15,34,64,.1); }
+    :root[data-theme='dark'] { --bg:#0b1626; --card:#111d30; --border:#1e3048; --text:#e8f0fe; --muted:#93a7c4; --accent:#3b82f6; --accent-hover:#60a5fa; --track:rgba(147,197,253,.2); --art:#2b4468; --line:#60a5fa; --shadow:0 10px 30px rgba(0,0,0,.45); }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px; color: var(--text); font: 16px/1.5 'Segoe UI', system-ui, sans-serif;
+           background: radial-gradient(ellipse at 50% -10%, var(--track), transparent 55%), var(--bg); }
+    main { width: 100%; max-width: 440px; padding: 36px 28px 28px; text-align: center; background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); animation: pop .3s ease both; }
+    svg { display: block; margin: 0 auto 8px; animation: float 4.5s ease-in-out infinite; }
+    .cloud { fill: var(--art); } .cut { stroke: var(--card); } .slash { stroke: var(--line); } .shadow { fill: var(--border); }
+    h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.25; }
+    p { margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+    .note { margin: 4px 0 22px; padding: 10px 12px; font-size: 13.5px; color: var(--text); background: var(--track); border-radius: 10px; }
+    button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 160px; min-height: 44px; padding: 0 22px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: 600 15px/1 'Segoe UI', system-ui, sans-serif; cursor: pointer; }
+    button:hover { background: var(--accent-hover); }
+    button:focus-visible { outline: 3px solid var(--track); outline-offset: 2px; box-shadow: 0 0 0 2px var(--accent); }
+    button[aria-disabled='true'] { cursor: progress; opacity: .9; }
+    .status { margin: 14px 0 0; font-size: 13px; }
+    @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+    @media (prefers-reduced-motion: reduce) { main, svg { animation: none; } }
+  </style>
+</head>
+<body>
+  <main role="main">
+    <svg width="168" height="128" viewBox="0 0 168 128" aria-hidden="true" focusable="false">
+      <ellipse class="shadow" cx="84" cy="116" rx="48" ry="6" />
+      <g class="cloud"><circle cx="62" cy="76" r="22" /><circle cx="92" cy="62" r="30" /><circle cx="120" cy="80" r="19" /><rect x="60" y="78" width="60" height="21" rx="10.5" /></g>
+      <line class="cut" x1="38" y1="24" x2="130" y2="108" stroke-width="16" stroke-linecap="round" />
+      <line class="slash" x1="38" y1="24" x2="130" y2="108" stroke-width="6" stroke-linecap="round" />
+    </svg>
+    <h1>You’re offline</h1>
+    <p>CCIS Sync needs an internet connection. Check your Wi-Fi or mobile data. We’ll reload on our own as soon as you’re back.</p>
+    <p class="note">Your appointments and data are safe. Nothing was lost.</p>
+    <button id="retry" type="button">Try again</button>
+    <p id="status" class="status" role="status" aria-live="polite">Checking again every few seconds.</p>
+  </main>
+  <script>
+    (function () {
+      try { if (localStorage.getItem('chakra-ui-color-mode') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {}
+      var btn = document.getElementById('retry'), status = document.getElementById('status'), busy = false;
+      function probe(manual) {
+        if (busy) return;
+        // Never auto-reload more than once every 15 seconds, in case the page itself is still unreachable.
+        var last = 0; try { last = Number(sessionStorage.getItem('offlineReloadAt')) || 0; } catch (e) {}
+        if (manual !== true && Date.now() - last < 15000) return;
+        busy = true; btn.setAttribute('aria-disabled', 'true'); btn.textContent = 'Checking…'; status.textContent = 'Checking your connection…';
+        var ctl = new AbortController(), timer = setTimeout(function () { ctl.abort(); }, 4000);
+        fetch('/favicon.svg?probe=' + Date.now(), { method: 'HEAD', cache: 'no-store', signal: ctl.signal })
+          .then(function () { try { sessionStorage.setItem('offlineReloadAt', String(Date.now())); } catch (e) {} status.textContent = 'You’re back. Reloading…'; location.reload(); })
+          .catch(function () { busy = false; btn.removeAttribute('aria-disabled'); btn.textContent = 'Try again'; status.textContent = 'Still offline. Checking again every few seconds.'; })
+          .then(function () { clearTimeout(timer); });
+      }
+      btn.addEventListener('click', function () { probe(true); });
+      window.addEventListener('online', function () { probe(false); });
+      setInterval(function () { probe(false); }, 8000);
+    })();
+  </script>
+</body>
+</html>
