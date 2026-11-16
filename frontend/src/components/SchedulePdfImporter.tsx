@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Alert, AlertIcon, Badge, Box, Button, Checkbox, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent,
   ModalHeader, ModalOverlay, Select, Spinner, Table, TableContainer, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useToast,
@@ -20,7 +20,7 @@ interface Row { id: string; dayOfWeek: number; startTime: string; endTime: strin
   subject?: string; section?: string; room?: string; label?: string }
 interface Issue { code: string; message: string; ref: { type: 'class' | 'consult'; id: string } | null }
 interface Report { scheduleFingerprint?: string; ok: boolean; errors: Issue[]; warnings: Issue[]; summary: { weeklyConsultationMinutes: number }; identity?: { status: 'match' | 'mismatch' | 'unreadable'; read: string } }
-interface Parsed { metadata: { term: string; academicYear: string; effectivityDate: string; facultyName: string; facultyNameConfidence: number | null; facultyNameNeedsReview: boolean };
+export interface Parsed { metadata: { term: string; academicYear: string; effectivityDate: string; facultyName: string; facultyNameConfidence: number | null; facultyNameNeedsReview: boolean };
   workload: { lectureHours: number | null; laboratoryHours: number | null };
   classes: Row[]; consultationHours: Row[]; warnings: Issue[]; excludedWeekendConsultations: number }
 
@@ -31,10 +31,11 @@ const t12 = (t: string) => { const [h, m] = t.split(':').map(Number); return `${
 interface Outcome { status: 'ACTIVE' | 'SCHEDULED'; effectivityDate: string; counts?: { classes: number; hours: number } }
 interface HistoryItem { id: string; status: string; effectivityDate: string; term: string; academicYear: string; confirmedAt: string; failureReason: string; classBlocks: number; consultationBlocks: number }
 
-interface Props { facultyId: string; facultyName: string; mode: 'admin' | 'faculty'; isOpen: boolean; onClose: () => void; onApplied?: () => void }
+interface Props { facultyId: string; facultyName: string; mode: 'admin' | 'faculty'; isOpen: boolean; onClose: () => void; onApplied?: () => void;
+  initial?: { data: Parsed; fileHash: string }; onDone?: (status: 'ACTIVE' | 'SCHEDULED') => void }
 const MAX_BYTES = 10 * 1024 * 1024;
 
-export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOpen, onClose, onApplied }: Props) {
+export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOpen, onClose, onApplied, initial, onDone }: Props) {
   const toast = useToast();
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const errBg = useColorModeValue('#fee2e2', '#4c1d1d');
@@ -54,6 +55,12 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [history, setHistory] = useState<HistoryItem[] | null>(null);
+
+  // Opened from the bulk importer with the PDF already read: show its rows straight away (no second OCR run)
+  useEffect(() => {
+    if (!isOpen || !initial) return;
+    setParsed(initial.data); setClasses(initial.data.classes); setHours(initial.data.consultationHours); setReport(null); setIdentity(false); setFileHash(initial.fileHash || ''); setEffDate(initial.data.metadata?.effectivityDate || '');
+  }, [isOpen, initial?.fileHash]);
 
   const reset = () => { setOutcome(null); setEffDate(''); setParsed(null); setClasses([]); setHours([]); setIdentity(false); setReport(null); setUploadError(''); setFileHash(''); };
   const close = () => { reset(); onClose(); };
@@ -119,6 +126,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
         return;
       }
       setOutcome({ status: data.status, effectivityDate: data.effectivityDate, counts: data.counts });
+      onDone?.(data.status);
       if (data.status === 'ACTIVE') onApplied?.();
     } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
     finally { setConfirming(false); }

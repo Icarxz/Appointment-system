@@ -29,7 +29,7 @@ const ALLOWED = ['FACULTY', 'ADMIN'];
 
 // Phase 5: upload the scanned PDF itself. The body is the raw PDF (no multipart, so no extra dependency).
 //   POST /api/schedule-import/preview?facultyId=<id>   Content-Type: application/pdf  -> same rows as /parse, plus fileHash
-const previewLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many uploads. Try again in a few minutes.' } });
+const previewLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: (req) => (req.user && req.user.role === 'ADMIN' ? 60 : 10), standardHeaders: true, legacyHeaders: false, message: { error: 'Too many uploads. Try again in a few minutes.' } });
 const OCR_STATUS = { OCR_BUSY: 429, OCR_TIMEOUT: 504, OCR_UNAVAILABLE: 503, OCR_FAILED: 502, OCR_BAD_OUTPUT: 502 };
 
 router.post('/preview', requireAuth(ALLOWED), previewLimiter, express.raw({ type: 'application/pdf', limit: MAX_PDF_BYTES }), async (req, res) => {
