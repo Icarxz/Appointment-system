@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Select, Textarea, VStack, Text, useColorModeValue } from '@chakra-ui/react';
+import { Textarea, VStack, Text, useColorModeValue } from '@chakra-ui/react';
+import SearchableSelect from './SearchableSelect';
 
 export interface CancelReasonOption {
   label: string; // saved as the reason and shown in notifications / tables
@@ -63,19 +64,14 @@ export default function CancelReasonPicker({ options, onChange }: Props) {
 
   return (
     <VStack align="stretch" spacing={3}>
-      <Select
-        placeholder="Select a reason"
-        value={preset}
-        onChange={(e) => {
-          const v = e.target.value;
+      <SearchableSelect
+        portal searchable={false} ariaLabel="Reason" placeholder="Select a reason" value={preset}
+        onChange={(v) => {
           setPreset(v);
           onChange(v === OTHER ? otherText.trim() : v); // "Other Reason" stays invalid until something is typed
         }}
-        color={textColor} borderColor={borderColor}
-      >
-        {options.map(opt => <option key={opt.label} value={opt.label}>{opt.label}</option>)}
-        <option value={OTHER}>{OTHER}</option>
-      </Select>
+        options={[...options.map(opt => ({ value: opt.label, label: opt.label })), { value: OTHER, label: OTHER }]}
+      />
       {!isOther && selectedHint && <Text fontSize="xs" color={mutedText} mt={-1}>{selectedHint}</Text>}
       {isOther && (
         <Textarea

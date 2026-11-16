@@ -5,7 +5,7 @@ import { formatDate } from './dateUtils';
 import BroadcastBanner from './BroadcastBanner';
 import {
   Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Badge, Text, 
-  Button as ChakraButton, Select, Input, HStack, useToast, FormControl, 
+  Button as ChakraButton, Input, HStack, useToast, FormControl, 
   FormLabel, Flex, VStack, Textarea
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
@@ -796,14 +796,12 @@ const saveConsultationHours = async () => {
         <HStack spacing={2} flexWrap="wrap">
           {w && w.minutes > 0 && (
             <>
-              <Select size="xs" w="110px" title="Start time" aria-label="Start time" value={startChoice(apt)}
-                onChange={(e) => setApproveStart({ ...approveStart, [apt._id]: e.target.value })}>
-                {startOptions(w).map(t => <option key={t} value={t}>{formatTime(t)}</option>)}
-              </Select>
-              <Select size="xs" w="110px" title="Consultation length" aria-label="Consultation length" value={lengthChoice(apt)}
-                onChange={(e) => setApproveDuration({ ...approveDuration, [apt._id]: Number(e.target.value) })}>
-                {lengthOptions(apt).map(m => <option key={m} value={m}>{lengthText(m)}</option>)}
-              </Select>
+              <SearchableSelect size="xs" maxW="110px" portal searchable={false} clearable={false} ariaLabel="Start time" placeholder="Start time" value={startChoice(apt)}
+                onChange={(v) => setApproveStart({ ...approveStart, [apt._id]: v })}
+                options={startOptions(w).map(t => ({ value: t, label: formatTime(t) }))} />
+              <SearchableSelect size="xs" maxW="110px" portal searchable={false} clearable={false} ariaLabel="Consultation length" placeholder="Length" value={String(lengthChoice(apt))}
+                onChange={(v) => setApproveDuration({ ...approveDuration, [apt._id]: Number(v) })}
+                options={lengthOptions(apt).map(m => ({ value: String(m), label: lengthText(m) }))} />
               <ChakraButton size="xs" colorScheme="green" onClick={() => updateAppointmentStatus(apt, 'APPROVED')}>Approve</ChakraButton>
             </>
           )}
@@ -1117,11 +1115,9 @@ const saveConsultationHours = async () => {
                 <Heading size="md" color={textColor} mb={6}>Update Live Status</Heading>
                 <VStack spacing={4} alignItems="flex-start">
                   <FormControl><FormLabel color={textColor}>Current Status</FormLabel>
-                    <Select value={myStatus} onChange={(e) => setMyStatus(e.target.value)} color={textColor}>
-                      <option value="AVAILABLE">Available</option><option value="IN_CLASS">In Class</option><option value="IN_CONSULTATION">Consultation Hours</option>
-                      <option value="IN_MEETING">In a Meeting</option><option value="ON_BREAK">On Break</option>
-                      <option value="OUT_OF_OFFICE">Out of Office</option><option value="ON_LEAVE">On Leave</option><option value="ABSENT">Absent</option>
-                    </Select>
+                    <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Current status" placeholder="Status" value={myStatus} onChange={setMyStatus}
+                      options={[['AVAILABLE', 'Available'], ['IN_CLASS', 'In Class'], ['IN_CONSULTATION', 'Consultation Hours'], ['IN_MEETING', 'In a Meeting'], ['ON_BREAK', 'On Break'],
+                        ['OUT_OF_OFFICE', 'Out of Office'], ['ON_LEAVE', 'On Leave'], ['ABSENT', 'Absent']].map(([value, label]) => ({ value, label }))} />
                   </FormControl>
                   <FormControl><FormLabel color={textColor}>Location</FormLabel><Input value={myLocation} onChange={(e) => setMyLocation(e.target.value)} color={textColor} /></FormControl>
                   <ChakraButton colorScheme="blue" onClick={() => setConfirmCfg({
@@ -1161,9 +1157,9 @@ const saveConsultationHours = async () => {
               <VStack spacing={3} align="stretch">
                 {consultBlocks.map((block, i) => (
                   <HStack key={i}>
-                    <Select size="sm" value={block.dayOfWeek} onChange={(e) => updateBlock(i, 'dayOfWeek', Number(e.target.value))}>
-                      {CONSULT_DAY_LABELS.map((d, idx) => <option key={idx} value={idx + 1}>{d}</option>)}
-                    </Select>
+                    <SearchableSelect size="sm" maxW="150px" searchable={false} clearable={false} ariaLabel="Day" placeholder="Day" value={String(block.dayOfWeek)}
+                      onChange={(v) => updateBlock(i, 'dayOfWeek', Number(v))}
+                      options={CONSULT_DAY_LABELS.map((d, idx) => ({ value: String(idx + 1), label: d }))} />
                     <Input size="sm" type="time" value={block.startTime} onChange={(e) => updateBlock(i, 'startTime', e.target.value)} />
                     <Input size="sm" type="time" value={block.endTime} onChange={(e) => updateBlock(i, 'endTime', e.target.value)} />
                     <ChakraButton size="sm" colorScheme="red" variant="ghost" onClick={() => removeBlock(i)}>✕</ChakraButton>
@@ -1184,9 +1180,9 @@ const saveConsultationHours = async () => {
                 <Heading size="sm" color={textColor} mb={1}>Added Consultation Hours</Heading>
                 <Text fontSize="sm" color={mutedText} mb={3}>Extra weekly hours in your vacant time, on top of your 4 fixed hours. They repeat every week, and students can book them like any other slot.</Text>
                 <HStack mb={3}>
-                  <Select size="sm" value={addedForm.dayOfWeek} onChange={(e) => setAddedForm({ ...addedForm, dayOfWeek: Number(e.target.value) })}>
-                    {CONSULT_DAY_LABELS.map((d, idx) => <option key={idx} value={idx + 1}>{d}</option>)}
-                  </Select>
+                  <SearchableSelect size="sm" maxW="150px" searchable={false} clearable={false} ariaLabel="Day" placeholder="Day" value={String(addedForm.dayOfWeek)}
+                    onChange={(v) => setAddedForm({ ...addedForm, dayOfWeek: Number(v) })}
+                    options={CONSULT_DAY_LABELS.map((d, idx) => ({ value: String(idx + 1), label: d }))} />
                   <Input size="sm" type="time" value={addedForm.startTime} onChange={(e) => setAddedForm({ ...addedForm, startTime: e.target.value })} />
                   <Input size="sm" type="time" value={addedForm.endTime} onChange={(e) => setAddedForm({ ...addedForm, endTime: e.target.value })} />
                   <ChakraButton size="sm" colorScheme="blue" onClick={addExtraHours} isDisabled={!addedForm.startTime || !addedForm.endTime}>Add</ChakraButton>
@@ -1325,19 +1321,17 @@ const saveConsultationHours = async () => {
                             <Text fontSize="sm" color={textColor} whiteSpace="pre-wrap" overflowWrap="anywhere">{apt.reason || '—'}</Text>
                           </Td>
                           <Td minW="240px">
-                            <Select
-                              size="sm"
-                              aria-label={`Intervention or action taken for ${apt.studentName}`}
+                            <SearchableSelect
+                              size="sm" portal searchable={false}
+                              ariaLabel={`Intervention or action taken for ${apt.studentName}`}
                               placeholder="Select an intervention"
                               value={interventionChoice(logForm[apt._id]?.interventionTaken || '')}
-                              onChange={e => setLogForm(prev => ({
+                              onChange={v => setLogForm(prev => ({
                                 ...prev,
-                                [apt._id]: { ...(prev[apt._id] || { casePresented: '', interventionTaken: '' }), interventionTaken: e.target.value },
+                                [apt._id]: { ...(prev[apt._id] || { casePresented: '', interventionTaken: '' }), interventionTaken: v },
                               }))}
-                            >
-                              {INTERVENTION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
-                              <option value="Others">Others</option>
-                            </Select>
+                              options={[...INTERVENTION_OPTIONS.map(option => ({ value: option, label: option })), { value: 'Others', label: 'Others' }]}
+                            />
                             {interventionChoice(logForm[apt._id]?.interventionTaken || '') === 'Others' && (
                               <Input
                                 mt={2}
@@ -1409,16 +1403,14 @@ const saveConsultationHours = async () => {
                           <Text fontSize="sm" color={textColor} whiteSpace="pre-wrap" overflowWrap="anywhere">{apt.casePresented || apt.reason || '—'}</Text>
                         </Td>
                         <Td minW="240px">
-                          <Select
-                            size="sm"
-                            aria-label={`Edit intervention or action taken for ${apt.studentName}`}
+                          <SearchableSelect
+                            size="sm" portal searchable={false}
+                            ariaLabel={`Edit intervention or action taken for ${apt.studentName}`}
                             placeholder="Select an intervention"
                             value={interventionChoice(apt.interventionTaken || '')}
-                            onChange={e => updateSavedLogField(apt._id, 'interventionTaken', e.target.value)}
-                          >
-                            {INTERVENTION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
-                            <option value="Others">Others</option>
-                          </Select>
+                            onChange={v => updateSavedLogField(apt._id, 'interventionTaken', v)}
+                            options={[...INTERVENTION_OPTIONS.map(option => ({ value: option, label: option })), { value: 'Others', label: 'Others' }]}
+                          />
                           {interventionChoice(apt.interventionTaken || '') === 'Others' && (
                             <Input
                               mt={2}
