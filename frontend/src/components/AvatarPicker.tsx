@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import { useRef } from 'react';
 import { Avatar, Button, HStack, Text, VStack, useToast } from '@chakra-ui/react';
 
 // Profile photo picker. Crops the chosen image to a centred square, shrinks it to 256x256 and
