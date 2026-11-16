@@ -38,9 +38,26 @@ export interface FacultyLite { _id: string; name: string }
 export type MatchStatus = 'matched' | 'ambiguous' | 'unmatched';
 export interface FileMatch { key: string; status: MatchStatus; candidates: FacultyLite[] }
 
+// Scans are named like NIEGO-RINABELLE-FEB-2.pdf or EGUALAN-ROLEN-FEB-2-UPDATED.pdf: the name, then a date or a note. Those trailing parts are
+// not part of the name. Numbers and words like "updated" go; a month goes only when something after it was removed too (so a first name
+// such as April, as in REYES-APRIL.pdf, is kept).
+const NOISE = new Set(['updated', 'update', 'new', 'old', 'final', 'copy', 'revised', 'rev', 'latest', 'schedule', 'sched', 'load', 'fil']);
+const MONTHS = new Set(['jan', 'january', 'feb', 'february', 'mar', 'march', 'apr', 'april', 'may', 'jun', 'june', 'jul', 'july', 'aug', 'august',
+  'sep', 'sept', 'september', 'oct', 'october', 'nov', 'november', 'dec', 'december']);
+export function filenameKey(fileName: string): string {
+  const tokens = String(fileName || '').replace(/\.pdf$/i, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .split(/[^a-z0-9]+/).filter(Boolean);
+  let removed = 0;
+  while (tokens.length > 1) {
+    const t = tokens[tokens.length - 1];
+    if (/^\d+$/.test(t) || NOISE.has(t) || (removed > 0 && MONTHS.has(t))) { tokens.pop(); removed++; } else break;
+  }
+  return tokens.join('');
+}
+
 // Exact comparison only (never includes()): a similar or partial name must not pick the wrong person.
 export function matchFacultyByFilename(fileName: string, faculty: FacultyLite[]): FileMatch {
-  const key = normalizeFacultyName(fileName);
+  const key = filenameKey(fileName);
   if (!key) return { key, status: 'unmatched', candidates: [] };
   const candidates = faculty.filter(f => facultyKeys(f.name).includes(key));
   return { key, status: candidates.length === 1 ? 'matched' : candidates.length > 1 ? 'ambiguous' : 'unmatched', candidates };
