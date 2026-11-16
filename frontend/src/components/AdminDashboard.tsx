@@ -5,8 +5,9 @@ import {
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
   useToast, Select, HStack, Flex, SimpleGrid, Avatar, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter,
-  InputGroup, InputRightAddon
+  InputGroup, InputRightAddon, Menu, MenuButton, MenuList, MenuItem, Portal
 } from '@chakra-ui/react';
+import { ChevronDownIcon } from '@chakra-ui/icons';
 import { IdTray, isIdComplete } from './IdTray';
 import { authFetch } from './authFetch';
 import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
@@ -520,7 +521,7 @@ export default function AdminDashboard() {
             </FilterPanel>
 
             <ScrollTable><Table variant="simple" size="md">
-              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Manage</Th></Tr></Thead>
               <Tbody>
                 {visibleFaculty.length === 0 && (
                   <Tr><Td colSpan={6}><Text color={mutedText} py={6} textAlign="center">No faculty match these filters.</Text></Td></Tr>
@@ -539,12 +540,15 @@ export default function AdminDashboard() {
                     <Td>
                       {userById[prof._id]?.role === 'FACULTY' && (
                         <HStack spacing={2}>
-                          <ChakraButton size="xs" variant="outline" onClick={() => setScheduleOf(prof)}>Schedule</ChakraButton>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(userById[prof._id])}>
-                            {userById[prof._id]?.facultyId ? 'Edit ID' : 'Add ID'}
-                          </ChakraButton>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(userById[prof._id])}>Edit email</ChakraButton>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(userById[prof._id])}>Edit name</ChakraButton>
+                          <Menu isLazy>
+                            <MenuButton as={ChakraButton} size="xs" variant="outline" rightIcon={<ChevronDownIcon />}>Edit</MenuButton>
+                            <Portal><MenuList>
+                              <MenuItem onClick={() => setScheduleOf(prof)}>Schedule</MenuItem>
+                              <MenuItem onClick={() => openIdEdit(userById[prof._id])}>{userById[prof._id]?.facultyId ? 'Edit ID' : 'Add ID'}</MenuItem>
+                              <MenuItem onClick={() => openEmailEdit(userById[prof._id])}>Edit email</MenuItem>
+                              <MenuItem onClick={() => openNameEdit(userById[prof._id])}>Edit name</MenuItem>
+                            </MenuList></Portal>
+                          </Menu>
                           <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(userById[prof._id]) ? 'green' : 'red'} onClick={() => setStatusTarget(userById[prof._id])}>
                             {isAccountDisabled(userById[prof._id]) ? 'Enable' : 'Disable'}
                           </ChakraButton>
@@ -595,7 +599,7 @@ export default function AdminDashboard() {
             </FilterPanel>
 
             <ScrollTable><Table variant="simple" size="md">
-              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>School ID</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Program / Section</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>School ID</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Program / Section</Th><Th color={mutedText}>Manage</Th></Tr></Thead>
               <Tbody>
                 {visibleStudents.length === 0 && (
                   <Tr><Td colSpan={5}><Text color={mutedText} py={6} textAlign="center">No students match these filters.</Text></Td></Tr>
@@ -608,11 +612,14 @@ export default function AdminDashboard() {
                     <Td>{student.programPosition ? <Badge colorScheme="purple" variant="subtle" borderRadius="full" px={2}>{student.programPosition}</Badge> : '—'}</Td>
                     <Td>
                       <HStack spacing={2}>
-                        <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(student)}>
-                          {student.schoolId ? 'Edit ID' : 'Add ID'}
-                        </ChakraButton>
-                        <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(student)}>Edit email</ChakraButton>
-                        <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(student)}>Edit name</ChakraButton>
+                        <Menu isLazy>
+                          <MenuButton as={ChakraButton} size="xs" variant="outline" rightIcon={<ChevronDownIcon />}>Edit</MenuButton>
+                          <Portal><MenuList>
+                            <MenuItem onClick={() => openIdEdit(student)}>{student.schoolId ? 'Edit ID' : 'Add ID'}</MenuItem>
+                            <MenuItem onClick={() => openEmailEdit(student)}>Edit email</MenuItem>
+                            <MenuItem onClick={() => openNameEdit(student)}>Edit name</MenuItem>
+                          </MenuList></Portal>
+                        </Menu>
                         <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(student) ? 'green' : 'red'} onClick={() => setStatusTarget(student)}>
                           {isAccountDisabled(student) ? 'Enable' : 'Disable'}
                         </ChakraButton>
