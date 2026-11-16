@@ -18,7 +18,7 @@ const API = import.meta.env.VITE_API_URL;
 // (edit, check, effectivity date, "Are you sure?"), so every file is confirmed one by one and the server re-checks all of it.
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const MAX_FILES = 20;
+const MAX_FILES = 10;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 interface HistoryRow { fileHash?: string; status: string; effectivityDate: string }
@@ -178,12 +178,12 @@ export default function BulkSchedulePdfImporter({ isOpen, onClose, facultyList, 
       <Modal isOpen={isOpen} onClose={close} size="6xl" scrollBehavior="inside" closeOnOverlayClick={false}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Bulk import schedule PDFs</ModalHeader>
+          <ModalHeader>Import faculty schedule (PDFs)</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
             <VStack align="stretch" spacing={4}>
               <Alert status="info" borderRadius="md"><AlertIcon />
-                <Text fontSize="sm">Choose up to {MAX_FILES} scanned Faculty Individual Load PDFs (10 MB each) named after the faculty member, for example <b>Carl Spence.pdf</b> or <b>CARL_SPENCE.pdf</b>. Each file is matched to an account by its name and read one after another. Nothing is saved until you press Review and confirm that file.</Text>
+                <Text fontSize="sm">Choose up to {MAX_FILES} Faculty Individual Load PDFs (10 MB each) named after the faculty member, for example <b>Carl Spence.pdf</b> or <b>CARL_SPENCE.pdf</b>. Each file is matched to an account by its name and read one after another. Nothing is saved until you press Review and confirm that file.</Text>
               </Alert>
               <Input type="file" multiple accept="application/pdf,.pdf" pt={1} aria-label="Schedule PDFs" onChange={e => { addFiles(Array.from(e.target.files || [])); e.target.value = ''; }} />
               {problems.map((p, i) => <Alert key={i} status="warning" borderRadius="md" py={1}><AlertIcon /><Text fontSize="sm">{p}</Text></Alert>)}
