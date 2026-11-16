@@ -3,7 +3,7 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, VStack, FormControl, FormLabel,
   FormHelperText, Input, Checkbox, Button, HStack, Text, Link as ChakraLink,
 } from '@chakra-ui/react';
-import { cohortConfig } from '../data/cohortConfig';
+import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import SearchableSelect from './SearchableSelect';
 import { idHint, isValidId } from '../utils/idValidator';
 
@@ -28,7 +28,6 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
   const [year, setYear] = useState('');
   const [section, setSection] = useState('');
   const [position, setPosition] = useState('');
-  const facultyPositions = ['Faculty', 'Librarian', 'Program Head (BS INFO)', 'Program Head (BS COMSCI)', 'Program Head (BLIS)', 'Dean'];
   const [idValue, setIdValue] = useState('');
   const [privacy, setPrivacy] = useState(false);
   const [error, setError] = useState('');
@@ -76,7 +75,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
             <FormControl isRequired>
               <FormLabel>Gender</FormLabel>
               <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Gender" placeholder="Select" value={gender} onChange={setGender}
-                options={['Male', 'Female', 'Prefer not to say'].map(g => ({ value: g, label: g }))} />
+                options={['Male', 'Female'].map(g => ({ value: g, label: g }))} />
             </FormControl>
             {isStudent ? (
               <HStack align="start">
@@ -102,7 +101,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
               <FormControl isRequired>
                 <FormLabel>Academic Position</FormLabel>
                 <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Academic Position" placeholder="Select position" value={position} onChange={setPosition}
-                  options={facultyPositions.map(item => ({ value: item, label: item }))} />
+                  options={FACULTY_POSITIONS.map(item => ({ value: item, label: item }))} />
               </FormControl>
             )}
             {needsId && (
