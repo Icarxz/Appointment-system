@@ -92,13 +92,11 @@ export default function FacultyAnalytics() {
       </SimpleGrid>
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
-        <ChartCard title="What happened to requests" hint={`All ${o.requests} requests you answered or that happened. ${o.pending} pending are not included.`}>
+        <ChartCard title="What happened to requests" hint={`All ${o.requests} requests you answered or that happened. ${o.pending} pending are not included. Who missed or cancelled is on the Missed and Cancelled tiles.`}>
           <PieChart segments={[
             { label: 'Completed', value: o.completed, color: OUTCOME_COLORS.completed },
-            { label: 'Missed by students', value: o.studentNoShows, color: OUTCOME_COLORS.missedStudent },
-            { label: 'Cancelled by students', value: o.cancelledByStudent, color: OUTCOME_COLORS.cancelledStudent },
-            { label: 'Missed by me', value: o.missedByFaculty, color: OUTCOME_COLORS.missedFaculty },
-            { label: 'Cancelled by me', value: o.cancelledByFaculty, color: OUTCOME_COLORS.cancelledFaculty },
+            { label: 'Missed', value: o.studentNoShows + o.missedByFaculty, color: OUTCOME_COLORS.missedStudent },
+            { label: 'Cancelled', value: o.cancelledByStudent + o.cancelledByFaculty, color: OUTCOME_COLORS.cancelledFaculty },
             { label: 'Declined by me', value: o.declined, color: OUTCOME_COLORS.declined },
             { label: 'Expired (no response)', value: o.expired, color: OUTCOME_COLORS.expired },
             { label: 'Upcoming', value: o.upcoming, color: OUTCOME_COLORS.upcoming },
