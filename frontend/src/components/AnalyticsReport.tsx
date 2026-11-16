@@ -132,16 +132,14 @@ export default function AnalyticsReport() {
       </SimpleGrid>
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="stretch">
-        <ChartCard title="What happened to requests" hint={`Share of each outcome among the ${o.requests} requests that were answered or happened. ${o.pending} pending are not included.`}>
+        <ChartCard title="What happened to requests" hint={`Share of each outcome among the ${o.requests} requests that were answered or happened. ${o.pending} pending are not included. Who missed or cancelled is on the Missed and Cancelled tiles.`}>
           <StackedBar segments={[
             { label: 'Completed', value: o.completed, color: OUTCOME_COLORS.completed },
             { label: 'Upcoming', value: o.upcoming, color: OUTCOME_COLORS.upcoming },
             { label: 'Declined', value: o.declined, color: OUTCOME_COLORS.declined },
             { label: 'Expired (no response)', value: o.expired, color: OUTCOME_COLORS.expired },
-            { label: 'Missed (student)', value: o.missedStudent, color: OUTCOME_COLORS.missedStudent },
-            { label: 'Missed (faculty)', value: o.missedFaculty, color: OUTCOME_COLORS.missedFaculty },
-            { label: 'Cancelled (student)', value: o.cancelledStudent, color: OUTCOME_COLORS.cancelledStudent },
-            { label: 'Cancelled (faculty)', value: o.cancelledFaculty, color: OUTCOME_COLORS.cancelledFaculty },
+            { label: 'Missed', value: o.missedStudent + o.missedFaculty, color: OUTCOME_COLORS.missedStudent },
+            { label: 'Cancelled', value: o.cancelledStudent + o.cancelledFaculty, color: OUTCOME_COLORS.cancelledFaculty },
             ...(o.other > 0 ? [{ label: 'Other / older status', value: o.other, color: '#a1a1aa' }] : []),
           ]} />
         </ChartCard>
