@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { cohortConfig } from '../data/cohortConfig';
+import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import { formatDate, formatDateTime } from './dateUtils';
 import BroadcastBanner from './BroadcastBanner';
 import OnboardingModal from './OnboardingModal';
@@ -204,14 +204,7 @@ export default function StudentDashboard() {
   }, [myRequests]);
 
   // Keep the student-facing faculty filter aligned with the approved Provision Account roles.
-  const positionOptions = [
-    'Faculty',
-    'Librarian',
-    'Program Head (BS INFO)',
-    'Program Head (BS COMSCI)',
-    'Program Head (BLIS)',
-    'Dean',
-  ];
+  const positionOptions = FACULTY_POSITIONS;
   const normalizeFacultyPosition = (rawPosition: string = '') => {
     const raw = rawPosition.trim().toLowerCase();
     if (!raw) return '';
