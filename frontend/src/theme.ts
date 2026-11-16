@@ -64,7 +64,12 @@ export default extendTheme({
     IconButton: { baseStyle: touchTarget },
     CloseButton: { baseStyle: touchTarget },
     Input: { baseStyle: { field: touchHeight }, variants: { outline: (props: { colorMode: string }) => ({ field: fieldLook(props) }) }, defaultProps: { focusBorderColor: 'blue.500' } },
-    Select: { baseStyle: { field: touchHeight }, variants: { outline: (props: { colorMode: string }) => ({ field: fieldLook(props) }) }, defaultProps: { focusBorderColor: 'blue.500' } },
+    // The list that opens from a native <select> is drawn by the browser, which on Windows / Chromium paints a white background and ignores the
+    // select's own: light text on that white list is unreadable in dark mode. Give every <option> the field's own background and text colour.
+    Select: { baseStyle: { field: touchHeight }, variants: { outline: (props: { colorMode: string }) => {
+      const f = FIELD[props.colorMode === 'dark' ? 'dark' : 'light'];
+      return { field: { ...fieldLook(props), '& > option, & > optgroup': { bg: f.bg, color: f.text } } };
+    } }, defaultProps: { focusBorderColor: 'blue.500' } },
     Textarea: { baseStyle: touchHeight, variants: { outline: (props: { colorMode: string }) => fieldLook(props) }, defaultProps: { focusBorderColor: 'blue.500' } },
     // Dialogs and drawers: rounder corners, a stronger title, and a dimmer backdrop that keeps the page readable behind it.
     Modal: {

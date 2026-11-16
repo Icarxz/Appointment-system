@@ -165,7 +165,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
           ))}
           {filterBox('Reason', (
             <SearchableSelect value={filters.reason} onChange={value => set({ reason: value })} placeholder="All Reasons"
-              options={reasons.map(reason => ({ value: reason, label: reason.length > 50 ? `${reason.slice(0, 50)}…` : reason }))} />
+              options={reasons.map(reason => ({ value: reason, label: reason }))} />
           ))}
           {filterBox('Status', (
             <SearchableSelect value={filters.status} onChange={value => set({ status: value })} placeholder="All Statuses"

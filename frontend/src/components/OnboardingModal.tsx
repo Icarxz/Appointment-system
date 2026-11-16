@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, VStack, FormControl, FormLabel,
-  FormHelperText, Input, Select, Checkbox, Button, HStack, Text, Link as ChakraLink,
+  FormHelperText, Input, Checkbox, Button, HStack, Text, Link as ChakraLink,
 } from '@chakra-ui/react';
 import { cohortConfig } from '../data/cohortConfig';
+import SearchableSelect from './SearchableSelect';
 import { idHint, isValidId } from '../utils/idValidator';
 
 interface Props {
@@ -74,37 +75,34 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
             </Text>
             <FormControl isRequired>
               <FormLabel>Gender</FormLabel>
-              <Select placeholder="Select" value={gender} onChange={e => setGender(e.target.value)}>
-                <option>Male</option><option>Female</option><option>Prefer not to say</option>
-              </Select>
+              <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Gender" placeholder="Select" value={gender} onChange={setGender}
+                options={['Male', 'Female', 'Prefer not to say'].map(g => ({ value: g, label: g }))} />
             </FormControl>
             {isStudent ? (
               <HStack align="start">
                 <FormControl isRequired>
                   <FormLabel>Program</FormLabel>
-                  <Select placeholder="Select" value={program} onChange={e => { setProgram(e.target.value); setYear(''); setSection(''); }}>
-                    {Object.keys(cohortConfig).map(p => <option key={p}>{p}</option>)}
-                  </Select>
+                  <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Program" placeholder="Select" value={program}
+                    onChange={v => { setProgram(v); setYear(''); setSection(''); }}
+                    options={Object.keys(cohortConfig).map(p => ({ value: p, label: p }))} />
                 </FormControl>
                 <FormControl isRequired>
                   <FormLabel>Year</FormLabel>
-                  <Select placeholder="-" isDisabled={!program} value={year} onChange={e => { setYear(e.target.value); setSection(''); }}>
-                    {program && Object.keys(cohortConfig[program]).map(y => <option key={y}>{y}</option>)}
-                  </Select>
+                  <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Year" placeholder="-" isDisabled={!program} value={year}
+                    onChange={v => { setYear(v); setSection(''); }}
+                    options={program ? Object.keys(cohortConfig[program]).map(y => ({ value: y, label: y })) : []} />
                 </FormControl>
                 <FormControl isRequired>
                   <FormLabel>Section</FormLabel>
-                  <Select placeholder="-" isDisabled={!year} value={section} onChange={e => setSection(e.target.value)}>
-                    {program && year && cohortConfig[program][year].map(s => <option key={s}>{s}</option>)}
-                  </Select>
+                  <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Section" placeholder="-" isDisabled={!year} value={section} onChange={setSection}
+                    options={program && year ? cohortConfig[program][year].map(sec => ({ value: sec, label: sec })) : []} />
                 </FormControl>
               </HStack>
             ) : (
               <FormControl isRequired>
                 <FormLabel>Academic Position</FormLabel>
-                <Select placeholder="Select position" value={position} onChange={e => setPosition(e.target.value)}>
-                  {facultyPositions.map(item => <option key={item} value={item}>{item}</option>)}
-                </Select>
+                <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Academic Position" placeholder="Select position" value={position} onChange={setPosition}
+                  options={facultyPositions.map(item => ({ value: item, label: item }))} />
               </FormControl>
             )}
             {needsId && (
