@@ -4,7 +4,7 @@
 // "use" is not reported (faculty are not required to use all their hours).
 const {
   outcomeCounts, buildHeatmap, buildAppealRows, buildAppealSummary, purposeRows, monthlySeries,
-  weeklySeries, STUDENT_APPEAL_REASONS, parseCohort, windowCounts, actorList,
+  weeklySeries, weeklyCreatedSeries, STUDENT_APPEAL_REASONS, parseCohort, windowCounts, actorList,
   isCounted, isMissed, isMissedStudent, isMissedFaculty, isCancelledStudent, isCancelledFaculty, studentKey, studentName,
 } = require('./reportMetrics');
 const { collapsePurposes } = require('./analyticsHelpers');
@@ -69,6 +69,8 @@ function buildFacultyAnalytics({ appointments, official = [], added = [], todayI
     },
     outcomes: {
       requests: c.requests,
+      pending: c.pending,
+      other: c.other,
       completed: c.completed,
       upcoming: c.upcoming,
       declined: c.declined,
@@ -82,6 +84,7 @@ function buildFacultyAnalytics({ appointments, official = [], added = [], todayI
       approvalRate,
     },
     weekly: weeklySeries(appointments, todayIso),
+    weeklyCreated: weeklyCreatedSeries(appointments, todayIso),
     monthly: monthlySeries(appointments, todayIso),
     heatmap: buildHeatmap(appointments, [...official, ...added]),
     appeals: {

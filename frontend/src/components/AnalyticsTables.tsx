@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import SearchableSelect from './SearchableSelect';
 import {
-  Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, Select, Tab, TabList,
+  Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, Tab, TabList,
   TabPanel, TabPanels, Table, Tbody, Td, Text, Th, Thead, Tr, Tabs, VStack, useColorModeValue,
 } from '@chakra-ui/react';
 
@@ -24,20 +25,21 @@ const ordinal = (y: string) => (y === '' ? 'Unspecified' : `${y}${y === '1' ? 's
 const byProgram = (a: string, b: string) => (a === 'Unspecified' ? 1 : b === 'Unspecified' ? -1 : a.localeCompare(b));
 const byYear = (a: string, b: string) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b));
 
+// An unspecified year is the empty string in the data, but the dropdown uses '' for "nothing chosen", so it gets a stand-in value.
+const NO_YEAR = '__none__';
+
 function FilterBar({ programs, years, program, year, onProgram, onYear }: {
   programs: string[]; years: string[]; program: string; year: string; onProgram: (v: string) => void; onYear: (v: string) => void;
 }) {
-  const t = useTheme();
+  // SearchableSelect gives '' when cleared; the tables use 'All' for "no filter".
   return (
     <HStack spacing={3} mb={3} wrap="wrap">
-      <Select size="sm" w="170px" value={program} onChange={e => onProgram(e.target.value)} color={t.text} borderColor={t.border} aria-label="Program">
-        <option value="All">All programs</option>
-        {programs.map(p => <option key={p} value={p}>{p}</option>)}
-      </Select>
-      <Select size="sm" w="150px" value={year} onChange={e => onYear(e.target.value)} color={t.text} borderColor={t.border} aria-label="Year level">
-        <option value="All">All year levels</option>
-        {years.map(y => <option key={y} value={y}>{ordinal(y)}</option>)}
-      </Select>
+      <SearchableSelect size="sm" maxW="170px" searchable={false} portal ariaLabel="Program" placeholder="All programs"
+        value={program === 'All' ? '' : program} onChange={v => onProgram(v || 'All')}
+        options={programs.map(p => ({ value: p, label: p }))} />
+      <SearchableSelect size="sm" maxW="170px" searchable={false} portal ariaLabel="Year level" placeholder="All year levels"
+        value={year === 'All' ? '' : year === '' ? NO_YEAR : year} onChange={v => onYear(v === '' ? 'All' : v === NO_YEAR ? '' : v)}
+        options={years.map(y => ({ value: y === '' ? NO_YEAR : y, label: ordinal(y) }))} />
     </HStack>
   );
 }

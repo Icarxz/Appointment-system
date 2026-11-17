@@ -3,7 +3,7 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, VStack, FormControl, FormLabel,
   FormHelperText, Input, Checkbox, Button, HStack, Text, Link as ChakraLink,
 } from '@chakra-ui/react';
-import { cohortConfig } from '../data/cohortConfig';
+import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import SearchableSelect from './SearchableSelect';
 import { idHint, isValidId } from '../utils/idValidator';
 import { PROGRAM_OPTIONS, programOfPosition } from '../utils/programs';
@@ -29,7 +29,6 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
   const [year, setYear] = useState('');
   const [section, setSection] = useState('');
   const [position, setPosition] = useState('');
-  const facultyPositions = ['Faculty', 'Librarian', 'Program Head (BS INFO)', 'Program Head (BS COMSCI)', 'Program Head (BLIS)', 'Dean'];
   const [facultyProg, setFacultyProg] = useState(''); // faculty only; a Program Head's comes from the position
   const facultyProgramValue = programOfPosition(position) || facultyProg;
   const [idValue, setIdValue] = useState('');
@@ -39,7 +38,6 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
 
   const submit = async () => {
     setError('');
-    if (!gender) return setError('Please select your gender.');
     if (isStudent && !(program && year && section)) return setError('Please select your program, year and section.');
     if (!isStudent && !position) return setError('Please select your position.');
     if (role === 'FACULTY' && !facultyProgramValue) return setError('Please select your program.');
@@ -78,9 +76,9 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
             <Text fontSize="sm" color="gray.600">
               Signed in as <b>{googleName ? `${googleName} (${email})` : email}</b>. Your name comes from your school account. We just need a few details Google doesn't provide.
             </Text>
-            <FormControl isRequired>
-              <FormLabel>Gender</FormLabel>
-              <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Gender" placeholder="Select" value={gender} onChange={setGender}
+            <FormControl>
+              <FormLabel>Gender <Text as="span" fontWeight="normal" opacity={0.6}>(optional)</Text></FormLabel>
+              <SearchableSelect portal searchable={false} ariaLabel="Gender" placeholder="Prefer not to answer" value={gender} onChange={setGender}
                 options={['Male', 'Female'].map(g => ({ value: g, label: g }))} />
             </FormControl>
             {isStudent ? (
@@ -108,7 +106,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
                 <FormControl isRequired>
                   <FormLabel>Academic Position</FormLabel>
                   <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Academic Position" placeholder="Select position" value={position} onChange={setPosition}
-                    options={facultyPositions.map(item => ({ value: item, label: item }))} />
+                    options={FACULTY_POSITIONS.map(item => ({ value: item, label: item }))} />
                 </FormControl>
                 {role === 'FACULTY' && (
                   <FormControl isRequired>

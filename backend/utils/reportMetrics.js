@@ -3,7 +3,7 @@
 // Dates are Manila "YYYY-MM-DD" strings, times are "HH:MM".
 //
 // Rules agreed for the project (see the analytics plan):
-//  - PENDING requests are never counted in analytics.
+//  - PENDING requests are never counted in `requests` or any rate; they are reported beside them as `pending`.
 //  - Appeals never reduce a miss count; they are reported beside it.
 //  - Missed rate = missed / (completed + missed).
 const { collapsePurposes, weekRange, bucketWeekly, shiftIso } = require('./analyticsHelpers');
@@ -40,6 +40,10 @@ function parseCohort(text) {
   return m ? { program: m[1], year: m[2], section: m[3].toUpperCase() } : { program: 'Unspecified', year: '', section: '' };
 }
 
+// Every non-pending status the outcome buckets below understand.
+const KNOWN_STATUS = (a) => a.status === 'COMPLETED' || a.status === 'APPROVED' || a.status === 'REJECTED'
+  || isMissed(a.status) || isCancelledStudent(a.status) || isCancelledFaculty(a.status);
+
 // All the headline counts for a set of appointments.
 function outcomeCounts(appointments) {
   const by = (pred) => appointments.filter((a) => pred(a.status)).length;
@@ -49,6 +53,9 @@ function outcomeCounts(appointments) {
   const missed = missedStudent + missedFaculty;
   return {
     requests: appointments.filter(isCounted).length,
+    // Pending is reported beside the counted outcomes, never inside them. submitted = pending + requests.
+    pending: appointments.filter((a) => a.status === 'PENDING').length,
+    submitted: appointments.length,
     completed,
     upcoming: by((s) => s === 'APPROVED'),
     // A request the system rejected because nobody answered it is "expired", not a faculty decision.
@@ -59,6 +66,8 @@ function outcomeCounts(appointments) {
     missed,
     cancelledStudent: by(isCancelledStudent),
     cancelledFaculty: by(isCancelledFaculty),
+    // A status this code does not know (an older or misspelled value) is kept in the totals and shown, not dropped.
+    other: appointments.filter((a) => isCounted(a) && !KNOWN_STATUS(a)).length,
     completionRate: pct(completed, completed + missed),
     missedRate: pct(missed, completed + missed),
   };
@@ -174,6 +183,24 @@ function weeklySeries(appointments, todayIso, pred = isCounted, weeks = 8) {
   return bucketWeekly(range, [...perDate.entries()].map(([_id, count]) => ({ _id, count })));
 }
 
+// A timestamp (Date or ISO string) as a Manila calendar date "YYYY-MM-DD"; '' when missing or invalid.
+function manilaDateOf(value) {
+  const t = value ? new Date(value).getTime() : NaN;
+  return Number.isNaN(t) ? '' : new Date(t + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// Requests per week by the day the student SUBMITTED them (createdAt, Manila time), pending included.
+// weeklySeries above groups by the scheduled consultation date instead; the two answer different questions.
+function weeklyCreatedSeries(appointments, todayIso, weeks = 8) {
+  const range = weekRange(todayIso, weeks);
+  const perDate = new Map();
+  appointments.forEach((a) => {
+    const d = manilaDateOf(a.createdAt);
+    if (d) perDate.set(d, (perDate.get(d) || 0) + 1);
+  });
+  return bucketWeekly(range, [...perDate.entries()].map(([_id, count]) => ({ _id, count })));
+}
+
 // Last N calendar months ending with the current one: [{ label: "Oct '26", value }]
 function monthlySeries(appointments, todayIso, months = 6) {
   const [y, mo] = todayIso.split('-').map(Number);
@@ -277,6 +304,7 @@ function buildSharedReport({ appointments, users, hoursRows = [], todayIso, incl
     },
     outcomes: counts,
     weekly: weeklySeries(appointments, todayIso),
+    weeklyCreated: weeklyCreatedSeries(appointments, todayIso),
     weeklyMissed: weeklySeries(appointments, todayIso, (a) => isMissed(a.status)),
     facultyLoad,
     purposes: collapsePurposes(purposeRows(appointments), 6),
@@ -305,6 +333,6 @@ function buildSharedReport({ appointments, users, hoursRows = [], todayIso, incl
 module.exports = {
   isCounted, isMissed, isMissedStudent, isMissedFaculty, isCancelledStudent, isCancelledFaculty, studentKey, studentName,
   STUDENT_APPEAL_REASONS, parseCohort, outcomeCounts, windowCounts, actorList, buildHeatmap,
-  buildAppealRows, buildAppealSummary, buildCohortRows, purposeRows, weeklySeries, monthlySeries,
+  buildAppealRows, buildAppealSummary, buildCohortRows, purposeRows, weeklySeries, weeklyCreatedSeries, manilaDateOf, monthlySeries,
   buildFacultyOutcomeRows, buildStudentOutcomeRows, buildGender, buildAccountHealth, buildSharedReport,
 };
