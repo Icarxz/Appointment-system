@@ -15,6 +15,7 @@ import { authFetch } from './authFetch';
 import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
 import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
 import ClassGridEditor from './ClassGridEditor';
+import AdminEditAccountModal from './AdminEditAccountModal';
 import ProfilePage from './ProfilePage';
 import ProfileGate from './ProfileGate';
 import DashboardShell from './DashboardShell';
@@ -92,6 +93,7 @@ export default function AdminDashboard() {
   const [nameEditValue, setNameEditValue] = useState('');
   const [nameSaving, setNameSaving] = useState(false);
   const [emailSaving, setEmailSaving] = useState(false);
+  const [accountEdit, setAccountEdit] = useState<any | null>(null); // Faculty / Students > Edit: the account open in the profile-style form
   const [idEdit, setIdEdit] = useState<any | null>(null);    // account whose School/Faculty ID is being added or edited
   const [idEditValue, setIdEditValue] = useState('');
   const [idSaving, setIdSaving] = useState(false);
@@ -258,7 +260,6 @@ export default function AdminDashboard() {
       (!studentQ || u.name.toLowerCase().includes(studentQ) || (u.email || '').toLowerCase().includes(studentQ) || (u.schoolId || '').toLowerCase().includes(studentQ));
   });
 
-  const openNameEdit = (u: any) => { setNameEdit(u); setNameEditValue(u?.name || ''); };
   const saveName = async () => {
     if (!nameEdit) return;
     setNameSaving(true);
@@ -304,7 +305,6 @@ export default function AdminDashboard() {
     setEmailSaving(false);
   };
 
-  const openIdEdit = (u: any) => { setIdEdit(u); setIdEditValue((u.role === 'STUDENT' ? u.schoolId : u.facultyId) || ''); };
 
   const saveId = async () => {
     if (!idEdit) return;
@@ -540,11 +540,7 @@ export default function AdminDashboard() {
                       {userById[prof._id]?.role === 'FACULTY' && (
                         <HStack spacing={2}>
                           <ChakraButton size="xs" variant="outline" onClick={() => setScheduleOf(prof)}>Schedule</ChakraButton>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(userById[prof._id])}>
-                            {userById[prof._id]?.facultyId ? 'Edit ID' : 'Add ID'}
-                          </ChakraButton>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(userById[prof._id])}>Edit email</ChakraButton>
-                          <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(userById[prof._id])}>Edit name</ChakraButton>
+                          <ChakraButton size="xs" variant="outline" onClick={() => userById[prof._id] && setAccountEdit(userById[prof._id])}>Edit</ChakraButton>
                           <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(userById[prof._id]) ? 'green' : 'red'} onClick={() => setStatusTarget(userById[prof._id])}>
                             {isAccountDisabled(userById[prof._id]) ? 'Enable' : 'Disable'}
                           </ChakraButton>
@@ -608,11 +604,7 @@ export default function AdminDashboard() {
                     <Td>{student.programPosition ? <Badge colorScheme="purple" variant="subtle" borderRadius="full" px={2}>{student.programPosition}</Badge> : '—'}</Td>
                     <Td>
                       <HStack spacing={2}>
-                        <ChakraButton size="xs" variant="outline" onClick={() => openIdEdit(student)}>
-                          {student.schoolId ? 'Edit ID' : 'Add ID'}
-                        </ChakraButton>
-                        <ChakraButton size="xs" variant="outline" onClick={() => openEmailEdit(student)}>Edit email</ChakraButton>
-                        <ChakraButton size="xs" variant="outline" onClick={() => openNameEdit(student)}>Edit name</ChakraButton>
+                        <ChakraButton size="xs" variant="outline" onClick={() => setAccountEdit(student)}>Edit</ChakraButton>
                         <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(student) ? 'green' : 'red'} onClick={() => setStatusTarget(student)}>
                           {isAccountDisabled(student) ? 'Enable' : 'Disable'}
                         </ChakraButton>
@@ -782,6 +774,7 @@ export default function AdminDashboard() {
           </ModalContent>
         </Modal>
 
+        <AdminEditAccountModal user={accountEdit} onClose={() => setAccountEdit(null)} onSaved={fetchAllData} onChangeEmail={u => { setAccountEdit(null); openEmailEdit(u); }} />
         <Modal isOpen={!!idEdit} onClose={() => setIdEdit(null)} isCentered>
           <ModalOverlay />
           <ModalContent>

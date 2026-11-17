@@ -52,6 +52,7 @@ const { STUDENT_ID_REGEX: SCHOOL_ID_REGEX, EMPLOYEE_ID_REGEX: FACULTY_ID_REGEX }
 const Broadcast = require('../models/Broadcast');
 const { isProfileComplete, parseList, audienceMismatch } = require('../utils/signInPolicy');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
+const { isValidCohort, cohortLabel } = require('../utils/studentCohort');
 const { isProgram, programOfPosition } = require('../utils/programs');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { canViewAppointment } = require('../utils/appointmentAccess');
@@ -789,6 +790,60 @@ router.patch('/users/:id/status', requireAuth(['ADMIN']), async (req, res) => {
     res.json({ message: `${user.name}'s account is enabled again.`, user: { _id: user._id, accountStatus: 'ACTIVE' } });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Could not update the account.' });
+  }
+});
+
+// ADMIN: edit an account's profile in one save. The same fields a person edits on their own profile (name, gender, School / Faculty ID),
+// plus program, year and section for a STUDENT. Not editable here: role, a faculty member's academic position, and the email (its own route).
+// Send only what changed. Nothing is saved unless every field that was sent is valid.
+router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role !== 'STUDENT' && user.role !== 'FACULTY') {
+      return res.status(400).json({ error: 'Only student and faculty accounts can be edited here.' });
+    }
+    const isStudent = user.role === 'STUDENT';
+    const { name, gender, idValue, program, year, section } = req.body || {};
+
+    if (name !== undefined) {
+      const clean = String(name).replace(/\s+/g, ' ').trim();
+      if (clean.length < 2 || clean.length > 100) return res.status(400).json({ error: 'Name must be 2 to 100 characters.' });
+      user.name = clean;
+    }
+
+    if (gender !== undefined) {
+      if (!['Male', 'Female', 'Prefer not to say'].includes(gender)) return res.status(400).json({ error: 'Choose Male, Female or Prefer not to say.' });
+      user.gender = gender;
+    }
+
+    if (idValue !== undefined) {
+      const id = String(idValue || '').trim().toUpperCase();
+      if (!(isStudent ? SCHOOL_ID_REGEX : FACULTY_ID_REGEX).test(id)) {
+        return res.status(400).json({
+          error: isStudent ? 'Invalid School ID format. Use 2025-S00001 or 2025-1234-A.' : 'Invalid Faculty ID format. Use 2025S-00001.'
+        });
+      }
+      const taken = await User.findOne({ [isStudent ? 'schoolId' : 'facultyId']: id, _id: { $ne: user._id } }).select('_id');
+      if (taken) return res.status(400).json({ error: 'Another account already uses this ID.' });
+      if (isStudent) user.schoolId = id; else user.facultyId = id;
+      user.noIdYet = false;
+    }
+
+    if (program !== undefined || year !== undefined || section !== undefined) {
+      if (!isStudent) return res.status(400).json({ error: 'Only students have a program, year and section.' });
+      if (!isValidCohort(program, year, section)) return res.status(400).json({ error: 'Choose a valid program, year and section.' });
+      user.programPosition = cohortLabel(program, year, section);
+    }
+
+    await user.save({ validateModifiedOnly: true });
+    res.json({
+      message: `${user.name}'s account was updated.`,
+      user: { _id: user._id, name: user.name, gender: user.gender, schoolId: user.schoolId, facultyId: user.facultyId, noIdYet: user.noIdYet, programPosition: user.programPosition }
+    });
+  } catch (error) {
+    if (error.code === 11000) return res.status(400).json({ error: 'Another account already uses this ID.' });
+    res.status(400).json({ error: error.message || 'Could not save the changes.' });
   }
 });
 
