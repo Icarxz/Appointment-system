@@ -199,7 +199,17 @@ export default function FacultyDashboard() {
   const [myConsultHours, setMyConsultHours] = useState<any[]>([]);
   const [myAppointments, setMyAppointments] = useState<any[]>([]);
   const hasSyncedRef = useRef(false);
-  const [notice, setNotice] = useState('');
+  // Post a Notice form + my upcoming notices
+  const [myNotices, setMyNotices] = useState<any[]>([]);
+  const [nType, setNType] = useState('');              // IN_MEETING | ON_LEAVE
+  const [nStartDate, setNStartDate] = useState('');    // "YYYY-MM-DD"
+  const [nEndDate, setNEndDate] = useState('');        // leave only
+  const [nStartTime, setNStartTime] = useState('');    // meeting only
+  const [nEndTime, setNEndTime] = useState('');        // meeting only
+  const [nReason, setNReason] = useState('');
+  const [nReasonOther, setNReasonOther] = useState('');
+  const [nMakeUp, setNMakeUp] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null); // the "Are you sure?" dialog for save buttons
   const [detailsId, setDetailsId] = useState<string | null>(null); // the request whose View Details panel is open
@@ -470,7 +480,6 @@ const saveConsultationHours = async () => {
           const me = data.find((f: any) => f._id === userId);
           if (me) { 
             setMyLocation(me.currentLocation || me.room || '');
-            setNotice(me.noticeMessage || '');
             hasSyncedRef.current = true;
           }
         }
@@ -488,6 +497,11 @@ const saveConsultationHours = async () => {
       authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/consultation-hours/${userId}`)
         .then(res => res.json())
         .then(data => setMyConsultHours(data));
+
+      authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/notices/mine`)
+        .then(res => res.json())
+        .then(data => setMyNotices(Array.isArray(data) ? data : []))
+        .catch(() => setMyNotices([]));
 
       authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/notes/${userId}`)
         .then(res => res.json())
@@ -559,14 +573,54 @@ const saveConsultationHours = async () => {
     }
   };
 
+  const NOTICE_REASONS: Record<string, string[]> = {
+    IN_MEETING: ['Faculty meeting', 'Department meeting', 'Seminar / training', 'Official school activity', 'Other'],
+    ON_LEAVE: ['Sick leave', 'Vacation leave', 'Official business', 'Emergency', 'Study leave', 'Other'],
+  };
+  const todayManila = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }); // "YYYY-MM-DD"
+  const fmtDay = (iso: string) => new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
+  const fmtClock = (iso: string) => new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
+  const noticeWhen = (n: any) => {
+    if (n.type === 'IN_MEETING') return `${fmtDay(n.startAt)}, ${fmtClock(n.startAt)} to ${fmtClock(n.endAt)}`;
+    const lastDay = new Date(new Date(n.endAt).getTime() - 1).toISOString();
+    return fmtDay(n.startAt) === fmtDay(lastDay) ? fmtDay(n.startAt) : `${fmtDay(n.startAt)} to ${fmtDay(lastDay)}`;
+  };
+  const noticeReasonText = (n: any) => (n.reason === 'Other' && n.reasonOther ? n.reasonOther : n.reason);
+  const noticeReady = !!nType && !!nStartDate && !!nReason && (nReason !== 'Other' || !!nReasonOther.trim())
+    && (nType === 'IN_MEETING' ? !!nStartTime && !!nEndTime : true);
+
   const handlePostNotice = async () => {
+    setIsPosting(true);
     try {
-      await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/notice/${userId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notice })
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/notice-entry`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: nType, startDate: nStartDate, endDate: nType === 'ON_LEAVE' ? (nEndDate || nStartDate) : undefined,
+          startTime: nStartTime, endTime: nEndTime, reason: nReason, reasonOther: nReasonOther, makeUpInfo: nMakeUp,
+        })
       });
-      toast({ title: 'Notice Broadcasted!', status: 'success' });
-    } catch (error) {}
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to post notice (${response.status})`);
+      }
+      toast({ title: 'Notice posted!', status: 'success', duration: 2000 });
+      setNType(''); setNStartDate(''); setNEndDate(''); setNStartTime(''); setNEndTime(''); setNReason(''); setNReasonOther(''); setNMakeUp('');
+      fetchData();
+    } catch (error: any) {
+      toast({ title: 'Could not post notice', description: error.message, status: 'error' });
+    }
+    setIsPosting(false);
+  };
+
+  const handleCancelNotice = async (id: string) => {
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status-entry/${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed to cancel notice');
+      toast({ title: 'Notice cancelled', status: 'success', duration: 2000 });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: 'Could not cancel notice', description: error.message, status: 'error' });
+    }
   };
 
 
@@ -1193,17 +1247,84 @@ const saveConsultationHours = async () => {
               
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
                 <Heading size="md" color={textColor} mb={6}>Post a Notice (Students)</Heading>
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  setConfirmCfg({ title: 'Post this notice to students?', body: 'Students will be able to see it. You can post a new one later to replace it.', confirmLabel: 'Post notice', run: handlePostNotice });
-                }}>
-                  <VStack spacing={4}>
-                    <FormControl><FormLabel color={textColor}>Reason for absence / Make-up info</FormLabel>
-                      <Textarea placeholder="e.g. Attending a seminar today. Make up class on Friday." value={notice} onChange={e => setNotice(e.target.value)} rows={4} color={textColor} />
+                <VStack spacing={4} alignItems="flex-start">
+                  <FormControl><FormLabel color={textColor}>Type</FormLabel>
+                    <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Notice type" placeholder="Meeting or Leave" value={nType}
+                      onChange={(v: string) => { setNType(v); setNReason(''); setNReasonOther(''); setNEndDate(''); setNStartTime(''); setNEndTime(''); }}
+                      options={[{ value: 'IN_MEETING', label: 'Meeting' }, { value: 'ON_LEAVE', label: 'Leave' }]} />
+                  </FormControl>
+                  {nType && (
+                    <HStack spacing={3} alignItems="flex-end" flexWrap="wrap" w="100%">
+                      <FormControl maxW="200px"><FormLabel color={textColor}>{nType === 'ON_LEAVE' ? 'From' : 'Date'}</FormLabel>
+                        <Input type="date" min={todayManila} value={nStartDate} color={textColor}
+                          onChange={(e) => { setNStartDate(e.target.value); if (nEndDate && e.target.value > nEndDate) setNEndDate(''); }} />
+                      </FormControl>
+                      {nType === 'ON_LEAVE' && (
+                        <FormControl maxW="200px"><FormLabel color={textColor}>To</FormLabel>
+                          <Input type="date" min={nStartDate || todayManila} value={nEndDate} color={textColor} onChange={(e) => setNEndDate(e.target.value)} />
+                        </FormControl>
+                      )}
+                      {nType === 'IN_MEETING' && (
+                        <>
+                          <FormControl maxW="150px"><FormLabel color={textColor}>Start</FormLabel>
+                            <Input type="time" value={nStartTime} color={textColor} onChange={(e) => setNStartTime(e.target.value)} />
+                          </FormControl>
+                          <FormControl maxW="150px"><FormLabel color={textColor}>End</FormLabel>
+                            <Input type="time" value={nEndTime} color={textColor} onChange={(e) => setNEndTime(e.target.value)} />
+                          </FormControl>
+                        </>
+                      )}
+                    </HStack>
+                  )}
+                  {nType && (
+                    <FormControl><FormLabel color={textColor}>Reason</FormLabel>
+                      <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Reason" placeholder="Choose a reason" value={nReason}
+                        onChange={(v: string) => { setNReason(v); if (v !== 'Other') setNReasonOther(''); }}
+                        options={(NOTICE_REASONS[nType] || []).map(value => ({ value, label: value }))} />
                     </FormControl>
-                    <ChakraButton type="submit" colorScheme="blue" variant="outline" w="100%">Post Notice</ChakraButton>
-                  </VStack>
-                </form>
+                  )}
+                  {nReason === 'Other' && (
+                    <FormControl><FormLabel color={textColor}>Please specify</FormLabel>
+                      <Input maxLength={120} value={nReasonOther} onChange={(e) => setNReasonOther(e.target.value)} color={textColor} />
+                    </FormControl>
+                  )}
+                  {nType && (
+                    <FormControl><FormLabel color={textColor}>Make-up info (optional)</FormLabel>
+                      <Textarea maxLength={300} placeholder="e.g. Make up class on Friday." value={nMakeUp} onChange={e => setNMakeUp(e.target.value)} rows={3} color={textColor} />
+                    </FormControl>
+                  )}
+                  <ChakraButton colorScheme="blue" variant="outline" w="100%" isDisabled={!noticeReady} isLoading={isPosting} onClick={() => setConfirmCfg({
+                    title: 'Post this notice?',
+                    body: `${nType === 'IN_MEETING' ? 'Meeting' : 'Leave'}: ${nStartDate}${nType === 'ON_LEAVE' && nEndDate && nEndDate !== nStartDate ? ` to ${nEndDate}` : ''}${nType === 'IN_MEETING' ? `, ${nStartTime} to ${nEndTime}` : ''}. Students cannot book new consultations in this time. Bookings you already have stay as they are.`,
+                    confirmLabel: 'Post notice', run: handlePostNotice,
+                  })}>Post Notice</ChakraButton>
+
+                  <Box w="100%" pt={2}>
+                    <Heading size="sm" color={textColor} mb={3}>Upcoming notices</Heading>
+                    {myNotices.length === 0 ? (
+                      <Text fontSize="sm" color={mutedText}>No meetings or leave posted.</Text>
+                    ) : (
+                      <VStack spacing={2} alignItems="stretch">
+                        {myNotices.map((n: any) => (
+                          <Flex key={n._id} justify="space-between" align="center" gap={3} p={3} borderWidth="1px" borderColor={borderColor} borderRadius="md">
+                            <Box>
+                              <HStack spacing={2} mb={1}>
+                                <Badge colorScheme={STATUS_COLORS[n.type] || 'gray'}>{STATUS_LABELS[n.type] || n.type}</Badge>
+                                <Text fontSize="sm" color={textColor}>{noticeReasonText(n)}</Text>
+                              </HStack>
+                              <Text fontSize="xs" color={mutedText}>{noticeWhen(n)}</Text>
+                            </Box>
+                            <ChakraButton size="xs" variant="outline" colorScheme="red" onClick={() => setConfirmCfg({
+                              title: 'Cancel this notice?',
+                              body: 'Students will be able to book that time again.',
+                              confirmLabel: 'Cancel notice', run: () => handleCancelNotice(n._id),
+                            })}>Cancel</ChakraButton>
+                          </Flex>
+                        ))}
+                      </VStack>
+                    )}
+                  </Box>
+                </VStack>
               </Box>
             </Box>
           </div>

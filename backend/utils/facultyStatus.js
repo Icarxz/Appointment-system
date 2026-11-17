@@ -117,7 +117,14 @@ function blocksBooking(entries, bookStart, bookEnd) {
   return entries.find((e) => BOOKING_BLOCKING.includes(e.type) && asDate(e.startAt) < bookEnd && bookStart < asDate(e.endAt)) || null;
 }
 
+/** Removes bookable slots ({ date, start, end }) that fall inside a meeting or leave window. */
+function dropBlockedSlots(slots, entries) {
+  const blocking = entries.filter((e) => BOOKING_BLOCKING.includes(e.type));
+  if (!blocking.length) return slots;
+  return slots.filter((s) => !blocksBooking(blocking, manilaDate(s.date, s.start), manilaDate(s.date, s.end)));
+}
+
 module.exports = {
-  MANUAL_STATUSES, SCHEDULED_STATUSES, BOOKING_BLOCKING, STATUS_LABELS, NOTICE_REASONS,
+  dropBlockedSlots, MANUAL_STATUSES, SCHEDULED_STATUSES, BOOKING_BLOCKING, STATUS_LABELS, NOTICE_REASONS,
   resolveFacultyStatus, validateEntry, blocksBooking,
 };

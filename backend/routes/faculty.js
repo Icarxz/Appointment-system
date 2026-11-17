@@ -60,7 +60,8 @@ const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
 const FacultyStatusEntry = require('../models/FacultyStatusEntry');
-const { resolveFacultyStatus, validateEntry } = require('../utils/facultyStatus');
+const { resolveFacultyStatus, validateEntry, dropBlockedSlots, BOOKING_BLOCKING } = require('../utils/facultyStatus');
+const { windowFromNotice } = require('../utils/noticeWindow');
 const { groupStatusInputs, toLegacyStatus } = require('../utils/facultyStatusInputs');
 const { endFromChoice } = require('../utils/statusDuration');
 
@@ -490,14 +491,16 @@ router.get('/announcements/:section', requireAuth(ALL_ROLES), async (req, res) =
 async function loadSlots(facultyId, flaggedDate = '') {
   const today = manilaNow().dateStr;
   const horizon = addDays(today, 28);
-  const [official, added, classes, appointments] = await Promise.all([
+  const [official, added, classes, appointments, blockers] = await Promise.all([
     ConsultationHours.find({ facultyId }).lean(),
     AddedConsultationHours.find({ facultyId, dayOfWeek: { $in: CONSULTATION_DAYS } }).lean(),
     Schedule.find({ facultyId }).lean(),
     Appointment.find({ facultyId, status: { $in: ['PENDING', 'APPROVED'] }, date: { $gte: today, $lt: horizon } }).lean(),
+    // A meeting or leave the faculty posted closes those hours to new bookings (existing bookings are left alone).
+    FacultyStatusEntry.find({ facultyId, type: { $in: BOOKING_BLOCKING }, endAt: { $gt: new Date() } }).lean(),
   ]);
   return {
-    slots: buildSlots({ official, added, classes, appointments, today, nowMs: Date.now(), weeks: 4, leadHours: BOOKING_LEAD_HOURS, flaggedDate }),
+    slots: dropBlockedSlots(buildSlots({ official, added, classes, appointments, today, nowMs: Date.now(), weeks: 4, leadHours: BOOKING_LEAD_HOURS, flaggedDate }), blockers),
     busy: buildBusy({ classes, appointments, today, weeks: 4, flaggedDate }),
   };
 }
@@ -939,6 +942,10 @@ router.post('/status-entry', requireAuth(['FACULTY']), async (req, res) => {
     // A new status replaces the one running right now; only a later, separate notice can clash.
     const running = existing.filter(e => e.startAt <= now);
     const others = existing.filter(e => e.startAt > now);
+    const activeNotice = running.find(e => e.isNotice);
+    if (activeNotice) {
+      return res.status(400).json({ error: 'You have a posted notice running now. Cancel it under Upcoming notices first.' });
+    }
     const check = validateEntry({ type, startAt: now, endAt: end.endAt }, others, now, { requireReason: false });
     if (!check.ok) return res.status(400).json({ error: check.error });
 
@@ -969,6 +976,45 @@ router.delete('/status-entry/:id', requireAuth(['FACULTY']), async (req, res) =>
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Error clearing status' });
+  }
+});
+
+// ---- Post a Notice: a meeting or leave planned ahead (shown to students, closes booking in its window) ----
+// Meeting body: { type:'IN_MEETING', startDate, startTime, endTime, reason, reasonOther?, makeUpInfo? }
+// Leave body:   { type:'ON_LEAVE', startDate, endDate, reason, reasonOther?, makeUpInfo? }
+router.post('/notice-entry', requireAuth(['FACULTY']), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const now = new Date();
+    const w = windowFromNotice(b, now);
+    if (!w.ok) return res.status(400).json({ error: w.error });
+
+    const existing = await FacultyStatusEntry.find({ facultyId: req.user.userId, endAt: { $gt: now } }).lean();
+    const entry = {
+      type: b.type, reason: String(b.reason || ''), reasonOther: String(b.reasonOther || '').trim().slice(0, 120),
+      startAt: w.startAt, endAt: w.endAt,
+    };
+    const check = validateEntry(entry, existing, now);
+    if (!check.ok) return res.status(400).json({ error: check.error });
+
+    const saved = await FacultyStatusEntry.create({
+      ...entry, facultyId: req.user.userId, isNotice: true,
+      makeUpInfo: String(b.makeUpInfo || '').trim().slice(0, 300),
+    });
+    res.status(201).json(saved);
+  } catch (err) {
+    res.status(500).json({ error: 'Error posting notice' });
+  }
+});
+
+// My notices that have not ended yet, soonest first.
+router.get('/notices/mine', requireAuth(['FACULTY']), async (req, res) => {
+  try {
+    const list = await FacultyStatusEntry.find({ facultyId: req.user.userId, isNotice: true, endAt: { $gt: new Date() } })
+      .sort({ startAt: 1 }).lean();
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: 'Error loading notices' });
   }
 });
 

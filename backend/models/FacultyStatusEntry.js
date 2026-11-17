@@ -12,6 +12,7 @@ const FacultyStatusEntrySchema = new mongoose.Schema({
   location:    { type: String, default: '' },
   startAt:     { type: Date, required: true },
   endAt:       { type: Date, required: true, index: true },
+  isNotice:    { type: Boolean, default: false }, // posted from Post a Notice (meeting / leave) rather than set quickly in My Status
   isDemo:      { type: Boolean },
 }, { timestamps: true });
 
