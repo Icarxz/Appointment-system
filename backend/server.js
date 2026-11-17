@@ -1,7 +1,6 @@
 // Load backend/.env BEFORE anything else: the job files below load the mailer, which needs EMAIL_USER and
 // EMAIL_APP_PASSWORD. (Loading .env later left the mailer without credentials, so no email was ever sent.)
 require('dotenv').config();
-const startStatusUpdater = require('./jobs/statusUpdater');
 const startConsultationReminder = require('./jobs/consultationReminder');
 const startMissedAppointments = require('./jobs/missedAppointments');
 const startPendingExpiry = require('./jobs/pendingExpiry');
@@ -53,7 +52,6 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('Connected to MongoDB Atlas Cloud');
 
-    startStatusUpdater();
     startConsultationReminder();
     startMissedAppointments();
     startPendingExpiry();

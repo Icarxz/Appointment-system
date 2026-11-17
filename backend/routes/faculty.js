@@ -167,7 +167,7 @@ router.get('/status', requireAuth(ALL_ROLES), async (req, res) => {
     const facultyFilter = { role: 'FACULTY' };
     if (req.user.role !== 'ADMIN') facultyFilter.accountStatus = { $nin: ['RESTRICTED', 'ARCHIVED'] };
     const facultyList = await User.find(facultyFilter)
-      .select('name gender programPosition program currentStatus currentLocation room statusUpdatedAt statusNote noticeMessage flaggedDate flaggedReason')
+      .select('name gender programPosition program currentStatus currentLocation room statusNote flaggedDate flaggedReason')
       .sort({ name: 1 });
 
     // Status is worked out here on every request from the schedule, running consultations and
@@ -1017,53 +1017,6 @@ router.get('/notices/mine', requireAuth(['FACULTY']), async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Error loading notices' });
   }
-});
-
-// IN_CONSULTATION: auto-set by cron during consultation hour blocks;
-// faculty may also select it manually.
-const VALID_STATUSES = ['AVAILABLE', 'IN_CLASS', 'IN_CONSULTATION', 'IN_MEETING', 'ON_BREAK', 'OUT_OF_OFFICE', 'ON_LEAVE', 'ABSENT', 'NOT_UPDATED'];
-
-router.put('/update-status/:id', requireAuth(['FACULTY']), ownerOnly(r => r.params.id), async (req, res) => {
-  try {
-    const { currentStatus, currentLocation } = req.body;
-    if (!VALID_STATUSES.includes(currentStatus)) {
-      return res.status(400).json({ error: 'Invalid status value' });
-    }
-
-    // isManualOverride: true signals the cron to respect this status
-    // until the next scheduled block starts, then auto resumes.
-    const updated = await User.findByIdAndUpdate(
-      req.params.id,
-      {
-        currentStatus,
-        currentLocation,
-        statusUpdatedAt:  new Date(),
-        isManualOverride: true,
-      },
-      { new: true }
-    );
-
-    if (!updated) {
-      return res.status(404).json({ error: 'Faculty not found' });
-    }
-
-    await StatusHistory.create({
-      facultyId: req.params.id,
-      status: currentStatus,
-      note: currentLocation || '',
-    });
-
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: 'Error updating status' });
-  }
-});
-
-router.put('/notice/:id', requireAuth(['FACULTY']), ownerOnly(r => r.params.id), async (req, res) => {
-  try {
-    const updated = await User.findByIdAndUpdate(req.params.id, { noticeMessage: req.body.notice }, { new: true });
-    res.json(updated);
-  } catch (err) { res.status(500).json({ error: 'Error saving notice' }); }
 });
 
 // 15. GET ROUTE: Fetch appointments for one specific student
