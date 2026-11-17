@@ -30,3 +30,19 @@ test('manual entry id is returned by the resolver', () => {
   const r = resolveFacultyStatus({ entries: [{ _id: 'x1', type: 'ON_BREAK', startAt: new Date('2026-11-17T08:50:00+08:00'), endAt: new Date('2026-11-17T09:10:00+08:00') }] }, now);
   assert.equal(r.entryId, 'x1');
 });
+
+test('public notices: only posted notices that have not ended, soonest first, Other shows own words', () => {
+  const { publicNotices } = require('./facultyStatusInputs');
+  const now = new Date('2026-11-17T09:00:00+08:00');
+  const d = (s) => new Date(`${s}+08:00`);
+  const out = publicNotices([
+    { _id: 1, isNotice: true, type: 'ON_LEAVE', reason: 'Sick leave', startAt: d('2026-11-25T00:00:00'), endAt: d('2026-11-26T00:00:00') },
+    { _id: 2, isNotice: true, type: 'IN_MEETING', reason: 'Other', reasonOther: 'Accreditation visit', startAt: d('2026-11-20T13:00:00'), endAt: d('2026-11-20T15:00:00'), makeUpInfo: 'Friday' },
+    { _id: 3, isNotice: true, type: 'IN_MEETING', reason: 'Faculty meeting', startAt: d('2026-11-10T13:00:00'), endAt: d('2026-11-10T15:00:00') },
+    { _id: 4, isNotice: false, type: 'ON_BREAK', startAt: d('2026-11-17T08:50:00'), endAt: d('2026-11-17T09:10:00') },
+  ], now);
+  assert.deepEqual(out.map((n) => n._id), ['2', '1']);
+  assert.equal(out[0].reason, 'Accreditation visit');
+  assert.equal(out[0].makeUpInfo, 'Friday');
+  assert.equal(Object.keys(out[0]).includes('facultyId'), false);
+});

@@ -37,4 +37,18 @@ function groupStatusInputs(facultyIds, rows, nowMin) {
 // Old screens still read currentStatus; keep them working until they use the new fields.
 const toLegacyStatus = (s) => (s === 'VACANT' ? 'AVAILABLE' : s === 'CONSULTATION_HOURS' ? 'IN_CONSULTATION' : s);
 
-module.exports = { groupStatusInputs, bookingRunning, toLegacyStatus };
+// What students may see: posted meetings and leave that have not ended, soonest first.
+// The "Other" reason shows the faculty's own words. Nothing else about the entry is exposed.
+function publicNotices(entries, now = new Date(), limit = 3) {
+  return (entries || [])
+    .filter((e) => e.isNotice && new Date(e.endAt) > now)
+    .sort((a, b) => new Date(a.startAt) - new Date(b.startAt))
+    .slice(0, limit)
+    .map((e) => ({
+      _id: String(e._id), type: e.type,
+      reason: e.reason === 'Other' && e.reasonOther ? e.reasonOther : e.reason,
+      startAt: e.startAt, endAt: e.endAt, makeUpInfo: e.makeUpInfo || '',
+    }));
+}
+
+module.exports = { groupStatusInputs, bookingRunning, toLegacyStatus, publicNotices };

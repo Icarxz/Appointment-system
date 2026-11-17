@@ -62,7 +62,7 @@ const { manilaNow, manilaDate } = require('../utils/manilaTime');
 const FacultyStatusEntry = require('../models/FacultyStatusEntry');
 const { resolveFacultyStatus, validateEntry, dropBlockedSlots, BOOKING_BLOCKING } = require('../utils/facultyStatus');
 const { windowFromNotice } = require('../utils/noticeWindow');
-const { groupStatusInputs, toLegacyStatus } = require('../utils/facultyStatusInputs');
+const { groupStatusInputs, toLegacyStatus, publicNotices } = require('../utils/facultyStatusInputs');
 const { endFromChoice } = require('../utils/statusDuration');
 
 // Booking / cancellation time limits (appointment date + time are Manila time)
@@ -194,6 +194,7 @@ router.get('/status', requireAuth(ALL_ROLES), async (req, res) => {
       obj.statusUntil = r.until;
       obj.statusReason = r.reason || '';
       obj.statusEntryId = r.entryId || null;
+      obj.notices = publicNotices(inputs.get(String(f._id)).entries, now); // upcoming meetings / leave, for students and staff
       obj.currentStatus = toLegacyStatus(r.status); // old screens keep working until they use the fields above
       obj.currentLocation = r.location || obj.room || '';
       // Students never receive classroom locations (also stripped from the schedule endpoint)

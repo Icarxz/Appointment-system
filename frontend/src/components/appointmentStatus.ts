@@ -23,9 +23,11 @@ export const statusColor = (status: string): string => {
 };
 
 const FACULTY_STATUS_LABELS: Record<string, string> = {
-  AVAILABLE: 'Available',
+  VACANT: 'Vacant',
+  AVAILABLE: 'Available', // older records only
   IN_CLASS: 'In Class',
-  IN_CONSULTATION: 'Consultation Hours',
+  IN_CONSULTATION: 'In Consultation',
+  CONSULTATION_HOURS: 'Consultation Hours',
   IN_MEETING: 'In a Meeting',
   ON_BREAK: 'On Break',
   OUT_OF_OFFICE: 'Out of Office',
@@ -34,15 +36,17 @@ const FACULTY_STATUS_LABELS: Record<string, string> = {
   NOT_UPDATED: 'Not Published',
 };
 
-// Shared by Admin, Dean and Student views so live-status wording and colors never drift.
+// Shared by Admin, Dean and Student views so status wording and colors never drift.
 export const facultyStatusLabel = (status: string): string =>
   FACULTY_STATUS_LABELS[status] ?? status;
 
 export const facultyStatusColor = (status: string): string => {
   switch (status) {
+    case 'VACANT':
     case 'AVAILABLE': return 'green';
     case 'IN_CLASS': return 'blue';
-    case 'IN_CONSULTATION': return 'teal';
+    case 'IN_CONSULTATION': return 'cyan';
+    case 'CONSULTATION_HOURS': return 'teal';
     case 'IN_MEETING': return 'yellow';
     case 'ON_BREAK': return 'orange';
     case 'OUT_OF_OFFICE': return 'gray';
@@ -50,6 +54,26 @@ export const facultyStatusColor = (status: string): string => {
     case 'ABSENT': return 'red';
     default: return 'gray';
   }
+};
+
+// The server works out each faculty member's status (schedule + anything they set). Use `status`;
+// `currentStatus` is only the older field, kept so a cached response still shows something.
+export const facultyStatusOf = (f: any): string => f?.status || f?.currentStatus || '';
+
+const manilaTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
+const manilaDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'Asia/Manila' });
+
+// "until 3:00 PM", or '' when the status has no end (Vacant).
+export const facultyStatusUntil = (f: any): string => (f?.statusUntil ? `until ${manilaTime(f.statusUntil)}` : '');
+
+// When a posted meeting or leave happens: "Nov 20, 1:00 PM to 3:00 PM" or "Nov 25 to Nov 27".
+export const noticeWhenText = (n: any): string => {
+  if (n.type === 'IN_MEETING') return `${manilaDay(n.startAt)}, ${manilaTime(n.startAt)} to ${manilaTime(n.endAt)}`;
+  const first = manilaDay(n.startAt);
+  const last = manilaDay(new Date(new Date(n.endAt).getTime() - 1).toISOString());
+  return first === last ? first : `${first} to ${last}`;
 };
 
 // Time limits (must match the backend, utils/appointmentTime.js): students may request, and
