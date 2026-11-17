@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { STUDENT_ID_REGEX, EMPLOYEE_ID_REGEX } = require('../utils/idValidator');
+const { PROGRAMS } = require('../utils/programs');
 
 const UserSchema = new mongoose.Schema({
   role: { 
@@ -72,6 +73,8 @@ facultyId: {
   onboardingComplete: { type: Boolean, default: true }, // existing accounts are already complete
   googleSub: { type: String, unique: true, sparse: true }, // Google's stable account id
   room: { type: String }, 
+  // The program a faculty member belongs to (optional). A Program Head's program is implied by the position (see utils/programs.js).
+  program: { type: String, enum: PROGRAMS },
   currentStatus: {
       type: String,
       enum: ['AVAILABLE', 'IN_CLASS', 'IN_CONSULTATION', 'IN_MEETING', 'ON_BREAK', 'OUT_OF_OFFICE', 'ON_LEAVE', 'ABSENT', 'NOT_UPDATED'],

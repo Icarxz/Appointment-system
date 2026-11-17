@@ -52,6 +52,7 @@ const { STUDENT_ID_REGEX: SCHOOL_ID_REGEX, EMPLOYEE_ID_REGEX: FACULTY_ID_REGEX }
 const Broadcast = require('../models/Broadcast');
 const { isProfileComplete, parseList, audienceMismatch } = require('../utils/signInPolicy');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
+const { isProgram } = require('../utils/programs');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
@@ -156,7 +157,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 router.get('/status', requireAuth(ALL_ROLES), async (req, res) => {
   try {
     const facultyList = await User.find({ role: 'FACULTY' })
-      .select('name gender programPosition currentStatus currentLocation room statusUpdatedAt statusNote noticeMessage flaggedDate flaggedReason')
+      .select('name gender programPosition program currentStatus currentLocation room statusUpdatedAt statusNote noticeMessage flaggedDate flaggedReason')
       .sort({ name: 1 });
 
     // Compare Manila calendar days. new Date().setHours(0,0,0,0) uses the server's
@@ -390,7 +391,7 @@ router.delete('/schedule/:id', requireAuth(STAFF), async (req, res) => {
 
 // 5. POST ROUTE: Admin adds a new faculty member (QR Generation)
 router.post('/add', requireAuth(STAFF), async (req, res) => {
-  const { name, programPosition, room, role, schoolId, facultyId } = req.body;
+  const { name, programPosition, room, role, schoolId, facultyId, program } = req.body;
   const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   try {
     if (!EMAIL_REGEX.test(email)) {
@@ -399,6 +400,9 @@ router.post('/add', requireAuth(STAFF), async (req, res) => {
     if (!isApprovedFacultyPosition(programPosition)) {
       return res.status(400).json({ error: 'Please select one of the approved positions: Faculty, Librarian, Program Head (BS INFO), Program Head (BS COMSCI), Program Head (BLIS), or Dean.' });
     }
+    // The program is optional and only kept for faculty accounts (a Program Head's is implied by the position anyway)
+    const hasProgram = program !== undefined && program !== null && program !== '';
+    if (hasProgram && !isProgram(program)) return res.status(400).json({ error: 'Program must be BS INFO, BS COMSCI or BLIS.' });
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ error: 'Email already exists' });
@@ -409,6 +413,7 @@ router.post('/add', requireAuth(STAFF), async (req, res) => {
       email,
       programPosition,
       room,
+      ...(hasProgram && (role || 'FACULTY') === 'FACULTY' ? { program: program.trim() } : {}),
       role: role || 'FACULTY',
       schoolId,
       facultyId,
@@ -419,6 +424,25 @@ router.post('/add', requireAuth(STAFF), async (req, res) => {
     res.json({ message: 'Account provisioned successfully', facultyName: name, userId: newUser._id, role: newUser.role });
   } catch (error) {
     res.status(500).json({ error: 'Error provisioning account' });
+  }
+});
+
+// PATCH /api/faculty/program/:id  { program }  - set or clear (program: '') the program of a faculty account
+router.patch('/program/:id', requireAuth(STAFF), async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Faculty account not found.' });
+    const { program } = req.body || {};
+    const clear = program === '' || program === null;
+    if (!clear && !isProgram(program)) return res.status(400).json({ error: 'Program must be BS INFO, BS COMSCI or BLIS.' });
+    const faculty = await User.findOneAndUpdate(
+      { _id: req.params.id, role: 'FACULTY' },
+      clear ? { $unset: { program: 1 } } : { $set: { program: program.trim() } },
+      { new: true, runValidators: true }
+    ).select('name program');
+    if (!faculty) return res.status(404).json({ error: 'Faculty account not found.' });
+    res.json({ message: 'Program updated.', program: faculty.program || '' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error while updating the program.' });
   }
 });
 
