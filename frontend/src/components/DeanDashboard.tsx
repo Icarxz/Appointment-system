@@ -14,6 +14,7 @@ import ProfilePage from './ProfilePage';
 import DashboardShell from './DashboardShell';
 import PageTitle from './PageTitle';
 import ScrollTable from './ScrollTable';
+import { PROGRAM_OPTIONS, facultyProgram } from '../utils/programs';
 import SearchableSelect from './SearchableSelect';
 import WelcomeHeader from './WelcomeHeader';
 import ExportBar from './ExportBar';
@@ -56,6 +57,7 @@ export default function DeanDashboard() {
   const [recordsCase, setRecordsCase] = useState('');
   const [recordsSort, setRecordsSort] = useState<'desc' | 'asc'>('desc'); // by date signed off
   const [rosterPosition, setRosterPosition] = useState('');
+  const [rosterProgram, setRosterProgram] = useState('');
   const [rosterStatus, setRosterStatus] = useState('');
   const [rosterGender, setRosterGender] = useState('');
   const [rosterSearch, setRosterSearch] = useState('');
@@ -103,11 +105,12 @@ export default function DeanDashboard() {
     const q = rosterSearch.trim().toLowerCase();
     return facultyRoster.filter(f =>
       (!rosterPosition || f.programPosition === rosterPosition) &&
+      (!rosterProgram || facultyProgram(f) === rosterProgram) &&
       (!rosterStatus || f.currentStatus === rosterStatus) &&
       matchesGender(f.gender, rosterGender) &&
       (!q || f.name.toLowerCase().includes(q) || (f.programPosition || '').toLowerCase().includes(q) || (f.currentLocation || f.room || '').toLowerCase().includes(q))
     );
-  }, [facultyRoster, rosterPosition, rosterStatus, rosterGender, rosterSearch]);
+  }, [facultyRoster, rosterPosition, rosterProgram, rosterStatus, rosterGender, rosterSearch]);
 
   // Exports what the roster currently shows (so a filtered view exports as filtered).
   const handleExportCSV = () => {
@@ -251,14 +254,17 @@ export default function DeanDashboard() {
 
             <FilterPanel
               shown={filteredRoster.length} total={facultyRoster.length} noun="faculty"
-              canClear={!!(rosterGender || rosterPosition || rosterStatus || rosterSearch)}
-              onClear={() => { setRosterGender(''); setRosterPosition(''); setRosterStatus(''); setRosterSearch(''); }}
+              canClear={!!(rosterGender || rosterPosition || rosterProgram || rosterStatus || rosterSearch)}
+              onClear={() => { setRosterGender(''); setRosterPosition(''); setRosterProgram(''); setRosterStatus(''); setRosterSearch(''); }}
             >
               <FilterField label="Gender">
                 <SearchableSelect placeholder="All genders" value={rosterGender} onChange={setRosterGender} maxW="100%" options={GENDER_OPTIONS} />
               </FilterField>
               <FilterField label="Position">
                 <SearchableSelect placeholder="All positions" value={rosterPosition} onChange={setRosterPosition} maxW="100%" options={[...new Set(facultyRoster.map(f => f.programPosition).filter(Boolean))].sort().map(position => ({ value: position, label: position }))} />
+              </FilterField>
+              <FilterField label="Program">
+                <SearchableSelect placeholder="All programs" value={rosterProgram} onChange={setRosterProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
               </FilterField>
               <FilterField label="Live status">
                 <SearchableSelect placeholder="All live statuses" value={rosterStatus} onChange={setRosterStatus} maxW="100%" options={[...new Set(facultyRoster.map(f => f.currentStatus).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />

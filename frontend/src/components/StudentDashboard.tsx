@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { cohortConfig } from '../data/cohortConfig';
+import { PROGRAM_OPTIONS, facultyProgram } from '../utils/programs';
 import { formatDate, formatDateTime } from './dateUtils';
 import BroadcastBanner from './BroadcastBanner';
 import OnboardingModal from './OnboardingModal';
@@ -69,6 +70,7 @@ export default function StudentDashboard() {
   const [statusSearch, setStatusSearch] = useState('');
   const [fGender, setFGender] = useState('');
   const [fPosition, setFPosition] = useState('');
+  const [fProgram, setFProgram] = useState('');
   const [fStatus, setFStatus] = useState('');
   const { isOpen: isMasterOpen, onOpen: onMasterOpen, onClose: onMasterClose } = useDisclosure();
   const [masterFaculty, setMasterFaculty] = useState<any>(null);
@@ -235,6 +237,7 @@ export default function StudentDashboard() {
     f.name.toLowerCase().includes(statusSearch.toLowerCase()) &&
     matchesGender(f.gender, fGender) &&
     (!fPosition || normalizeFacultyPosition(f.programPosition || '') === fPosition) &&
+    (!fProgram || facultyProgram(f) === fProgram) &&
     (!fStatus || matchesStatus(f.currentStatus))
   );
 
@@ -392,8 +395,8 @@ export default function StudentDashboard() {
             <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
               <FilterPanel
                 shown={statusFiltered.length} total={faculty.length} noun="faculty"
-                canClear={!!(statusSearch || fGender || fPosition || fStatus)}
-                onClear={() => { setStatusSearch(''); setFGender(''); setFPosition(''); setFStatus(''); }}
+                canClear={!!(statusSearch || fGender || fPosition || fProgram || fStatus)}
+                onClear={() => { setStatusSearch(''); setFGender(''); setFPosition(''); setFProgram(''); setFStatus(''); }}
               >
                 <FilterField label="Search">
                   <Input placeholder="Faculty name..." value={statusSearch} onChange={(e) => setStatusSearch(e.target.value)} color={textColor} borderColor={borderColor} bg={cardBg} />
@@ -404,6 +407,9 @@ export default function StudentDashboard() {
                 <FilterField label="Position">
                   <SearchableSelect placeholder="All positions" value={fPosition} onChange={setFPosition} maxW="100%"
                     options={positionOptions.map(p => ({ value: p, label: p }))} />
+                </FilterField>
+                <FilterField label="Program">
+                  <SearchableSelect placeholder="All programs" value={fProgram} onChange={setFProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
                 </FilterField>
                 <FilterField label="Status">
                   <SearchableSelect placeholder="All statuses" value={fStatus} onChange={setFStatus} maxW="100%"

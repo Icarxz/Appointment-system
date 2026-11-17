@@ -9,12 +9,11 @@ import {
 export const GENDER_OPTIONS = [
   { value: 'Male', label: 'Male' },
   { value: 'Female', label: 'Female' },
-  { value: 'Prefer not to say', label: 'Prefer not to say' },
-  { value: 'Not provided', label: 'Not provided' }, // accounts created before gender was collected
+  { value: 'Not provided', label: 'Not provided' }, // accounts created before gender was collected, or saved as the retired 'Prefer not to say'
 ];
 
 export const matchesGender = (gender: string | undefined, filter: string) =>
-  !filter || (filter === 'Not provided' ? !gender : gender === filter);
+  !filter || (filter === 'Not provided' ? gender !== 'Male' && gender !== 'Female' : gender === filter);
 
 // "BS INFO 1A" -> { program: 'BS INFO', year: '1', section: 'A' }
 export const parseCohort = (pp?: string) => {

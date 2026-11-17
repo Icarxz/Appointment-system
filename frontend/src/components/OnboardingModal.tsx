@@ -6,6 +6,7 @@ import {
 import { cohortConfig } from '../data/cohortConfig';
 import SearchableSelect from './SearchableSelect';
 import { idHint, isValidId } from '../utils/idValidator';
+import { PROGRAM_OPTIONS, programOfPosition } from '../utils/programs';
 
 interface Props {
   isOpen: boolean;
@@ -29,6 +30,8 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
   const [section, setSection] = useState('');
   const [position, setPosition] = useState('');
   const facultyPositions = ['Faculty', 'Librarian', 'Program Head (BS INFO)', 'Program Head (BS COMSCI)', 'Program Head (BLIS)', 'Dean'];
+  const [facultyProg, setFacultyProg] = useState(''); // faculty only; a Program Head's comes from the position
+  const facultyProgramValue = programOfPosition(position) || facultyProg;
   const [idValue, setIdValue] = useState('');
   const [privacy, setPrivacy] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +42,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
     if (!gender) return setError('Please select your gender.');
     if (isStudent && !(program && year && section)) return setError('Please select your program, year and section.');
     if (!isStudent && !position) return setError('Please select your position.');
+    if (role === 'FACULTY' && !facultyProgramValue) return setError('Please select your program.');
     if (needsId && !isValidId(idValue, idKind)) return setError(`Enter a valid ${isStudent ? 'Student' : 'Employee'} ID (${idHint(idKind)}).`);
     if (!privacy) return setError('Please accept the Privacy Policy.');
 
@@ -50,6 +54,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
         body: JSON.stringify({
           gender,
           programPosition: isStudent ? `${program} ${year}${section}` : position,
+          program: role === 'FACULTY' ? facultyProgramValue : undefined,
           idValue: needsId ? idValue : undefined,
           privacyAccepted: true,
         }),
@@ -76,7 +81,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
             <FormControl isRequired>
               <FormLabel>Gender</FormLabel>
               <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Gender" placeholder="Select" value={gender} onChange={setGender}
-                options={['Male', 'Female', 'Prefer not to say'].map(g => ({ value: g, label: g }))} />
+                options={['Male', 'Female'].map(g => ({ value: g, label: g }))} />
             </FormControl>
             {isStudent ? (
               <HStack align="start">
@@ -99,11 +104,21 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
                 </FormControl>
               </HStack>
             ) : (
-              <FormControl isRequired>
-                <FormLabel>Academic Position</FormLabel>
-                <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Academic Position" placeholder="Select position" value={position} onChange={setPosition}
-                  options={facultyPositions.map(item => ({ value: item, label: item }))} />
-              </FormControl>
+              <>
+                <FormControl isRequired>
+                  <FormLabel>Academic Position</FormLabel>
+                  <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Academic Position" placeholder="Select position" value={position} onChange={setPosition}
+                    options={facultyPositions.map(item => ({ value: item, label: item }))} />
+                </FormControl>
+                {role === 'FACULTY' && (
+                  <FormControl isRequired>
+                    <FormLabel>Program</FormLabel>
+                    <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Program" placeholder="Select program" value={facultyProgramValue} onChange={setFacultyProg}
+                      isDisabled={!!programOfPosition(position)} options={PROGRAM_OPTIONS} />
+                    {programOfPosition(position) && <FormHelperText>Taken from your position.</FormHelperText>}
+                  </FormControl>
+                )}
+              </>
             )}
             {needsId && (
               <FormControl isRequired isInvalid={idValue !== '' && !isValidId(idValue, idKind)}>
