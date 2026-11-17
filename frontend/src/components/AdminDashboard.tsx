@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { usePersistedState } from './usePersistedState';
 import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import { PROGRAM_OPTIONS, facultyProgram, programOfPosition } from '../utils/programs';
 import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
@@ -57,10 +58,10 @@ export default function AdminDashboard() {
   const toast = useToast();
   const userName = localStorage.getItem('userName');
 
-  const [activePage, setActivePage] = useState('appointments');
+  const [activePage, setActivePage] = usePersistedState('admin-page', 'appointments', ['appointments', 'home', 'provision', 'users', 'analytics', 'records', 'profile']); // stays on the same page after a reload
   const [facultyList, setFacultyList] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [userTab, setUserTab] = useState<'faculty' | 'students'>('faculty');
+  const [userTab, setUserTab] = usePersistedState<'faculty' | 'students'>('admin-users-tab', 'faculty', ['faculty', 'students']);
   const [facultySearch, setFacultySearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
   const [filterProgram, setFilterProgram] = useState('');
@@ -160,7 +161,7 @@ export default function AdminDashboard() {
   const [recordsSearch, setRecordsSearch] = useState('');
   const [recordsFaculty, setRecordsFaculty] = useState('');
   const [recordsCase, setRecordsCase] = useState('');
-  const [recordsSort, setRecordsSort] = useState<'desc' | 'asc'>('desc'); // by date signed off
+  const [recordsSort, setRecordsSort] = useState<'desc' | 'asc'>('desc'); // by date completed
   const [detailsId, setDetailsId] = useState<string | null>(null); // the appointment whose View Details panel is open
   const [facultyPositionFilter, setFacultyPositionFilter] = useState('');
   const [facultyProgramFilter, setFacultyProgramFilter] = useState('');
@@ -656,7 +657,7 @@ export default function AdminDashboard() {
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <Flex mb={4} align="center" justify="space-between" gap={3} flexWrap="wrap" className="no-print">
               <Text color={mutedText} fontSize="sm">
-                Completed consultations signed off by faculty. {recordsFaculty ? 'The printout is that faculty member\'s Students\' Consultation Form.' : 'Choose a faculty to print their Students\' Consultation Form.'}
+                Consultations completed and saved by faculty. {recordsFaculty ? 'The printout is that faculty member\'s Students\' Consultation Form.' : 'Choose a faculty to print their Students\' Consultation Form.'}
               </Text>
               <ChakraButton colorScheme="blue" size="sm" onClick={printConsultationForm} isDisabled={!printReady}
                 title={recordsFaculty ? undefined : 'Choose a faculty first'}>Print / Save as PDF</ChakraButton>
