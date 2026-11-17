@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Box, Button, FormControl, FormLabel, HStack, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay,
+  Box, Button, FormControl, FormHelperText, FormLabel, HStack, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay,
   Select, SimpleGrid, Text, useColorModeValue, useToast,
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
@@ -8,9 +8,12 @@ import { IdTray, isIdComplete, idRawOf } from './IdTray';
 import SearchableSelect from './SearchableSelect';
 import { parseCohort } from './PeopleUi';
 import { cohortConfig } from '../data/cohortConfig';
+import { PROGRAM_OPTIONS, facultyProgram, programOfPosition } from '../utils/programs';
+import { EMPLOYMENT_OPTIONS } from '../utils/employment';
 
 // Admin > Faculty / Students > Edit. The same form a person sees on their own profile (name, gender, School / Faculty ID), plus program,
-// year and section for a student. Email (it has its own safe change), role and a faculty member's academic position are shown but not editable.
+// year and section for a student, or the program and employment type (Full-time / Part-time) for faculty. Email (it has its own safe change), role and a
+// faculty member's academic position are shown but not editable; a Program Head's program comes from the position.
 // Only the fields that changed are sent, and the server checks every one of them.
 
 interface Props { user: any | null; onClose: () => void; onSaved: () => void; onChangeEmail: (u: any) => void }
@@ -38,6 +41,8 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
   const [program, setProgram] = useState('');
   const [year, setYear] = useState('');
   const [section, setSection] = useState('');
+  const [fProgram, setFProgram] = useState('');       // faculty: BS INFO / BS COMSCI / BLIS
+  const [employment, setEmployment] = useState('');   // faculty: Full-time / Part-time
   const [saving, setSaving] = useState(false);
 
   // Start from the account's current details each time a different account is opened
@@ -46,6 +51,7 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
     const c = parseCohort(user.programPosition);
     setName(user.name || ''); setGender(user.gender || ''); setIdDraft((user.role === 'STUDENT' ? user.schoolId : user.facultyId) || '');
     setProgram(c.program); setYear(c.year); setSection(c.section); setSaving(false);
+    setFProgram(facultyProgram(user)); setEmployment(user.employmentType || '');
   }, [user?._id]);
 
   if (!user) return null;
@@ -58,7 +64,11 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
   const idOk = !idChanged || isIdComplete(idKind, idDraft);
   const cohortChanged = isStudent && (program !== cohort.program || year !== cohort.year || section !== cohort.section);
   const cohortOk = !cohortChanged || (!!program && !!year && !!section);
-  const canSave = (nameChanged || genderChanged || idChanged || cohortChanged) && nameOk && idOk && cohortOk;
+  const isHead = !isStudent && !!programOfPosition(user.programPosition); // a Program Head's program comes from the position
+  const fProgramChanged = !isStudent && !isHead && fProgram !== '' && fProgram !== facultyProgram(user);
+  const employmentChanged = !isStudent && employment !== '' && employment !== (user.employmentType || '');
+  const legacyGender = !!user.gender && user.gender !== 'Male' && user.gender !== 'Female'; // the retired 'Prefer not to say'
+  const canSave = (nameChanged || genderChanged || idChanged || cohortChanged || fProgramChanged || employmentChanged) && nameOk && idOk && cohortOk;
 
   const save = async () => {
     const body: Record<string, string> = {};
@@ -66,6 +76,8 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
     if (genderChanged) body.gender = gender;
     if (idChanged) body.idValue = idDraft;
     if (cohortChanged) { body.program = program; body.year = year; body.section = section; }
+    if (fProgramChanged) body.program = fProgram;
+    if (employmentChanged) body.employmentType = employment;
     setSaving(true);
     try {
       const res = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/users/${user._id}/profile`, {
@@ -99,8 +111,8 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
               <Select placeholder="Select gender" value={gender} onChange={e => setGender(e.target.value)}>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
-                <option value="Prefer not to say">Prefer not to say</option>
               </Select>
+              {legacyGender && <FormHelperText>Currently saved as "{user.gender}". Choose Male or Female to change it.</FormHelperText>}
             </FormControl>
           </SimpleGrid>
 
@@ -130,6 +142,22 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
                   options={cohortConfig[program]?.[year] ? cohortConfig[program][year].map(s => ({ value: s, label: s })) : []} />
               </FormControl>
             </HStack>
+          )}
+
+          {!isStudent && (
+            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5}>
+              <FormControl>
+                <FormLabel fontSize="sm">Program</FormLabel>
+                <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Program" placeholder="Not set" isDisabled={isHead}
+                  value={fProgram} onChange={setFProgram} options={PROGRAM_OPTIONS} />
+                {isHead && <FormHelperText>Taken from the position.</FormHelperText>}
+              </FormControl>
+              <FormControl>
+                <FormLabel fontSize="sm">Employment type</FormLabel>
+                <SearchableSelect portal searchable={false} clearable={false} ariaLabel="Employment type" placeholder="Not set"
+                  value={employment} onChange={setEmployment} options={EMPLOYMENT_OPTIONS} />
+              </FormControl>
+            </SimpleGrid>
           )}
 
           <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5} opacity={0.8}>

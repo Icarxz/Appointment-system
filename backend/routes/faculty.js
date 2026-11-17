@@ -53,7 +53,8 @@ const Broadcast = require('../models/Broadcast');
 const { isProfileComplete, parseList, audienceMismatch } = require('../utils/signInPolicy');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
 const { isValidCohort, cohortLabel } = require('../utils/studentCohort');
-const { isProgram, programOfPosition } = require('../utils/programs');
+const { isProgram, programOfPosition, effectiveProgram } = require('../utils/programs');
+const { isEmploymentType } = require('../utils/employment');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
@@ -804,7 +805,7 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
       return res.status(400).json({ error: 'Only student and faculty accounts can be edited here.' });
     }
     const isStudent = user.role === 'STUDENT';
-    const { name, gender, idValue, program, year, section } = req.body || {};
+    const { name, gender, idValue, program, year, section, employmentType } = req.body || {};
 
     if (name !== undefined) {
       const clean = String(name).replace(/\s+/g, ' ').trim();
@@ -813,7 +814,7 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     if (gender !== undefined) {
-      if (!['Male', 'Female', 'Prefer not to say'].includes(gender)) return res.status(400).json({ error: 'Choose Male, Female or Prefer not to say.' });
+      if (!['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female.' }); // 'Prefer not to say' was retired; accounts that have it keep it
       user.gender = gender;
     }
 
@@ -830,8 +831,22 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
       user.noIdYet = false;
     }
 
-    if (program !== undefined || year !== undefined || section !== undefined) {
-      if (!isStudent) return res.status(400).json({ error: 'Only students have a program, year and section.' });
+    if (!isStudent && (year !== undefined || section !== undefined)) return res.status(400).json({ error: 'Only students have a year and section.' });
+    if (!isStudent && (program !== undefined || employmentType !== undefined)) {
+      // A faculty member's program (BS INFO / BS COMSCI / BLIS) and employment type. A Program Head's program comes from the position.
+      if (program !== undefined) {
+        if (programOfPosition(user.programPosition)) return res.status(400).json({ error: "A Program Head's program comes from the position and cannot be changed here." });
+        if (!isProgram(program)) return res.status(400).json({ error: 'Program must be BS INFO, BS COMSCI or BLIS.' });
+        user.program = program.trim();
+      }
+      if (employmentType !== undefined) {
+        if (!isEmploymentType(employmentType)) return res.status(400).json({ error: 'Choose Full-time or Part-time.' });
+        user.employmentType = employmentType;
+      }
+    }
+    if (isStudent && employmentType !== undefined) return res.status(400).json({ error: 'Only faculty have an employment type.' });
+
+    if (isStudent && (program !== undefined || year !== undefined || section !== undefined)) {
       if (!isValidCohort(program, year, section)) return res.status(400).json({ error: 'Choose a valid program, year and section.' });
       user.programPosition = cohortLabel(program, year, section);
     }
@@ -839,7 +854,8 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     await user.save({ validateModifiedOnly: true });
     res.json({
       message: `${user.name}'s account was updated.`,
-      user: { _id: user._id, name: user.name, gender: user.gender, schoolId: user.schoolId, facultyId: user.facultyId, noIdYet: user.noIdYet, programPosition: user.programPosition }
+      user: { _id: user._id, name: user.name, gender: user.gender, schoolId: user.schoolId, facultyId: user.facultyId, noIdYet: user.noIdYet, programPosition: user.programPosition,
+        program: isStudent ? '' : effectiveProgram(user), employmentType: user.employmentType || '' }
     });
   } catch (error) {
     if (error.code === 11000) return res.status(400).json({ error: 'Another account already uses this ID.' });
