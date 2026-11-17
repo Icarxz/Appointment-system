@@ -93,3 +93,42 @@ test('expired requests are counted separately from declined, for the faculty tab
   assert.strictEqual(c.expired, 1);
   assert.strictEqual(buildStudentOutcomeRows(list)[0].declined, 1);
 });
+
+// ---- Analytics improvements: totals reconcile, pending shown beside the counts, request-date trend ----
+test('outcomeCounts: pending and unknown statuses are visible, and every counted request lands in exactly one bucket', () => {
+  const { outcomeCounts } = require('./reportMetrics');
+  const rows = [
+    { status: 'PENDING' }, { status: 'PENDING' },
+    { status: 'COMPLETED' }, { status: 'APPROVED' }, { status: 'REJECTED' }, { status: 'REJECTED', autoRejected: true },
+    { status: 'MISSED (STUDENT)' }, { status: 'MISSED (FACULTY)' },
+    { status: 'CANCELLED BY STUDENT' }, { status: 'CANCELLED BY FACULTY' }, { status: 'CANCELLED (FACULTY ON LEAVE)' },
+    { status: 'LEGACY-ODD' },
+  ];
+  const c = outcomeCounts(rows);
+  assert.equal(c.submitted, 12);
+  assert.equal(c.pending, 2);
+  assert.equal(c.requests, 10);          // unchanged meaning: everything that left PENDING
+  assert.equal(c.other, 1);
+  const buckets = c.completed + c.upcoming + c.declined + c.expired + c.missed + c.cancelledStudent + c.cancelledFaculty + c.other;
+  assert.equal(buckets, c.requests);     // nothing is silently left out of the chart
+  assert.equal(c.pending + c.requests, c.submitted);
+});
+
+test('weeklyCreatedSeries groups by the day the request was submitted in Manila time, not the consultation date', () => {
+  const { weeklyCreatedSeries, weeklySeries, manilaDateOf } = require('./reportMetrics');
+  // 2026-11-09 is a Monday. 23:30 UTC on Sunday Nov 8 is already Monday Nov 9 in Manila.
+  assert.equal(manilaDateOf('2026-11-08T23:30:00Z'), '2026-11-09');
+  assert.equal(manilaDateOf(undefined), '');
+  assert.equal(manilaDateOf('not a date'), '');
+  const rows = [
+    { status: 'PENDING', createdAt: '2026-11-08T23:30:00Z', date: '2026-11-18' },   // submitted week of Nov 9, consult week of Nov 16
+    { status: 'COMPLETED', createdAt: '2026-11-10T02:00:00Z', date: '2026-11-11' },
+    { status: 'APPROVED' },                                                         // no createdAt: ignored, not NaN
+  ];
+  const created = weeklyCreatedSeries(rows, '2026-11-12');
+  const thisWeek = created[created.length - 1];
+  assert.equal(thisWeek.value, 2);
+  assert.ok(created.every((w) => Number.isFinite(w.value)));
+  const scheduled = weeklySeries(rows, '2026-11-12');
+  assert.equal(scheduled[scheduled.length - 1].value, 1);   // only the completed one is dated this week and counted
+});

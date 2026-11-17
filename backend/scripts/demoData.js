@@ -41,7 +41,7 @@ async function main() {
   const data = buildDemoData({ today: manilaNow().dateStr });
   const base = { isDemo: true, accountStatus: 'ACTIVE', isVerified: true, onboardingComplete: true, privacyAcceptedAt: new Date() };
 
-  const facultyDocs = await User.insertMany(data.faculty.map(f => ({ ...base, role: 'FACULTY', name: f.name, email: f.email, facultyId: f.facultyId, programPosition: 'Instructor', gender: 'Prefer not to say' })));
+  const facultyDocs = await User.insertMany(data.faculty.map(f => ({ ...base, role: 'FACULTY', name: f.name, email: f.email, facultyId: f.facultyId, programPosition: 'Instructor' })));
   const studentDocs = await User.insertMany(data.students.map(s => ({ ...base, role: 'STUDENT', name: s.name, email: s.email, schoolId: s.schoolId, programPosition: s.programPosition, gender: s.gender })));
   const fId = Object.fromEntries(data.faculty.map((f, i) => [f.key, facultyDocs[i]._id]));
   const sDoc = Object.fromEntries(data.students.map((s, i) => [s.key, studentDocs[i]]));

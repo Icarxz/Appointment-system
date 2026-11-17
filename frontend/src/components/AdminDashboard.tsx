@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { cohortConfig } from '../data/cohortConfig';
+import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
+import { PROGRAM_OPTIONS, facultyProgram, programOfPosition } from '../utils/programs';
+import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 import { formatDate, formatDateTime } from './dateUtils';
 import { 
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
-  useToast, Select, HStack, Flex, SimpleGrid, Avatar, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
+  useToast, Select, HStack, Flex, SimpleGrid, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter,
   InputGroup, InputRightAddon
 } from '@chakra-ui/react';
@@ -30,71 +32,6 @@ import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
 // import { QRCodeSVG } from 'qrcode.react';
-
-// ---------- Shared helpers for the People / Records pages ----------
-const GENDER_OPTIONS = [
-  { value: 'Male', label: 'Male' },
-  { value: 'Female', label: 'Female' },
-  { value: 'Prefer not to say', label: 'Prefer not to say' },
-  { value: 'Not provided', label: 'Not provided' }, // older accounts created before gender was collected
-];
-const matchesGender = (g: string | undefined, filter: string) =>
-  !filter || (filter === 'Not provided' ? !g : g === filter);
-
-// "BS INFO 1A" -> { program: 'BS INFO', year: '1', section: 'A' }
-const parseCohort = (pp?: string) => {
-  const m = (pp || '').trim().match(/^(.*\S)\s+(\d+)([A-Za-z]+)$/);
-  return m ? { program: m[1], year: m[2], section: m[3].toUpperCase() } : { program: '', year: '', section: '' };
-};
-
-function GenderBadge({ gender }: { gender?: string }) {
-  if (!gender) return <Text as="span" opacity={0.5}>—</Text>;
-  const color = gender === 'Male' ? 'blue' : gender === 'Female' ? 'pink' : 'gray';
-  return <Badge colorScheme={color} borderRadius="full" px={2}>{gender}</Badge>;
-}
-
-function PersonCell({ name, sub, onClick, title, disabled }: { name: string; sub?: string; onClick?: () => void; title?: string; disabled?: boolean }) {
-  return (
-    <HStack spacing={3} align="center" opacity={disabled ? 0.6 : 1}>
-      <Avatar size="sm" name={name} />
-      <Box minW={0}>
-        <Text
-          fontWeight="bold" lineHeight="short"
-          cursor={onClick ? 'pointer' : undefined}
-          color={onClick ? 'blue.500' : undefined}
-          _hover={onClick ? { textDecoration: 'underline' } : undefined}
-          onClick={onClick} title={title}
-        >{name}{disabled && <Badge ml={2} colorScheme="red" borderRadius="full" px={2} verticalAlign="middle">Disabled</Badge>}</Text>
-        {sub && <Text fontSize="xs" opacity={0.65} lineHeight="short">{sub}</Text>}
-      </Box>
-    </HStack>
-  );
-}
-
-function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Box minW={0}>
-      <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" opacity={0.65} mb={1}>{label}</Text>
-      {children}
-    </Box>
-  );
-}
-
-function FilterPanel({ children, shown, total, noun, canClear, onClear }: {
-  children: React.ReactNode; shown: number; total: number; noun: string; canClear: boolean; onClear: () => void;
-}) {
-  const bg = useColorModeValue('gray.50', 'whiteAlpha.50');
-  const line = useColorModeValue('gray.200', 'whiteAlpha.200');
-  return (
-    <Box bg={bg} borderWidth="1px" borderColor={line} borderRadius="lg" p={4} mb={4} className="no-print">
-      <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3} alignItems="end">{children}</SimpleGrid>
-      <Flex mt={3} align="center" justify="space-between" gap={3} flexWrap="wrap">
-        <Text fontSize="xs" opacity={0.7}>Showing {shown} of {total} {noun}</Text>
-        {canClear && <ChakraButton size="xs" variant="ghost" colorScheme="blue" onClick={onClear}>Clear filters</ChakraButton>}
-      </Flex>
-    </Box>
-  );
-}
 
 const SCHOOL_DOMAIN = 'antiquespride.edu.ph';
 
@@ -139,14 +76,6 @@ export default function AdminDashboard() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [programPosition, setProgramPosition] = useState('');
-  const provisionPositionOptions = [
-    'Faculty',
-    'Librarian',
-    'Program Head (BS INFO)',
-    'Program Head (BS COMSCI)',
-    'Program Head (BLIS)',
-    'Dean',
-  ];
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
@@ -234,6 +163,8 @@ export default function AdminDashboard() {
   const [recordsSort, setRecordsSort] = useState<'desc' | 'asc'>('desc'); // by date signed off
   const [detailsId, setDetailsId] = useState<string | null>(null); // the appointment whose View Details panel is open
   const [facultyPositionFilter, setFacultyPositionFilter] = useState('');
+  const [facultyProgramFilter, setFacultyProgramFilter] = useState('');
+  const [newProgram, setNewProgram] = useState(''); // Provision Account: the program of a new faculty member (optional)
   const [facultyStatusFilter, setFacultyStatusFilter] = useState('');
   const filteredRecords = React.useMemo(() => {
     const q = recordsSearch.trim().toLowerCase();
@@ -265,9 +196,22 @@ export default function AdminDashboard() {
 
   const filteredFacultyList = React.useMemo(() => facultyList.filter(f =>
     (!facultyPositionFilter || f.programPosition === facultyPositionFilter) &&
+    (!facultyProgramFilter || facultyProgram(f) === facultyProgramFilter) &&
     (!facultyStatusFilter || f.currentStatus === facultyStatusFilter) &&
     matchesGender(f.gender, facultyGender)
-  ), [facultyList, facultyPositionFilter, facultyStatusFilter, facultyGender]);
+  ), [facultyList, facultyPositionFilter, facultyProgramFilter, facultyStatusFilter, facultyGender]);
+
+  // Admin: set (or clear, with '') the program of a faculty member. A Program Head's program also comes from the position, so clearing it falls back to that.
+  const saveProgram = async (id: string, program: string) => {
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/program/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ program })
+      });
+      const data = await response.json();
+      if (response.ok) setFacultyList(list => list.map(f => (f._id === id ? { ...f, program: data.program || undefined } : f)));
+      else toast({ title: data.error || 'Could not save the program.', status: 'error' });
+    } catch { toast({ title: 'Could not reach the server.', status: 'error' }); }
+  };
 
   const handleAddFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,14 +220,14 @@ export default function AdminDashboard() {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/add`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, programPosition, role })
+        body: JSON.stringify({ name, email, programPosition, role, program: role === 'FACULTY' ? newProgram : '' })
       });
       const data = await response.json();
       if (response.ok) {
         toast({ title: data.message, status: 'success' });
         setNewFacultyName(data.facultyName);
         setNewAccount({ id: data.userId, role: data.role });
-        setName(''); setEmail(''); setProgramPosition('');
+        setName(''); setEmail(''); setProgramPosition(''); setNewProgram('');
         fetchAllData();
       } else { toast({ title: data.error, status: 'error' }); }
     } catch (error) { }
@@ -499,9 +443,16 @@ export default function AdminDashboard() {
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Program & Position</FormLabel>
                         <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
-                          options={provisionPositionOptions.map(position => ({ value: position, label: position }))} />
+                          options={FACULTY_POSITIONS.map(position => ({ value: position, label: position }))} />
                       </FormControl>
                     </SimpleGrid>
+
+                    {role === 'FACULTY' && (
+                      <FormControl>
+                        <FormLabel color={textColor}>Faculty Program (optional)</FormLabel>
+                        <SearchableSelect placeholder="Not set" value={newProgram} onChange={setNewProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
+                      </FormControl>
+                    )}
 
                     <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={loading}>Generate Account</ChakraButton>
                   </VStack>
@@ -537,8 +488,8 @@ export default function AdminDashboard() {
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <FilterPanel
               shown={visibleFaculty.length} total={facultyList.length} noun="faculty"
-              canClear={!!(facultyGender || facultyPositionFilter || facultyStatusFilter || facultySearch)}
-              onClear={() => { setFacultyGender(''); setFacultyPositionFilter(''); setFacultyStatusFilter(''); setFacultySearch(''); }}
+              canClear={!!(facultyGender || facultyPositionFilter || facultyProgramFilter || facultyStatusFilter || facultySearch)}
+              onClear={() => { setFacultyGender(''); setFacultyPositionFilter(''); setFacultyProgramFilter(''); setFacultyStatusFilter(''); setFacultySearch(''); }}
             >
               <FilterField label="Gender">
                 <SearchableSelect placeholder="All genders" value={facultyGender} onChange={setFacultyGender} maxW="100%" options={GENDER_OPTIONS} />
@@ -546,6 +497,9 @@ export default function AdminDashboard() {
               <FilterField label="Position">
                 <SearchableSelect placeholder="All positions" value={facultyPositionFilter} onChange={setFacultyPositionFilter} maxW="100%"
                   options={[...new Set(facultyList.map(f => f.programPosition).filter(Boolean))].sort().map(position => ({ value: position, label: position }))} />
+              </FilterField>
+              <FilterField label="Program">
+                <SearchableSelect placeholder="All programs" value={facultyProgramFilter} onChange={setFacultyProgramFilter} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
               </FilterField>
               <FilterField label="Live status">
                 <SearchableSelect placeholder="All live statuses" value={facultyStatusFilter} onChange={setFacultyStatusFilter} maxW="100%"
@@ -562,15 +516,19 @@ export default function AdminDashboard() {
             </FilterPanel>
 
             <ScrollTable><Table variant="simple" size="md">
-              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Program</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
                 {visibleFaculty.length === 0 && (
-                  <Tr><Td colSpan={6}><Text color={mutedText} py={6} textAlign="center">No faculty match these filters.</Text></Td></Tr>
+                  <Tr><Td colSpan={7}><Text color={mutedText} py={6} textAlign="center">No faculty match these filters.</Text></Td></Tr>
                 )}
                 {visibleFaculty.map(prof => (
                   <Tr key={prof._id} _hover={{ bg: hoverBg }}>
                     <Td color={textColor}><PersonCell name={prof.name} sub={userById[prof._id]?.email} onClick={() => setScheduleOf(prof)} title="View schedule" disabled={isAccountDisabled(userById[prof._id])} /></Td>
                     <Td color={textColor}>{prof.programPosition}</Td>
+                    <Td minW="150px">
+                      <SearchableSelect size="sm" maxW="150px" portal searchable={false} ariaLabel={`Program of ${prof.name}`} placeholder="Not set"
+                        value={facultyProgram(prof)} onChange={(v) => saveProgram(prof._id, v)} options={PROGRAM_OPTIONS} isDisabled={!!programOfPosition(prof.programPosition)} />
+                    </Td>
                     <Td><GenderBadge gender={prof.gender} /></Td>
                     <Td color={textColor}>{userById[prof._id]?.facultyId || (userById[prof._id]?.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
                     <Td>

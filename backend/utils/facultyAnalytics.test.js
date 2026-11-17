@@ -5,10 +5,11 @@ const { buildFacultyAnalytics } = require('./facultyAnalytics');
 const apt = (o) => ({ status: 'COMPLETED', date: '2026-10-20', time: '09:00', duration: 60, studentSection: 'BS INFO 4D', reason: 'Capstone / Thesis Consultation', studentId: 's1', ...o });
 const today = '2026-10-26';
 
-test('pending requests are not counted anywhere', () => {
+test('pending requests are not counted as requests, but are reported beside them', () => {
   const r = buildFacultyAnalytics({ todayIso: today, appointments: [apt({}), apt({ status: 'PENDING' })] });
   assert.strictEqual(r.outcomes.requests, 1);
-  assert.strictEqual(r.outcomes.pending, undefined);
+  assert.strictEqual(r.outcomes.pending, 1);   // shown separately (analytics plan 5.1); never inside requests or any rate
+  assert.strictEqual(r.outcomes.completionRate, 100);
   assert.strictEqual(r.hours, undefined); // consultation-hour use is no longer reported
 });
 test('counts outcomes, completion, missed and approval rates', () => {
