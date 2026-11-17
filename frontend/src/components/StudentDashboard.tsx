@@ -447,9 +447,8 @@ export default function StudentDashboard() {
                                   {n.type === 'IN_MEETING' ? 'Meeting' : 'Leave'}: {noticeWhenText(n)}{n.reason ? ` (${n.reason})` : ''}{n.makeUpInfo ? `. Make-up: ${n.makeUpInfo}` : ''}
                                 </Badge>
                               ))}
-                              {prof.noticeMessage && <Badge colorScheme="blue" textTransform="none" whiteSpace="normal" p={2} borderRadius="md">📢 {prof.noticeMessage}</Badge>}
                               {prof.flaggedDate && <Badge colorScheme="orange" textTransform="none" p={2} borderRadius="md">🗓️ Out on {prof.flaggedDate} {prof.flaggedReason ? `(${prof.flaggedReason})` : ''}</Badge>}
-                              {!prof.noticeMessage && !prof.flaggedDate && !(prof.notices || []).length && <Text color={mutedText} fontSize="sm">No current notices</Text>}
+                              {!prof.flaggedDate && !(prof.notices || []).length && <Text color={mutedText} fontSize="sm">No current notices</Text>}
                             </VStack>
                           </Td>
                         </Tr>

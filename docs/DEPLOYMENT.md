@@ -11,7 +11,7 @@ Decided with the owner: the PDF importer's OCR runs **only on the owner's laptop
 ## 0. Know these limits before you start (checked against Render's docs on Nov 13, 2026: https://render.com/docs/free)
 | Limit on Render free | What it means for this app |
 |---|---|
-| Sleeps after 15 minutes without traffic; waking takes about a minute | First request after idle is slow. The app's `node-cron` jobs (status updater, pending-request expiry, reminders, schedule-import activation) **do not run while it sleeps**. |
+| Sleeps after 15 minutes without traffic; waking takes about a minute | First request after idle is slow. The app's `node-cron` jobs (pending-request expiry, reminders, schedule-import activation) **do not run while it sleeps**. Faculty status needs no job: it is worked out from the schedule and the manual entries on every request. |
 | 750 free instance hours per month | One always-on service (about 744 h/month) fits, but only one. |
 | **Outbound ports 25, 465 and 587 are blocked** | **Gmail email (SMTP) will not send from Render free** (HTTPS APIs such as Brevo do). In-app notifications still work. |
 | Ephemeral filesystem | Nothing is stored on disk by the app (the importer deletes temp files), so this is fine. |
