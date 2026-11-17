@@ -19,7 +19,7 @@ import SearchableSelect from './SearchableSelect';
 import WelcomeHeader from './WelcomeHeader';
 import ExportBar from './ExportBar';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
-import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
+import { facultyStatusColor, facultyStatusLabel, facultyStatusOf, facultyStatusUntil } from './appointmentStatus';
 import { GENDER_OPTIONS, matchesGender, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 
 const PAGE_TITLES = {
@@ -106,7 +106,7 @@ export default function DeanDashboard() {
     return facultyRoster.filter(f =>
       (!rosterPosition || f.programPosition === rosterPosition) &&
       (!rosterProgram || facultyProgram(f) === rosterProgram) &&
-      (!rosterStatus || f.currentStatus === rosterStatus) &&
+      (!rosterStatus || facultyStatusOf(f) === rosterStatus) &&
       matchesGender(f.gender, rosterGender) &&
       (!q || f.name.toLowerCase().includes(q) || (f.programPosition || '').toLowerCase().includes(q) || (f.currentLocation || f.room || '').toLowerCase().includes(q))
     );
@@ -115,10 +115,10 @@ export default function DeanDashboard() {
   // Exports what the roster currently shows (so a filtered view exports as filtered).
   const handleExportCSV = () => {
     const cell = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    let csvContent = "data:text/csv;charset=utf-8,Name,Program/Position,Gender,Live Status,Location\n";
+    let csvContent = "data:text/csv;charset=utf-8,Name,Program/Position,Gender,Status,Location\n";
     filteredRoster.forEach(f => {
       const location = f.currentLocation || f.room || 'N/A';
-      csvContent += [f.name, f.programPosition, f.gender || 'Not provided', f.currentStatus, location].map(cell).join(',') + '\n';
+      csvContent += [f.name, f.programPosition, f.gender || 'Not provided', facultyStatusOf(f), location].map(cell).join(',') + '\n';
     });
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -248,7 +248,7 @@ export default function DeanDashboard() {
         {activePage === 'roster' && (
           <Box bg={C.surface} p={6} borderRadius="lg" borderWidth="1px" borderColor={C.border} shadow="sm">
             <Flex mb={4} align="center" justify="space-between" gap={3} flexWrap="wrap">
-              <Text color={C.textMid} fontSize="sm">Live status of every faculty member.</Text>
+              <Text color={C.textMid} fontSize="sm">Current status of every faculty member.</Text>
               <ChakraButton colorScheme="blue" size="sm" onClick={handleExportCSV}>Export CSV Report</ChakraButton>
             </Flex>
 
@@ -266,8 +266,8 @@ export default function DeanDashboard() {
               <FilterField label="Program">
                 <SearchableSelect placeholder="All programs" value={rosterProgram} onChange={setRosterProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
               </FilterField>
-              <FilterField label="Live status">
-                <SearchableSelect placeholder="All live statuses" value={rosterStatus} onChange={setRosterStatus} maxW="100%" options={[...new Set(facultyRoster.map(f => f.currentStatus).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
+              <FilterField label="Status">
+                <SearchableSelect placeholder="All statuses" value={rosterStatus} onChange={setRosterStatus} maxW="100%" options={[...new Set(facultyRoster.map(f => facultyStatusOf(f)).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
               </FilterField>
               <FilterField label="Search">
                 <Input
@@ -282,7 +282,7 @@ export default function DeanDashboard() {
 
             <ScrollTable>
               <Table variant="simple" size="md">
-                <Thead><Tr><Th color={C.textMid}>Name</Th><Th color={C.textMid}>Position</Th><Th color={C.textMid}>Gender</Th><Th color={C.textMid}>Live Status</Th><Th color={C.textMid}>Location</Th></Tr></Thead>
+                <Thead><Tr><Th color={C.textMid}>Name</Th><Th color={C.textMid}>Position</Th><Th color={C.textMid}>Gender</Th><Th color={C.textMid}>Status</Th><Th color={C.textMid}>Location</Th></Tr></Thead>
                 <Tbody>
                   {filteredRoster.length === 0 && (
                     <Tr><Td colSpan={5}><Text color={C.textMid} py={6} textAlign="center">No faculty match these filters.</Text></Td></Tr>
@@ -293,9 +293,10 @@ export default function DeanDashboard() {
                       <Td color={C.text}>{prof.programPosition}</Td>
                       <Td><GenderBadge gender={prof.gender} /></Td>
                       <Td>
-                        <Badge colorScheme={facultyStatusColor(prof.currentStatus)} borderRadius="full" px={2}>
-                          {facultyStatusLabel(prof.currentStatus)}
+                        <Badge colorScheme={facultyStatusColor(facultyStatusOf(prof))} borderRadius="full" px={2}>
+                          {facultyStatusLabel(facultyStatusOf(prof))}
                         </Badge>
+                        {facultyStatusUntil(prof) && <Text fontSize="xs" color={C.textMid}>{facultyStatusUntil(prof)}</Text>}
                       </Td>
                       <Td color={C.text}>{prof.currentLocation || prof.room || 'N/A'}</Td>
                     </Tr>

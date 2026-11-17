@@ -30,7 +30,7 @@ import FacultyScheduleModal from './FacultyScheduleModal';
 import SchedulePdfImporter from './SchedulePdfImporter';
 import BulkSchedulePdfImporter from './BulkSchedulePdfImporter';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
-import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
+import { facultyStatusColor, facultyStatusLabel, facultyStatusOf, facultyStatusUntil } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
 // import { QRCodeSVG } from 'qrcode.react';
 
@@ -199,7 +199,7 @@ export default function AdminDashboard() {
   const filteredFacultyList = React.useMemo(() => facultyList.filter(f =>
     (!facultyPositionFilter || f.programPosition === facultyPositionFilter) &&
     (!facultyProgramFilter || facultyProgram(f) === facultyProgramFilter) &&
-    (!facultyStatusFilter || f.currentStatus === facultyStatusFilter) &&
+    (!facultyStatusFilter || facultyStatusOf(f) === facultyStatusFilter) &&
     matchesGender(f.gender, facultyGender)
   ), [facultyList, facultyPositionFilter, facultyProgramFilter, facultyStatusFilter, facultyGender]);
 
@@ -236,7 +236,7 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  // Quick lookup so the faculty table (which comes from the live-status list) can show IDs.
+  // Quick lookup so the faculty table (which comes from the status list) can show IDs.
   const userById: Record<string, any> = {};
   allUsers.forEach(u => { userById[u._id] = u; });
 
@@ -501,9 +501,9 @@ export default function AdminDashboard() {
               <FilterField label="Program">
                 <SearchableSelect placeholder="All programs" value={facultyProgramFilter} onChange={setFacultyProgramFilter} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
               </FilterField>
-              <FilterField label="Live status">
-                <SearchableSelect placeholder="All live statuses" value={facultyStatusFilter} onChange={setFacultyStatusFilter} maxW="100%"
-                  options={[...new Set(facultyList.map(f => f.currentStatus).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
+              <FilterField label="Status">
+                <SearchableSelect placeholder="All statuses" value={facultyStatusFilter} onChange={setFacultyStatusFilter} maxW="100%"
+                  options={[...new Set(facultyList.map(f => facultyStatusOf(f)).filter(Boolean))].sort().map(status => ({ value: status, label: facultyStatusLabel(status) }))} />
               </FilterField>
               <FilterField label="Search">
                 <Input
@@ -516,7 +516,7 @@ export default function AdminDashboard() {
             </FilterPanel>
 
             <ScrollTable><Table variant="simple" size="md">
-              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Program</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Position</Th><Th color={mutedText}>Program</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Faculty ID</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
               <Tbody>
                 {visibleFaculty.length === 0 && (
                   <Tr><Td colSpan={7}><Text color={mutedText} py={6} textAlign="center">No faculty match these filters.</Text></Td></Tr>
@@ -532,9 +532,10 @@ export default function AdminDashboard() {
                     <Td><GenderBadge gender={prof.gender} /></Td>
                     <Td color={textColor}>{userById[prof._id]?.facultyId || (userById[prof._id]?.noIdYet ? <Badge colorScheme="yellow">No ID yet</Badge> : '—')}</Td>
                     <Td>
-                      <Badge colorScheme={facultyStatusColor(prof.currentStatus)} borderRadius="full" px={2}>
-                        {facultyStatusLabel(prof.currentStatus)}
+                      <Badge colorScheme={facultyStatusColor(facultyStatusOf(prof))} borderRadius="full" px={2}>
+                        {facultyStatusLabel(facultyStatusOf(prof))}
                       </Badge>
+                      {facultyStatusUntil(prof) && <Text fontSize="xs" color={mutedText}>{facultyStatusUntil(prof)}</Text>}
                     </Td>
                     <Td>
                       {userById[prof._id]?.role === 'FACULTY' && (

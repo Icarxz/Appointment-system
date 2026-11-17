@@ -12,7 +12,7 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
-import { BOOKING_LEAD_HOURS, facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
+import { BOOKING_LEAD_HOURS, facultyStatusColor, facultyStatusLabel, facultyStatusOf, facultyStatusUntil, noticeWhenText } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
 import CancelReasonPicker, { STUDENT_CANCEL_REASONS } from './CancelReasonPicker';
@@ -222,7 +222,7 @@ export default function StudentDashboard() {
     return '';
   };
   const statusGroups: Record<string, string[]> = {
-    IN_CLASS: ['IN_CLASS'], IN_CONSULTATION: ['IN_CONSULTATION'], LEAVE_ABSENT: ['ON_LEAVE', 'ABSENT'],
+    IN_CLASS: ['IN_CLASS'], IN_CONSULTATION: ['IN_CONSULTATION', 'CONSULTATION_HOURS'], VACANT: ['VACANT', 'AVAILABLE'], ON_LEAVE: ['ON_LEAVE'],
   };
   const namedStatuses = Object.values(statusGroups).flat();
   const matchesStatus = (st: string) => fStatus === 'OTHER' ? !namedStatuses.includes(st) : statusGroups[fStatus].includes(st);
@@ -231,7 +231,7 @@ export default function StudentDashboard() {
     matchesGender(f.gender, fGender) &&
     (!fPosition || normalizeFacultyPosition(f.programPosition || '') === fPosition) &&
     (!fProgram || facultyProgram(f) === fProgram) &&
-    (!fStatus || matchesStatus(f.currentStatus))
+    (!fStatus || matchesStatus(facultyStatusOf(f)))
   );
 
   const matchingFaculty = faculty.filter(f => f.name.toLowerCase().includes(facultySearch.toLowerCase()));
@@ -408,9 +408,10 @@ export default function StudentDashboard() {
                   <SearchableSelect placeholder="All statuses" value={fStatus} onChange={setFStatus} maxW="100%"
                     options={[
                       { value: 'IN_CLASS', label: 'In Class' },
-                      { value: 'IN_CONSULTATION', label: 'In Consultation' },
-                      { value: 'LEAVE_ABSENT', label: 'On Leave / Absent' },
-                      { value: 'OTHER', label: 'Other (Available, Meeting, Break, Out of Office...)' },
+                      { value: 'IN_CONSULTATION', label: 'In Consultation / Consultation Hours' },
+                      { value: 'VACANT', label: 'Vacant' },
+                      { value: 'ON_LEAVE', label: 'On Leave' },
+                      { value: 'OTHER', label: 'Other (Meeting, Break, Out of Office)' },
                     ]} />
                 </FilterField>
               </FilterPanel>
@@ -419,7 +420,7 @@ export default function StudentDashboard() {
               </Text>
               <TableContainer>
                 <Table variant="simple" size="md">
-                  <Thead><Tr><Th color={mutedText}>Faculty Name</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Live Status</Th><Th color={mutedText}>Announcements / Notices</Th></Tr></Thead>
+                  <Thead><Tr><Th color={mutedText}>Faculty Name</Th><Th color={mutedText}>Gender</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Announcements / Notices</Th></Tr></Thead>
                   <Tbody>
                     {statusFiltered.length === 0 && (
                       <Tr><Td colSpan={4}><Text color={mutedText} fontSize="sm">No faculty match your search or filters.</Text></Td></Tr>
@@ -433,16 +434,22 @@ export default function StudentDashboard() {
                           <Td><GenderBadge gender={prof.gender} /></Td>
                           <Td>
                             <HStack>
-                              <Badge colorScheme={facultyStatusColor(prof.currentStatus)} px={3} py={1} borderRadius="full">
-                                {facultyStatusLabel(prof.currentStatus)}
+                              <Badge colorScheme={facultyStatusColor(facultyStatusOf(prof))} px={3} py={1} borderRadius="full">
+                                {facultyStatusLabel(facultyStatusOf(prof))}
                               </Badge>
+                              {facultyStatusUntil(prof) && <Text fontSize="xs" color={mutedText}>{facultyStatusUntil(prof)}</Text>}
                             </HStack>
                           </Td>
                           <Td maxW="300px">
                             <VStack align="start" spacing={1}>
+                              {(prof.notices || []).map((n: any) => (
+                                <Badge key={n._id} colorScheme={facultyStatusColor(n.type)} textTransform="none" whiteSpace="normal" p={2} borderRadius="md">
+                                  {n.type === 'IN_MEETING' ? 'Meeting' : 'Leave'}: {noticeWhenText(n)}{n.reason ? ` (${n.reason})` : ''}{n.makeUpInfo ? `. Make-up: ${n.makeUpInfo}` : ''}
+                                </Badge>
+                              ))}
                               {prof.noticeMessage && <Badge colorScheme="blue" textTransform="none" whiteSpace="normal" p={2} borderRadius="md">📢 {prof.noticeMessage}</Badge>}
                               {prof.flaggedDate && <Badge colorScheme="orange" textTransform="none" p={2} borderRadius="md">🗓️ Out on {prof.flaggedDate} {prof.flaggedReason ? `(${prof.flaggedReason})` : ''}</Badge>}
-                              {!prof.noticeMessage && !prof.flaggedDate && <Text color={mutedText} fontSize="sm">No current notices</Text>}
+                              {!prof.noticeMessage && !prof.flaggedDate && !(prof.notices || []).length && <Text color={mutedText} fontSize="sm">No current notices</Text>}
                             </VStack>
                           </Td>
                         </Tr>
@@ -487,7 +494,7 @@ export default function StudentDashboard() {
                             <Text p={3} fontSize="sm" color={mutedText}>No professors found.</Text>
                           )}
                           {filteredFaculty.map(f => {
-                            const unavailable = f.currentStatus === 'ABSENT' || f.currentStatus === 'ON_LEAVE';
+                            const unavailable = false; // closed times are not offered as slots; the professor can still be chosen for another day
                             return (
                               <Box
                                 key={f._id}
