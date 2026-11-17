@@ -53,7 +53,7 @@ function buildDemoData({ today, seed = 2026, weeks = 8 }) {
         n += 1;
         students.push({
           key: `S${n}`, name: `${pick(rng, FIRST)} ${pick(rng, LAST)} ${n}`, email: `demo.student${n}@demo.invalid`,
-          schoolId: `2025-S9${pad(n, 4)}`, programPosition: `${program} ${year}${sec}`, gender: pick(rng, ['Male', 'Female', 'Prefer not to say']),
+          schoolId: `2025-S9${pad(n, 4)}`, programPosition: `${program} ${year}${sec}`, gender: pick(rng, ['Male', 'Female']),
         });
       }
     }

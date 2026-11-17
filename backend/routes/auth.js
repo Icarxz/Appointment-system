@@ -8,6 +8,7 @@ const { requireAuth } = require('../middleware/auth');
 const { decideSignIn, parseList, isProfileComplete, audienceMismatch } = require('../utils/signInPolicy');
 const { validateId } = require('../utils/idValidator');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
+const { isProgram, programOfPosition } = require('../utils/programs');
 
 const router = express.Router();
 
@@ -115,16 +116,23 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (isProfileComplete(user)) return res.status(400).json({ error: 'Profile is already complete.' });
 
-    const { gender, programPosition, idValue, privacyAccepted } = req.body || {};
+    const { gender, programPosition, idValue, privacyAccepted, program } = req.body || {};
     if (privacyAccepted !== true) return res.status(400).json({ error: 'Please accept the Privacy Policy.' });
-    // Gender is optional (analytics shows a blank as "Not provided"). When given it must be one of the stored values.
+    // Gender is optional (analytics shows a blank as "Not provided"). When given it must be Male or Female ('Prefer not to say' was retired; old accounts keep it).
     const genderGiven = gender !== undefined && gender !== null && String(gender).trim() !== '';
-    if (genderGiven && !['Male', 'Female', 'Prefer not to say'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female, or leave gender blank.' });
+    if (genderGiven && !['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female, or leave gender blank.' });
     if (!programPosition || !String(programPosition).trim()) {
       return res.status(400).json({ error: user.role === 'STUDENT' ? 'Program, year and section are required.' : 'Position is required.' });
     }
     if (user.role !== 'STUDENT' && !isApprovedFacultyPosition(programPosition)) {
       return res.status(400).json({ error: 'Please select one of the approved positions: Faculty, Librarian, Program Head (BS INFO), Program Head (BS COMSCI), Program Head (BLIS), or Dean.' });
+    }
+
+    // Faculty also say which program they belong to; a Program Head's is taken from the position. Nobody else has one.
+    let facultyProgram = '';
+    if (user.role === 'FACULTY') {
+      facultyProgram = programOfPosition(String(programPosition).trim()) || (isProgram(program) ? program.trim() : ''); // a head's program comes from the position, whatever the client sent
+      if (!facultyProgram) return res.status(400).json({ error: 'Please select your program (BS INFO, BS COMSCI or BLIS).' });
     }
 
     // Students use the student ID format; faculty and dean use the employee format. Admin has no ID.
@@ -140,6 +148,7 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
     // The name stays as it came from the school Google account.
     if (genderGiven) user.gender = gender;
     user.programPosition = String(programPosition).trim();
+    if (facultyProgram) user.program = facultyProgram;
     user.privacyAcceptedAt = new Date();
     user.noIdYet = false;
     user.onboardingComplete = true;
