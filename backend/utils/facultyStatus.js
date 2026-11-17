@@ -70,7 +70,7 @@ function resolveFacultyStatus(input, now = new Date()) {
   if (active) {
     return {
       status: active.type, label: STATUS_LABELS[active.type], until: asDate(active.endAt),
-      source: 'manual', location: active.location || '', reason: active.reason || '',
+      entryId: active._id ? String(active._id) : null, source: 'manual', location: active.location || '', reason: active.reason || '',
     };
   }
 
@@ -94,7 +94,7 @@ function resolveFacultyStatus(input, now = new Date()) {
  * Validates a new manual entry. Returns { ok: true } or { ok: false, error }.
  * existing = the faculty's other not-yet-ended entries.
  */
-function validateEntry(entry, existing = [], now = new Date()) {
+function validateEntry(entry, existing = [], now = new Date(), opts = {}) {
   if (!MANUAL_STATUSES.includes(entry.type)) return { ok: false, error: 'Choose a valid status.' };
   const start = asDate(entry.startAt);
   const end = asDate(entry.endAt);
@@ -103,7 +103,7 @@ function validateEntry(entry, existing = [], now = new Date()) {
   if (end <= now) return { ok: false, error: 'The end time has already passed.' };
 
   const reasons = NOTICE_REASONS[entry.type];
-  if (reasons) {
+  if (reasons && opts.requireReason !== false) {
     if (!entry.reason || !reasons.includes(entry.reason)) return { ok: false, error: 'Choose a reason.' };
     if (entry.reason === 'Other' && !String(entry.reasonOther || '').trim()) return { ok: false, error: 'Please type the reason for "Other".' };
   }

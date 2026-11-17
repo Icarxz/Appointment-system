@@ -59,6 +59,10 @@ const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
+const FacultyStatusEntry = require('../models/FacultyStatusEntry');
+const { resolveFacultyStatus, validateEntry } = require('../utils/facultyStatus');
+const { groupStatusInputs, toLegacyStatus } = require('../utils/facultyStatusInputs');
+const { endFromChoice } = require('../utils/statusDuration');
 
 // Booking / cancellation time limits (appointment date + time are Manila time)
 const { findConflict, conflictMessage } = require('../utils/duplicateRequest');
@@ -165,20 +169,34 @@ router.get('/status', requireAuth(ALL_ROLES), async (req, res) => {
       .select('name gender programPosition program currentStatus currentLocation room statusUpdatedAt statusNote noticeMessage flaggedDate flaggedReason')
       .sort({ name: 1 });
 
-    // Compare Manila calendar days. new Date().setHours(0,0,0,0) uses the server's
-    // own timezone (UTC on most hosts), which made early-morning check-ins look stale.
-    const todayManila = manilaNow().dateStr;
+    // Status is worked out here on every request from the schedule, running consultations and
+    // any manual status that has not expired. Nothing depends on the cron job or on the server being awake.
+    const now = new Date();
+    const clock = manilaNow(now);
+    const nowMin = Number(clock.hhmm.slice(0, 2)) * 60 + Number(clock.hhmm.slice(3));
+    const ids = facultyList.map(f => f._id);
+    const [classes, official, added, entries, bookings] = await Promise.all([
+      Schedule.find({ facultyId: { $in: ids }, dayOfWeek: clock.dayOfWeek }).lean(),
+      ConsultationHours.find({ facultyId: { $in: ids }, dayOfWeek: clock.dayOfWeek }).lean(),
+      AddedConsultationHours.find({ facultyId: { $in: ids }, dayOfWeek: clock.dayOfWeek }).lean(),
+      FacultyStatusEntry.find({ facultyId: { $in: ids }, endAt: { $gt: now } }).lean(),
+      Appointment.find({ facultyId: { $in: ids }, date: clock.dateStr, status: 'APPROVED' }).select('facultyId time duration').lean(),
+    ]);
+    const inputs = groupStatusInputs(ids, { classes, official, added, entries, bookings }, nowMin);
 
     const enriched = facultyList.map(f => {
       const obj = f.toObject();
+      const r = resolveFacultyStatus(inputs.get(String(f._id)), now);
+      obj.status = r.status;                 // new: IN_CLASS, IN_CONSULTATION, CONSULTATION_HOURS, VACANT, IN_MEETING, ON_BREAK, OUT_OF_OFFICE, ON_LEAVE
+      obj.statusLabel = r.label;
+      obj.statusSource = r.source;           // 'scheduled' or 'manual'
+      obj.statusUntil = r.until;
+      obj.statusReason = r.reason || '';
+      obj.statusEntryId = r.entryId || null;
+      obj.currentStatus = toLegacyStatus(r.status); // old screens keep working until they use the fields above
+      obj.currentLocation = r.location || obj.room || '';
       // Students never receive classroom locations (also stripped from the schedule endpoint)
       if (req.user.role === 'STUDENT') { delete obj.room; delete obj.currentLocation; }
-      const updatedToday = f.statusUpdatedAt && manilaNow(new Date(f.statusUpdatedAt)).dateStr === todayManila;
-      
-      const scheduleDriven = obj.currentStatus === 'IN_CLASS' || obj.currentStatus === 'IN_CONSULTATION';
-      if (!updatedToday && !scheduleDriven) {
-        obj.currentStatus = 'NOT_UPDATED';
-      }
       return obj;
     });
 
@@ -908,6 +926,52 @@ router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']
 
 // 13. PUT ROUTE: Save a Notice
 // 13b. PUT ROUTE: Faculty updates their own live status/location (used by FacultyDashboard's status page)
+// ---- My Status: manual statuses that always expire ----------------------------------------------
+// Body: { type, duration, untilTime?, location? }  duration = 15 | 30 | 60 | 120 | 'UNTIL' | 'EOD'
+router.post('/status-entry', requireAuth(['FACULTY']), async (req, res) => {
+  try {
+    const { type, duration, untilTime, location } = req.body || {};
+    const now = new Date();
+    const end = endFromChoice(duration, untilTime, now);
+    if (!end.ok) return res.status(400).json({ error: end.error });
+
+    const existing = await FacultyStatusEntry.find({ facultyId: req.user.userId, endAt: { $gt: now } }).lean();
+    // A new status replaces the one running right now; only a later, separate notice can clash.
+    const running = existing.filter(e => e.startAt <= now);
+    const others = existing.filter(e => e.startAt > now);
+    const check = validateEntry({ type, startAt: now, endAt: end.endAt }, others, now, { requireReason: false });
+    if (!check.ok) return res.status(400).json({ error: check.error });
+
+    // End any status that is running now, so there is only ever one.
+    if (running.length) await FacultyStatusEntry.updateMany({ _id: { $in: running.map(e => e._id) } }, { $set: { endAt: now } });
+
+    const entry = await FacultyStatusEntry.create({
+      facultyId: req.user.userId, type, startAt: now, endAt: end.endAt,
+      location: String(location || '').trim().slice(0, 80),
+    });
+    await StatusHistory.create({ facultyId: req.user.userId, status: type, note: entry.location });
+    res.status(201).json(entry);
+  } catch (err) {
+    res.status(500).json({ error: 'Error setting status' });
+  }
+});
+
+// Clear my current manual status early. A scheduled (future) entry is deleted instead.
+router.delete('/status-entry/:id', requireAuth(['FACULTY']), async (req, res) => {
+  try {
+    if (!isObjectIdHex(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+    const entry = await FacultyStatusEntry.findById(req.params.id);
+    if (!entry || String(entry.facultyId) !== String(req.user.userId)) return res.status(404).json({ error: 'Status not found' });
+    const now = new Date();
+    if (entry.endAt <= now) return res.json({ ok: true });
+    if (entry.startAt > now) await entry.deleteOne();
+    else { entry.endAt = now; await entry.save(); }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error clearing status' });
+  }
+});
+
 // IN_CONSULTATION: auto-set by cron during consultation hour blocks;
 // faculty may also select it manually.
 const VALID_STATUSES = ['AVAILABLE', 'IN_CLASS', 'IN_CONSULTATION', 'IN_MEETING', 'ON_BREAK', 'OUT_OF_OFFICE', 'ON_LEAVE', 'ABSENT', 'NOT_UPDATED'];

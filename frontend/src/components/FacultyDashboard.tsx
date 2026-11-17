@@ -189,7 +189,10 @@ export default function FacultyDashboard() {
   const [focusDay,   setFocusDay]   = useState(0);       
   
   // ── Data State ───────────────────────────────────────────────────────────────
-  const [myStatus, setMyStatus] = useState('');
+  const [myStatus, setMyStatus] = useState('');          // the manual status being chosen in the form
+  const [myDuration, setMyDuration] = useState('');       // 15 | 30 | 60 | 120 | UNTIL | EOD
+  const [myUntil, setMyUntil] = useState('');             // "HH:MM", used when duration is UNTIL
+  const [myCurrent, setMyCurrent] = useState<any>(null);  // my effective status from the server
   const [myLocation, setMyLocation] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [mySchedule, setMySchedule] = useState<any[]>([]);
@@ -462,10 +465,10 @@ const saveConsultationHours = async () => {
     authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status`)
       .then((res) => res.json())
       .then((data) => {
+        if (userId && Array.isArray(data)) setMyCurrent(data.find((f: any) => f._id === userId) || null);
         if (userId && data.length > 0 && !hasSyncedRef.current) {
           const me = data.find((f: any) => f._id === userId);
           if (me) { 
-            setMyStatus(me.currentStatus);
             setMyLocation(me.currentLocation || me.room || '');
             setNotice(me.noticeMessage || '');
             hasSyncedRef.current = true;
@@ -501,27 +504,59 @@ const saveConsultationHours = async () => {
 
   // ── Existing Status Handlers ────────────────────────────────────────
   const STATUS_LABELS: Record<string, string> = {
-    AVAILABLE: 'Available', IN_CLASS: 'In Class', IN_CONSULTATION: 'Consultation Hours', IN_MEETING: 'In a Meeting',
-    ON_BREAK: 'On Break', OUT_OF_OFFICE: 'Out of Office', ON_LEAVE: 'On Leave', ABSENT: 'Absent',
+    IN_CLASS: 'In Class', IN_CONSULTATION: 'In Consultation', CONSULTATION_HOURS: 'Consultation Hours', VACANT: 'Vacant',
+    IN_MEETING: 'In a Meeting', ON_BREAK: 'On Break', OUT_OF_OFFICE: 'Out of Office', ON_LEAVE: 'On Leave',
   };
+  const STATUS_COLORS: Record<string, string> = {
+    IN_CLASS: 'orange', IN_CONSULTATION: 'purple', CONSULTATION_HOURS: 'teal', VACANT: 'green',
+    IN_MEETING: 'blue', ON_BREAK: 'yellow', OUT_OF_OFFICE: 'gray', ON_LEAVE: 'red',
+  };
+  // Only these are chosen by hand. Each has its own list of "how long" choices.
+  const MANUAL_STATUS_OPTIONS = ['IN_MEETING', 'ON_BREAK', 'OUT_OF_OFFICE', 'ON_LEAVE'];
+  const DURATION_CHOICES: Record<string, [string, string][]> = {
+    ON_BREAK: [['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour']],
+    IN_MEETING: [['30', '30 minutes'], ['60', '1 hour'], ['120', '2 hours'], ['UNTIL', 'Until a time...']],
+    OUT_OF_OFFICE: [['UNTIL', 'Until a time...'], ['EOD', 'Rest of today']],
+    ON_LEAVE: [['EOD', 'Rest of today']],
+  };
+  const fmtUntil = (iso?: string) => iso ? new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }) : '';
+  const statusSourceText = (c: any) => {
+    if (!c) return '';
+    const until = c.statusUntil ? ` until ${fmtUntil(c.statusUntil)}` : '';
+    return c.statusSource === 'manual' ? `Set by you${until}` : `Scheduled${until}`;
+  };
+  const durationLabel = () => (DURATION_CHOICES[myStatus] || []).find(([v]) => v === myDuration)?.[1] || '';
 
   const handleUpdateMyStatus = async () => {
     setIsUpdating(true);
     try {
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/update-status/${userId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentStatus: myStatus, currentLocation: myLocation })
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status-entry`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: myStatus, duration: myDuration, untilTime: myUntil, location: myLocation })
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to update status (${response.status})`);
+        throw new Error(data.error || `Failed to set status (${response.status})`);
       }
-      toast({ title: 'Status updated!', status: 'success', duration: 2000 });
+      toast({ title: 'Status set!', status: 'success', duration: 2000 });
+      setMyStatus(''); setMyDuration(''); setMyUntil('');
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not update status', description: error.message, status: 'error' });
+      toast({ title: 'Could not set status', description: error.message, status: 'error' });
     }
     setIsUpdating(false);
+  };
+
+  const handleClearMyStatus = async () => {
+    if (!myCurrent?.statusEntryId) return;
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status-entry/${myCurrent.statusEntryId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed to clear status');
+      toast({ title: 'Status cleared', status: 'success', duration: 2000 });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: 'Could not clear status', description: error.message, status: 'error' });
+    }
   };
 
   const handlePostNotice = async () => {
@@ -1112,19 +1147,46 @@ const saveConsultationHours = async () => {
             <Box display="flex" gap={6} flexDirection={{ base: 'column', md: 'row' }}>
               
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
-                <Heading size="md" color={textColor} mb={6}>Update Live Status</Heading>
+                <Heading size="md" color={textColor} mb={6}>My Status</Heading>
                 <VStack spacing={4} alignItems="flex-start">
                   <FormControl><FormLabel color={textColor}>Current Status</FormLabel>
-                    <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Current status" placeholder="Status" value={myStatus} onChange={setMyStatus}
-                      options={[['AVAILABLE', 'Available'], ['IN_CLASS', 'In Class'], ['IN_CONSULTATION', 'Consultation Hours'], ['IN_MEETING', 'In a Meeting'], ['ON_BREAK', 'On Break'],
-                        ['OUT_OF_OFFICE', 'Out of Office'], ['ON_LEAVE', 'On Leave'], ['ABSENT', 'Absent']].map(([value, label]) => ({ value, label }))} />
+                    <HStack spacing={3} flexWrap="wrap">
+                      <Badge colorScheme={STATUS_COLORS[myCurrent?.status] || 'gray'} fontSize="sm" px={3} py={1} borderRadius="md">
+                        {myCurrent ? (STATUS_LABELS[myCurrent.status] || myCurrent.statusLabel) : 'Loading...'}
+                      </Badge>
+                      <Text fontSize="sm" color={mutedText}>{statusSourceText(myCurrent)}</Text>
+                    </HStack>
+                    {myCurrent?.statusSource === 'manual' && myCurrent?.statusEntryId && (
+                      <ChakraButton mt={3} size="sm" variant="outline" colorScheme="red" onClick={() => setConfirmCfg({
+                        title: 'Clear your status?',
+                        body: 'Your status goes back to what your schedule says.',
+                        confirmLabel: 'Clear status', run: handleClearMyStatus,
+                      })}>Clear status</ChakraButton>
+                    )}
                   </FormControl>
+                  <FormControl><FormLabel color={textColor}>Set a status</FormLabel>
+                    <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Set a status" placeholder="Status" value={myStatus}
+                      onChange={(v: string) => { setMyStatus(v); setMyDuration(''); setMyUntil(''); }}
+                      options={MANUAL_STATUS_OPTIONS.map(value => ({ value, label: STATUS_LABELS[value] }))} />
+                  </FormControl>
+                  {myStatus && (
+                    <FormControl><FormLabel color={textColor}>For how long</FormLabel>
+                      <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="For how long" placeholder="Duration" value={myDuration}
+                        onChange={setMyDuration}
+                        options={(DURATION_CHOICES[myStatus] || []).map(([value, label]) => ({ value, label }))} />
+                    </FormControl>
+                  )}
+                  {myDuration === 'UNTIL' && (
+                    <FormControl><FormLabel color={textColor}>Until what time</FormLabel>
+                      <Input type="time" maxW="200px" value={myUntil} onChange={(e) => setMyUntil(e.target.value)} color={textColor} />
+                    </FormControl>
+                  )}
                   <FormControl><FormLabel color={textColor}>Location</FormLabel><Input value={myLocation} onChange={(e) => setMyLocation(e.target.value)} color={textColor} /></FormControl>
-                  <ChakraButton colorScheme="blue" onClick={() => setConfirmCfg({
-                    title: 'Update your live status?',
-                    body: `Students will see you as "${STATUS_LABELS[myStatus] || myStatus}"${myLocation.trim() ? ` at "${myLocation.trim()}"` : ''}.`,
-                    confirmLabel: 'Update status', run: handleUpdateMyStatus,
-                  })} isLoading={isUpdating} w="100%">Update Live Status</ChakraButton>
+                  <ChakraButton colorScheme="blue" isDisabled={!myStatus || !myDuration || (myDuration === 'UNTIL' && !myUntil)} onClick={() => setConfirmCfg({
+                    title: 'Set your status?',
+                    body: `Students will see you as "${STATUS_LABELS[myStatus] || myStatus}" ${myDuration === 'UNTIL' ? `until ${myUntil}` : myDuration === 'EOD' ? 'for the rest of today' : `for ${durationLabel()}`}${myLocation.trim() ? ` at "${myLocation.trim()}"` : ''}. It ends by itself.`,
+                    confirmLabel: 'Set status', run: handleUpdateMyStatus,
+                  })} isLoading={isUpdating} w="100%">Set Status</ChakraButton>
                 </VStack>
               </Box>
 

@@ -72,3 +72,8 @@ test('booking block: meeting and leave block, break does not', () => {
   assert.equal(blocksBooking(e, at('10:15'), at('10:45')), null);
   assert.equal(blocksBooking(e, at('16:00'), at('16:30')), null);
 });
+
+test('validate: reason can be waived for quick My Status entries', () => {
+  const now = at('08:00');
+  assert.equal(validateEntry(entry('ON_LEAVE', '09:00', '10:00'), [], now, { requireReason: false }).ok, true);
+});
