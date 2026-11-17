@@ -10,6 +10,7 @@ import {
   InputGroup, InputRightAddon
 } from '@chakra-ui/react';
 import { IdTray, isIdComplete } from './IdTray';
+import { ConnectionBanner, OfflineState, FilterPanelSkeleton, TableSkeleton, CardListSkeleton, useOnlineStatus, useSlowLoading } from './LoadingStates';
 import { authFetch } from './authFetch';
 import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
 import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
@@ -26,6 +27,7 @@ import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import WelcomeHeader from './WelcomeHeader';
 import FacultyScheduleModal from './FacultyScheduleModal';
 import SchedulePdfImporter from './SchedulePdfImporter';
+import BulkSchedulePdfImporter from './BulkSchedulePdfImporter';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
@@ -81,6 +83,7 @@ export default function AdminDashboard() {
 
   const [provisionImportOpen, setProvisionImportOpen] = useState(false); // Provision Account: import a schedule PDF for the account just created
   const [reviewOpen, setReviewOpen] = useState(false); // Class Schedules: review an OCR schedule draft (importer preview)
+  const [bulkOpen, setBulkOpen] = useState(false); // Class Schedules: bulk import of several schedule PDFs
   const [gridKey, setGridKey] = useState(0); // bumped after an import so the class grid reloads
   const [scheduleOf, setScheduleOf] = useState<any | null>(null); // faculty whose schedule is open
   const [emailEdit, setEmailEdit] = useState<any | null>(null); // account being moved to a school email
@@ -105,11 +108,34 @@ export default function AdminDashboard() {
   const mutedText = palette.textMid;
   const hoverBg = useColorModeValue('blue.50', 'whiteAlpha.100');
 
-  const fetchAllData = () => {
-    authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status`).then(res => res.json()).then(data => setFacultyList(data));
-    authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointments/all`).then(res => res.json()).then(data => setAppointments(data));
-    authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/users/all`).then(res => res.json()).then(data => setAllUsers(data));
+  // First load shows skeleton trays; if it fails (offline / server down) the page shows a Retry panel.
+  // Later refreshes keep whatever is already on screen, so a dropped connection never blanks the page.
+  const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadError, setLoadError] = useState('');
+  const online = useOnlineStatus();
+  const slowLoad = useSlowLoading(dataStatus === 'loading');
+  const fetchAllData = async () => {
+    const api = import.meta.env.VITE_API_URL;
+    const get = async (path: string) => {
+      const res = await authFetch(`${api}${path}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not load the data.');
+      return data;
+    };
+    try {
+      const [fac, appts, users] = await Promise.all([
+        get('/api/faculty/status'), get('/api/faculty/appointments/all'), get('/api/faculty/users/all'),
+      ]);
+      setFacultyList(fac); setAppointments(appts); setAllUsers(users);
+      setLoadError(''); setDataStatus('ready');
+    } catch (e: any) {
+      setLoadError(e instanceof TypeError ? 'We could not reach the server. Check your connection and try again.' : (e.message || 'Could not load the data.'));
+      setDataStatus(prev => (prev === 'ready' ? 'ready' : 'error'));
+    }
   };
+  const retryLoad = () => { setDataStatus(prev => (prev === 'error' ? 'loading' : prev)); return fetchAllData(); };
+  const dataReady = dataStatus === 'ready';
+  const needsData = activePage === 'appointments' || activePage === 'users' || activePage === 'records';
 
   useEffect(() => { fetchAllData(); }, []);
 
@@ -351,6 +377,18 @@ export default function AdminDashboard() {
           {activePage === 'profile' && "My Profile"}
         </PageTitle>}
 
+        <ConnectionBanner slow={slowLoad} onReconnect={fetchAllData} />
+
+        {needsData && dataStatus === 'loading' && (
+          activePage === 'appointments' ? <CardListSkeleton count={4} /> : (
+            <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+              <FilterPanelSkeleton fields={activePage === 'records' ? 3 : 4} />
+              <TableSkeleton rows={6} cols={5} />
+            </Box>
+          )
+        )}
+        {needsData && dataStatus === 'error' && <OfflineState offline={!online} message={loadError} onRetry={retryLoad} />}
+
         {activePage === 'profile' && <ProfilePage />}
 
         {activePage === 'home' && (
@@ -360,6 +398,10 @@ export default function AdminDashboard() {
               <SearchableSelect placeholder="Choose instructor..." value={selectedFacultyId} onChange={setSelectedFacultyId} maxW="360px"
                 options={facultyList.map(f => ({ value: f._id, label: f.name }))} />
             </FormControl>
+            <HStack mb={3} justify="flex-end">
+              <ChakraButton size="sm" colorScheme="blue" onClick={() => setBulkOpen(true)} title="Upload several faculty schedule PDFs at once. Each file name picks the faculty; you review and confirm each one.">Bulk Import PDFs</ChakraButton>
+              <BulkSchedulePdfImporter isOpen={bulkOpen} onClose={() => setBulkOpen(false)} facultyList={facultyList} onApplied={() => setGridKey(k => k + 1)} />
+            </HStack>
             {selectedFacultyId && (
               <HStack mb={3} justify="flex-end">
                 <ChakraButton size="sm" variant="outline" onClick={() => setReviewOpen(true)} title="Upload a scanned Faculty Load PDF, review it, then confirm to replace the class schedule.">Import Schedule PDF</ChakraButton>
@@ -442,7 +484,7 @@ export default function AdminDashboard() {
           </Box>
         )}
 
-        {activePage === 'users' && userTab === 'faculty' && (
+        {dataReady && activePage === 'users' && userTab === 'faculty' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <FilterPanel
               shown={visibleFaculty.length} total={facultyList.length} noun="faculty"
@@ -516,7 +558,7 @@ export default function AdminDashboard() {
           </Box>
         )}
 
-        {activePage === 'users' && userTab === 'students' && (
+        {dataReady && activePage === 'users' && userTab === 'students' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <FilterPanel
               shown={visibleStudents.length} total={allStudents.length} noun="students"
@@ -610,7 +652,7 @@ export default function AdminDashboard() {
           </Box>
         )}
 
-        {activePage === 'records' && (
+        {dataReady && activePage === 'records' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <Flex mb={4} align="center" justify="space-between" gap={3} flexWrap="wrap" className="no-print">
               <Text color={mutedText} fontSize="sm">
@@ -684,7 +726,7 @@ export default function AdminDashboard() {
           </Box>
         )}
 
-        {activePage === 'appointments' && (
+        {dataReady && activePage === 'appointments' && (
           <Box bg={cardBg} p={{ base: 3, md: 6 }} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             {/* Same list as the Student and Faculty pages (filters, grouped by the day requested, View Details), but read-only for the Admin. */}
             <RequestList role="ADMIN" requests={appointments} onViewDetails={setDetailsId} onChanged={fetchAllData} />
