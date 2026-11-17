@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { STUDENT_ID_REGEX, EMPLOYEE_ID_REGEX } = require('../utils/idValidator');
 const { PROGRAMS } = require('../utils/programs');
+const { EMPLOYMENT_TYPES } = require('../utils/employment');
 
 const UserSchema = new mongoose.Schema({
   role: { 
@@ -79,6 +80,8 @@ facultyId: {
   room: { type: String }, 
   // The program a faculty member belongs to (optional). A Program Head's program is implied by the position (see utils/programs.js).
   program: { type: String, enum: PROGRAMS },
+  // Full-time or part-time (optional; faculty only). Set on the faculty's own profile or by the Admin.
+  employmentType: { type: String, enum: EMPLOYMENT_TYPES },
   currentStatus: {
       type: String,
       enum: ['AVAILABLE', 'IN_CLASS', 'IN_CONSULTATION', 'IN_MEETING', 'ON_BREAK', 'OUT_OF_OFFICE', 'ON_LEAVE', 'ABSENT', 'NOT_UPDATED'],

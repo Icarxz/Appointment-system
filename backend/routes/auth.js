@@ -8,7 +8,8 @@ const { requireAuth } = require('../middleware/auth');
 const { decideSignIn, parseList, isProfileComplete, audienceMismatch } = require('../utils/signInPolicy');
 const { validateId } = require('../utils/idValidator');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
-const { isProgram, programOfPosition } = require('../utils/programs');
+const { isProgram, programOfPosition, effectiveProgram } = require('../utils/programs');
+const { isEmploymentType } = require('../utils/employment');
 
 const router = express.Router();
 
@@ -96,11 +97,12 @@ router.post('/google', googleLimiter, async (req, res) => {
 router.get('/me', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']), async (req, res) => {
   try {
     const user = await User.findById(req.user.userId)
-      .select('name email role gender programPosition schoolId facultyId onboardingComplete privacyAcceptedAt +avatar');
+      .select('name email role gender programPosition program employmentType schoolId facultyId onboardingComplete privacyAcceptedAt +avatar');
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({
       name: user.name, email: user.email, role: user.role, gender: user.gender || '',
       programPosition: user.programPosition || '', schoolId: user.schoolId || '', facultyId: user.facultyId || '',
+      program: user.role === 'FACULTY' ? effectiveProgram(user) : '', employmentType: user.employmentType || '',
       privacyAcceptedAt: user.privacyAcceptedAt, profileComplete: isProfileComplete(user), avatar: user.avatar || '',
     });
   } catch (error) {
@@ -172,7 +174,7 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY']), async (req, res) =
   try {
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const { name, gender, idValue, avatar } = req.body || {};
+    const { name, gender, idValue, avatar, program, employmentType } = req.body || {};
 
     if (name !== undefined) {
       const clean = String(name).replace(/\s+/g, ' ').trim();
@@ -196,6 +198,20 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY']), async (req, res) =
       user.noIdYet = false;
     }
 
+    // Faculty also keep their program and employment type. A Program Head's program comes from the position and is not editable.
+    if (program !== undefined || employmentType !== undefined) {
+      if (user.role !== 'FACULTY') return res.status(400).json({ error: 'Only faculty have a program and an employment type.' });
+      if (program !== undefined) {
+        if (programOfPosition(user.programPosition)) return res.status(400).json({ error: "A Program Head's program comes from the position and cannot be changed here." });
+        if (!isProgram(program)) return res.status(400).json({ error: 'Program must be BS INFO, BS COMSCI or BLIS.' });
+        user.program = program.trim();
+      }
+      if (employmentType !== undefined) {
+        if (!isEmploymentType(employmentType)) return res.status(400).json({ error: 'Choose Full-time or Part-time.' });
+        user.employmentType = employmentType;
+      }
+    }
+
     if (avatar !== undefined) {
       if (avatar === null || avatar === '') {
         user.avatar = undefined; // remove the photo
@@ -212,7 +228,8 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY']), async (req, res) =
       message: 'Profile saved.',
       profile: {
         name: user.name, gender: user.gender || '', schoolId: user.schoolId || '', facultyId: user.facultyId || '',
-        avatar: user.avatar || '', profileComplete: isProfileComplete(user)
+        avatar: user.avatar || '', profileComplete: isProfileComplete(user),
+        program: user.role === 'FACULTY' ? effectiveProgram(user) : '', employmentType: user.employmentType || ''
       }
     });
   } catch (error) {

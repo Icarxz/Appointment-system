@@ -1,22 +1,26 @@
 import { useEffect, useState } from 'react';
 import {
-  Avatar, Badge, Box, Button, FormControl, FormLabel, Heading, HStack, Input, Select, SimpleGrid, Spinner, Text,
+  Avatar, Badge, Box, Button, FormControl, FormHelperText, FormLabel, Heading, HStack, Input, Select, SimpleGrid, Spinner, Text,
   useColorModeValue, useDisclosure, useToast,
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import OnboardingModal from './OnboardingModal';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 import AvatarPicker from './AvatarPicker';
+import SearchableSelect from './SearchableSelect';
+import { PROGRAM_OPTIONS, programOfPosition } from '../utils/programs';
+import { EMPLOYMENT_OPTIONS } from '../utils/employment';
 import { IdTray, isIdComplete, idRawOf } from './IdTray';
 
 interface Profile {
   name: string; email: string; role: string; gender: string; programPosition: string;
+  program?: string; employmentType?: string; // faculty only ('' when not set)
   schoolId: string; facultyId: string; privacyAcceptedAt: string | null; profileComplete: boolean; avatar: string;
 }
 
 // The logged-in person's own profile (students and faculty).
-// Editable: photo, name, gender (Male / Female), School / Employee ID.
-// Read-only: email, role, program-year-section / academic position.
+// Editable: photo, name, gender (Male / Female), School / Employee ID; faculty also their program and employment type (Full-time / Part-time).
+// Read-only: email, role, program-year-section / academic position (a Program Head's program comes from the position).
 export default function ProfilePage() {
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState('');
@@ -30,6 +34,8 @@ export default function ProfilePage() {
   const [nameDraft, setNameDraft] = useState('');
   const [genderDraft, setGenderDraft] = useState('');
   const [idDraft, setIdDraft] = useState('');
+  const [programDraft, setProgramDraft] = useState('');
+  const [employmentDraft, setEmploymentDraft] = useState('');
   const [avatarDraft, setAvatarDraft] = useState<string | null | undefined>(undefined); // undefined = unchanged, null = remove
 
   const cardBg = useColorModeValue('#ffffff', '#111d30');
@@ -62,6 +68,8 @@ export default function ProfilePage() {
     setNameDraft(p.name);
     setGenderDraft(p.gender === 'Male' || p.gender === 'Female' ? p.gender : '');
     setIdDraft(idValue || '');
+    setProgramDraft(p.program || '');
+    setEmploymentDraft(p.employmentType || '');
     setAvatarDraft(undefined);
     setEditing(true);
   };
@@ -71,9 +79,12 @@ export default function ProfilePage() {
   const genderChanged = genderDraft !== '' && genderDraft !== p.gender;
   const idChanged = idRawOf(idDraft) !== idRawOf(idValue);
   const avatarChanged = avatarDraft !== undefined;
+  const isHead = !!programOfPosition(p.programPosition); // a Program Head's program comes from the position
+  const programChanged = !isStudent && !isHead && programDraft !== '' && programDraft !== (p.program || '');
+  const employmentChanged = !isStudent && employmentDraft !== '' && employmentDraft !== (p.employmentType || '');
   const nameOk = nameClean.length >= 2 && nameClean.length <= 100;
   const idOk = !idChanged || isIdComplete(idKind, idDraft);
-  const canSave = (nameChanged || genderChanged || idChanged || avatarChanged) && nameOk && idOk;
+  const canSave = (nameChanged || genderChanged || idChanged || avatarChanged || programChanged || employmentChanged) && nameOk && idOk;
 
   const save = async () => {
     const body: Record<string, any> = {};
@@ -81,6 +92,8 @@ export default function ProfilePage() {
     if (genderChanged) body.gender = genderDraft;
     if (idChanged) body.idValue = idDraft;
     if (avatarChanged) body.avatar = avatarDraft;
+    if (programChanged) body.program = programDraft;
+    if (employmentChanged) body.employmentType = employmentDraft;
     setSaving(true);
     try {
       const r = await authFetch(`${import.meta.env.VITE_API_URL}/api/auth/profile`, {
@@ -92,7 +105,7 @@ export default function ProfilePage() {
       if (!r.ok) throw new Error(d.error);
       const next = d.profile;
       const completeChanged = next.profileComplete !== p.profileComplete;
-      setP({ ...p, name: next.name, gender: next.gender, schoolId: next.schoolId, facultyId: next.facultyId, avatar: next.avatar, profileComplete: next.profileComplete });
+      setP({ ...p, name: next.name, gender: next.gender, schoolId: next.schoolId, facultyId: next.facultyId, avatar: next.avatar, profileComplete: next.profileComplete, program: next.program, employmentType: next.employmentType });
       if (next.name !== p.name) localStorage.setItem('userName', next.name);
       if (completeChanged) localStorage.setItem('onboardingComplete', String(next.profileComplete));
       toast({ title: 'Profile saved', status: 'success' });
@@ -138,11 +151,13 @@ export default function ProfilePage() {
             <Row label="Role" value={isStudent ? 'Student' : 'Faculty'} />
             <Row label="Gender" value={p.gender} />
             <Row label={isStudent ? 'Program, year and section' : 'Academic position'} value={p.programPosition} />
+            {!isStudent && <Row label="Program" value={p.program} />}
+            {!isStudent && <Row label="Employment type" value={p.employmentType} />}
             <Row label={idLabel} value={idValue} />
             <Row label="Privacy Policy accepted" value={p.privacyAcceptedAt ? new Date(p.privacyAcceptedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : ''} />
           </SimpleGrid>
           <Text fontSize="xs" color={muted} mt={5}>
-            You can edit your photo, name, gender and ID. Your email, role and {isStudent ? 'program, year and section' : 'academic position'} can only be changed by the administrator.
+            You can edit your photo, name, gender{isStudent ? '' : ', program, employment type'} and ID. Your email, role and {isStudent ? 'program, year and section' : 'academic position'} can only be changed by the administrator.
           </Text>
         </>
       ) : (
@@ -170,6 +185,22 @@ export default function ProfilePage() {
             <IdTray kind={idKind} value={idDraft} onChange={setIdDraft} />
             {idChanged && !idOk && <Text fontSize="xs" color="red.500" mt={2} textAlign="center">Finish the ID, or restore your current one, to save.</Text>}
           </FormControl>
+
+          {!isStudent && (
+            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5}>
+              <FormControl>
+                <FormLabel fontSize="sm">Program</FormLabel>
+                <SearchableSelect searchable={false} clearable={false} ariaLabel="Program" placeholder="Select program" isDisabled={isHead}
+                  value={isHead ? (p.program || '') : programDraft} onChange={setProgramDraft} options={PROGRAM_OPTIONS} />
+                {isHead && <FormHelperText>Taken from your position.</FormHelperText>}
+              </FormControl>
+              <FormControl>
+                <FormLabel fontSize="sm">Employment type</FormLabel>
+                <SearchableSelect searchable={false} clearable={false} ariaLabel="Employment type" placeholder="Select type"
+                  value={employmentDraft} onChange={setEmploymentDraft} options={EMPLOYMENT_OPTIONS} />
+              </FormControl>
+            </SimpleGrid>
+          )}
 
           <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5} opacity={0.75}>
             <Row label="School email (not editable)" value={p.email} />
