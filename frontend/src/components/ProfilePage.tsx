@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Avatar, Badge, Box, Button, FormControl, FormLabel, Heading, HStack, Input, Select, SimpleGrid, Spinner, Text,
+  Avatar, Badge, Box, Button, Checkbox, CheckboxGroup, FormControl, FormLabel, Heading, HStack, Input, Radio, RadioGroup, Select, SimpleGrid, Spinner, Text, Wrap,
   useColorModeValue, useDisclosure, useToast,
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
@@ -12,10 +12,13 @@ import { IdTray, isIdComplete, idRawOf } from './IdTray';
 interface Profile {
   name: string; email: string; role: string; gender: string; programPosition: string;
   schoolId: string; facultyId: string; privacyAcceptedAt: string | null; profileComplete: boolean; avatar: string;
+  employmentType?: string; programs?: string[]; // faculty only
 }
 
+const PROGRAM_OPTIONS = ['BS INFO', 'BS COMSCI', 'BLIS'];
+
 // The logged-in person's own profile (students and faculty).
-// Editable: photo, name, gender (Male / Female), School / Employee ID.
+// Editable: photo, name, gender (Male / Female), School / Employee ID, and for faculty: Full-time / Part-time and programs.
 // Read-only: email, role, program-year-section / academic position.
 export default function ProfilePage() {
   const [p, setP] = useState<Profile | null>(null);
@@ -30,6 +33,8 @@ export default function ProfilePage() {
   const [nameDraft, setNameDraft] = useState('');
   const [genderDraft, setGenderDraft] = useState('');
   const [idDraft, setIdDraft] = useState('');
+  const [employmentDraft, setEmploymentDraft] = useState('');
+  const [programsDraft, setProgramsDraft] = useState<string[]>([]);
   const [avatarDraft, setAvatarDraft] = useState<string | null | undefined>(undefined); // undefined = unchanged, null = remove
 
   const cardBg = useColorModeValue('#ffffff', '#111d30');
@@ -62,6 +67,8 @@ export default function ProfilePage() {
     setNameDraft(p.name);
     setGenderDraft(p.gender === 'Male' || p.gender === 'Female' ? p.gender : '');
     setIdDraft(idValue || '');
+    setEmploymentDraft(p.employmentType || '');
+    setProgramsDraft(p.programs || []);
     setAvatarDraft(undefined);
     setEditing(true);
   };
@@ -71,9 +78,12 @@ export default function ProfilePage() {
   const genderChanged = genderDraft !== '' && genderDraft !== p.gender;
   const idChanged = idRawOf(idDraft) !== idRawOf(idValue);
   const avatarChanged = avatarDraft !== undefined;
+  const employmentChanged = !isStudent && employmentDraft !== '' && employmentDraft !== p.employmentType;
+  const programsChanged = !isStudent && [...programsDraft].sort().join('|') !== [...(p.programs || [])].sort().join('|');
+  const programsOk = !programsChanged || programsDraft.length > 0;
   const nameOk = nameClean.length >= 2 && nameClean.length <= 100;
   const idOk = !idChanged || isIdComplete(idKind, idDraft);
-  const canSave = (nameChanged || genderChanged || idChanged || avatarChanged) && nameOk && idOk;
+  const canSave = (nameChanged || genderChanged || idChanged || avatarChanged || employmentChanged || programsChanged) && nameOk && idOk && programsOk;
 
   const save = async () => {
     const body: Record<string, any> = {};
@@ -81,6 +91,8 @@ export default function ProfilePage() {
     if (genderChanged) body.gender = genderDraft;
     if (idChanged) body.idValue = idDraft;
     if (avatarChanged) body.avatar = avatarDraft;
+    if (employmentChanged) body.employmentType = employmentDraft;
+    if (programsChanged) body.programs = programsDraft;
     setSaving(true);
     try {
       const r = await authFetch(`${import.meta.env.VITE_API_URL}/api/auth/profile`, {
@@ -92,7 +104,7 @@ export default function ProfilePage() {
       if (!r.ok) throw new Error(d.error);
       const next = d.profile;
       const completeChanged = next.profileComplete !== p.profileComplete;
-      setP({ ...p, name: next.name, gender: next.gender, schoolId: next.schoolId, facultyId: next.facultyId, avatar: next.avatar, profileComplete: next.profileComplete });
+      setP({ ...p, name: next.name, gender: next.gender, schoolId: next.schoolId, facultyId: next.facultyId, avatar: next.avatar, profileComplete: next.profileComplete, employmentType: next.employmentType, programs: next.programs });
       if (next.name !== p.name) localStorage.setItem('userName', next.name);
       if (completeChanged) localStorage.setItem('onboardingComplete', String(next.profileComplete));
       toast({ title: 'Profile saved', status: 'success' });
@@ -139,6 +151,15 @@ export default function ProfilePage() {
             <Row label="Gender" value={p.gender} />
             <Row label={isStudent ? 'Program, year and section' : 'Academic position'} value={p.programPosition} />
             <Row label={idLabel} value={idValue} />
+            {!isStudent && <Row label="Employment type" value={p.employmentType} />}
+            {!isStudent && (
+              <Box>
+                <Text fontSize="xs" color={muted}>Programs</Text>
+                {p.programs && p.programs.length > 0
+                  ? <Wrap mt={1}>{p.programs.map(x => <Badge key={x} colorScheme="blue" borderRadius="full" px={2}>{x}</Badge>)}</Wrap>
+                  : <Text fontWeight="600" color={text}>—</Text>}
+              </Box>
+            )}
             <Row label="Privacy Policy accepted" value={p.privacyAcceptedAt ? new Date(p.privacyAcceptedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : ''} />
           </SimpleGrid>
           <Text fontSize="xs" color={muted} mt={5}>
@@ -170,6 +191,31 @@ export default function ProfilePage() {
             <IdTray kind={idKind} value={idDraft} onChange={setIdDraft} />
             {idChanged && !idOk && <Text fontSize="xs" color="red.500" mt={2} textAlign="center">Finish the ID, or restore your current one, to save.</Text>}
           </FormControl>
+
+          {!isStudent && (
+            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5}>
+              <FormControl>
+                <FormLabel fontSize="sm">Employment type</FormLabel>
+                <RadioGroup value={employmentDraft} onChange={setEmploymentDraft}>
+                  <HStack spacing={5}>
+                    <Radio value="Full-time">Full-time</Radio>
+                    <Radio value="Part-time">Part-time</Radio>
+                  </HStack>
+                </RadioGroup>
+              </FormControl>
+              <FormControl isInvalid={programsChanged && !programsOk}>
+                <FormLabel fontSize="sm">Programs</FormLabel>
+                <CheckboxGroup value={programsDraft} onChange={(v) => setProgramsDraft(v as string[])}>
+                  <Wrap spacing={4}>
+                    {PROGRAM_OPTIONS.map(x => <Checkbox key={x} value={x}>{x}</Checkbox>)}
+                  </Wrap>
+                </CheckboxGroup>
+                <Text fontSize="xs" color={programsChanged && !programsOk ? 'red.500' : muted} mt={1}>
+                  {programsChanged && !programsOk ? 'Select at least one program.' : 'Pick one, two or all three.'}
+                </Text>
+              </FormControl>
+            </SimpleGrid>
+          )}
 
           <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5} opacity={0.75}>
             <Row label="School email (not editable)" value={p.email} />

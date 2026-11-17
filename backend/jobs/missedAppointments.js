@@ -4,9 +4,9 @@ const User = require('../models/User');
 const { notify, fmtDate, fmtTime } = require('../utils/notify');
 const { manilaNow } = require('../utils/manilaTime');
 
-// An APPROVED consultation that nobody signed off (completed) or marked as a student
+// An APPROVED consultation that nobody completed or marked as a student
 // no-show by the end of its day (Philippine time) is counted as MISSED (FACULTY).
-// The faculty can still log it late from the Consultation Log if it did take place
+// The faculty can still complete it late from the Consultation Log if it did take place
 // (the complete route accepts MISSED (FACULTY) for exactly that reason).
 async function markMissedFaculty() {
   const today = manilaNow().dateStr;
@@ -19,8 +19,8 @@ async function markMissedFaculty() {
     const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
     await notify(apt.facultyId, {
       type: 'APPOINTMENT_UPDATE',
-      title: 'Consultation not signed off',
-      message: `Your approved consultation with ${apt.studentName} on ${when} was never completed or marked as a no-show, so it is counted as missed. If it did take place, you can still log it in your Consultation Log.`,
+      title: 'Consultation not completed',
+      message: `Your approved consultation with ${apt.studentName} on ${when} was never completed or marked as a no-show, so it is counted as missed. If it did take place, you can still complete it in your Consultation Log.`,
       appointmentId: apt._id,
     });
     const student = apt.studentId || (await User.findOne({ role: 'STUDENT', name: apt.studentName }).select('_id'))?._id;

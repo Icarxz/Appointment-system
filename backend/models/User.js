@@ -33,6 +33,10 @@ const UserSchema = new mongoose.Schema({
   // select:false keeps it out of lists (users/all, faculty status); only /api/auth/me returns it.
   avatar: { type: String, select: false },
 
+  // Faculty only, set by the faculty member in My Profile
+  employmentType: { type: String, enum: ['Full-time', 'Part-time'] },
+  programs: { type: [{ type: String, enum: ['BS INFO', 'BS COMSCI', 'BLIS'] }], default: undefined }, // one, two or all three
+
   noIdYet: { type: Boolean, default: false }, // registered without a School/Faculty ID; an Admin adds it later in User Management
 
   schoolId: {

@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
-import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
+import { usePersistedState } from './usePersistedState';
+import { cohortConfig } from '../data/cohortConfig';
 import { formatDate, formatDateTime } from './dateUtils';
 import { 
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
-  useToast, Select, HStack, Flex, SimpleGrid, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
+  useToast, Select, HStack, Flex, SimpleGrid, Avatar, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter,
   InputGroup, InputRightAddon
 } from '@chakra-ui/react';
 import { IdTray, isIdComplete } from './IdTray';
+import { ConnectionBanner, OfflineState, FilterPanelSkeleton, TableSkeleton, CardListSkeleton, useOnlineStatus, useSlowLoading } from './LoadingStates';
 import { authFetch } from './authFetch';
 import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
 import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
@@ -29,6 +30,71 @@ import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
 // import { QRCodeSVG } from 'qrcode.react';
+
+// ---------- Shared helpers for the People / Records pages ----------
+const GENDER_OPTIONS = [
+  { value: 'Male', label: 'Male' },
+  { value: 'Female', label: 'Female' },
+  { value: 'Prefer not to say', label: 'Prefer not to say' },
+  { value: 'Not provided', label: 'Not provided' }, // older accounts created before gender was collected
+];
+const matchesGender = (g: string | undefined, filter: string) =>
+  !filter || (filter === 'Not provided' ? !g : g === filter);
+
+// "BS INFO 1A" -> { program: 'BS INFO', year: '1', section: 'A' }
+const parseCohort = (pp?: string) => {
+  const m = (pp || '').trim().match(/^(.*\S)\s+(\d+)([A-Za-z]+)$/);
+  return m ? { program: m[1], year: m[2], section: m[3].toUpperCase() } : { program: '', year: '', section: '' };
+};
+
+function GenderBadge({ gender }: { gender?: string }) {
+  if (!gender) return <Text as="span" opacity={0.5}>—</Text>;
+  const color = gender === 'Male' ? 'blue' : gender === 'Female' ? 'pink' : 'gray';
+  return <Badge colorScheme={color} borderRadius="full" px={2}>{gender}</Badge>;
+}
+
+function PersonCell({ name, sub, onClick, title, disabled }: { name: string; sub?: string; onClick?: () => void; title?: string; disabled?: boolean }) {
+  return (
+    <HStack spacing={3} align="center" opacity={disabled ? 0.6 : 1}>
+      <Avatar size="sm" name={name} />
+      <Box minW={0}>
+        <Text
+          fontWeight="bold" lineHeight="short"
+          cursor={onClick ? 'pointer' : undefined}
+          color={onClick ? 'blue.500' : undefined}
+          _hover={onClick ? { textDecoration: 'underline' } : undefined}
+          onClick={onClick} title={title}
+        >{name}{disabled && <Badge ml={2} colorScheme="red" borderRadius="full" px={2} verticalAlign="middle">Disabled</Badge>}</Text>
+        {sub && <Text fontSize="xs" opacity={0.65} lineHeight="short">{sub}</Text>}
+      </Box>
+    </HStack>
+  );
+}
+
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Box minW={0}>
+      <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" opacity={0.65} mb={1}>{label}</Text>
+      {children}
+    </Box>
+  );
+}
+
+function FilterPanel({ children, shown, total, noun, canClear, onClear }: {
+  children: React.ReactNode; shown: number; total: number; noun: string; canClear: boolean; onClear: () => void;
+}) {
+  const bg = useColorModeValue('gray.50', 'whiteAlpha.50');
+  const line = useColorModeValue('gray.200', 'whiteAlpha.200');
+  return (
+    <Box bg={bg} borderWidth="1px" borderColor={line} borderRadius="lg" p={4} mb={4} className="no-print">
+      <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3} alignItems="end">{children}</SimpleGrid>
+      <Flex mt={3} align="center" justify="space-between" gap={3} flexWrap="wrap">
+        <Text fontSize="xs" opacity={0.7}>Showing {shown} of {total} {noun}</Text>
+        {canClear && <ChakraButton size="xs" variant="ghost" colorScheme="blue" onClick={onClear}>Clear filters</ChakraButton>}
+      </Flex>
+    </Box>
+  );
+}
 
 const SCHOOL_DOMAIN = 'antiquespride.edu.ph';
 
@@ -54,10 +120,10 @@ export default function AdminDashboard() {
   const toast = useToast();
   const userName = localStorage.getItem('userName');
 
-  const [activePage, setActivePage] = useState('appointments');
+  const [activePage, setActivePage] = usePersistedState('admin-page', 'appointments', ['appointments', 'home', 'provision', 'users', 'analytics', 'records', 'profile']); // stays on the same page after a reload
   const [facultyList, setFacultyList] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [userTab, setUserTab] = useState<'faculty' | 'students'>('faculty');
+  const [userTab, setUserTab] = usePersistedState<'faculty' | 'students'>('admin-users-tab', 'faculty', ['faculty', 'students']);
   const [facultySearch, setFacultySearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
   const [filterProgram, setFilterProgram] = useState('');
@@ -73,6 +139,14 @@ export default function AdminDashboard() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [programPosition, setProgramPosition] = useState('');
+  const provisionPositionOptions = [
+    'Faculty',
+    'Librarian',
+    'Program Head (BS INFO)',
+    'Program Head (BS COMSCI)',
+    'Program Head (BLIS)',
+    'Dean',
+  ];
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
@@ -104,11 +178,34 @@ export default function AdminDashboard() {
   const mutedText = palette.textMid;
   const hoverBg = useColorModeValue('blue.50', 'whiteAlpha.100');
 
-  const fetchAllData = () => {
-    authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status`).then(res => res.json()).then(data => setFacultyList(data));
-    authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointments/all`).then(res => res.json()).then(data => setAppointments(data));
-    authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/users/all`).then(res => res.json()).then(data => setAllUsers(data));
+  // First load shows skeleton trays; if it fails (offline / server down) the page shows a Retry panel.
+  // Later refreshes keep whatever is already on screen, so a dropped connection never blanks the page.
+  const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadError, setLoadError] = useState('');
+  const online = useOnlineStatus();
+  const slowLoad = useSlowLoading(dataStatus === 'loading');
+  const fetchAllData = async () => {
+    const api = import.meta.env.VITE_API_URL;
+    const get = async (path: string) => {
+      const res = await authFetch(`${api}${path}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not load the data.');
+      return data;
+    };
+    try {
+      const [fac, appts, users] = await Promise.all([
+        get('/api/faculty/status'), get('/api/faculty/appointments/all'), get('/api/faculty/users/all'),
+      ]);
+      setFacultyList(fac); setAppointments(appts); setAllUsers(users);
+      setLoadError(''); setDataStatus('ready');
+    } catch (e: any) {
+      setLoadError(e instanceof TypeError ? 'We could not reach the server. Check your connection and try again.' : (e.message || 'Could not load the data.'));
+      setDataStatus(prev => (prev === 'ready' ? 'ready' : 'error'));
+    }
   };
+  const retryLoad = () => { setDataStatus(prev => (prev === 'error' ? 'loading' : prev)); return fetchAllData(); };
+  const dataReady = dataStatus === 'ready';
+  const needsData = activePage === 'appointments' || activePage === 'users' || activePage === 'records';
 
   useEffect(() => { fetchAllData(); }, []);
 
@@ -133,7 +230,7 @@ export default function AdminDashboard() {
   const [recordsSearch, setRecordsSearch] = useState('');
   const [recordsFaculty, setRecordsFaculty] = useState('');
   const [recordsCase, setRecordsCase] = useState('');
-  const [recordsSort, setRecordsSort] = useState<'desc' | 'asc'>('desc'); // by date signed off
+  const [recordsSort, setRecordsSort] = useState<'desc' | 'asc'>('desc'); // by date completed
   const [detailsId, setDetailsId] = useState<string | null>(null); // the appointment whose View Details panel is open
   const [facultyPositionFilter, setFacultyPositionFilter] = useState('');
   const [facultyStatusFilter, setFacultyStatusFilter] = useState('');
@@ -335,6 +432,18 @@ export default function AdminDashboard() {
           {activePage === 'profile' && "My Profile"}
         </PageTitle>}
 
+        <ConnectionBanner slow={slowLoad} onReconnect={fetchAllData} />
+
+        {needsData && dataStatus === 'loading' && (
+          activePage === 'appointments' ? <CardListSkeleton count={4} /> : (
+            <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+              <FilterPanelSkeleton fields={activePage === 'records' ? 3 : 4} />
+              <TableSkeleton rows={6} cols={5} />
+            </Box>
+          )
+        )}
+        {needsData && dataStatus === 'error' && <OfflineState offline={!online} message={loadError} onRetry={retryLoad} />}
+
         {activePage === 'profile' && <ProfilePage />}
 
         {activePage === 'home' && (
@@ -385,7 +494,7 @@ export default function AdminDashboard() {
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Program & Position</FormLabel>
                         <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
-                          options={FACULTY_POSITIONS.map(position => ({ value: position, label: position }))} />
+                          options={provisionPositionOptions.map(position => ({ value: position, label: position }))} />
                       </FormControl>
                     </SimpleGrid>
 
@@ -419,7 +528,7 @@ export default function AdminDashboard() {
           </Box>
         )}
 
-        {activePage === 'users' && userTab === 'faculty' && (
+        {dataReady && activePage === 'users' && userTab === 'faculty' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <FilterPanel
               shown={visibleFaculty.length} total={facultyList.length} noun="faculty"
@@ -486,7 +595,7 @@ export default function AdminDashboard() {
           </Box>
         )}
 
-        {activePage === 'users' && userTab === 'students' && (
+        {dataReady && activePage === 'users' && userTab === 'students' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <FilterPanel
               shown={visibleStudents.length} total={allStudents.length} noun="students"
@@ -580,11 +689,11 @@ export default function AdminDashboard() {
           </Box>
         )}
 
-        {activePage === 'records' && (
+        {dataReady && activePage === 'records' && (
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <Flex mb={4} align="center" justify="space-between" gap={3} flexWrap="wrap" className="no-print">
               <Text color={mutedText} fontSize="sm">
-                Completed consultations signed off by faculty. {recordsFaculty ? 'The printout is that faculty member\'s Students\' Consultation Form.' : 'Choose a faculty to print their Students\' Consultation Form.'}
+                Consultations completed and saved by faculty. {recordsFaculty ? 'The printout is that faculty member\'s Students\' Consultation Form.' : 'Choose a faculty to print their Students\' Consultation Form.'}
               </Text>
               <ChakraButton colorScheme="blue" size="sm" onClick={printConsultationForm} isDisabled={!printReady}
                 title={recordsFaculty ? undefined : 'Choose a faculty first'}>Print / Save as PDF</ChakraButton>
@@ -654,7 +763,7 @@ export default function AdminDashboard() {
           </Box>
         )}
 
-        {activePage === 'appointments' && (
+        {dataReady && activePage === 'appointments' && (
           <Box bg={cardBg} p={{ base: 3, md: 6 }} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             {/* Same list as the Student and Faculty pages (filters, grouped by the day requested, View Details), but read-only for the Admin. */}
             <RequestList role="ADMIN" requests={appointments} onViewDetails={setDetailsId} onChanged={fetchAllData} />

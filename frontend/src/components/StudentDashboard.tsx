@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
+import { usePersistedState } from './usePersistedState';
+import { cohortConfig } from '../data/cohortConfig';
 import { formatDate, formatDateTime } from './dateUtils';
 import BroadcastBanner from './BroadcastBanner';
 import OnboardingModal from './OnboardingModal';
@@ -59,7 +60,7 @@ export default function StudentDashboard() {
   const { isOpen: isPrivacyOpen, onOpen: onPrivacyOpen, onClose: onPrivacyClose } = useDisclosure();
   useEffect(() => { if (!profileComplete) onProfileOpen(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [activePage, setActivePage] = useState('home');
+  const [activePage, setActivePage] = usePersistedState('student-page', 'home', ['home', 'appointments', 'requests', 'profile']); // stays on the same page after a reload
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
   const { aptId, closeApt } = useDeepLink(['home', 'appointments', 'requests', 'profile'] as const, setActivePage);
   const [faculty, setFaculty] = useState<any[]>([]);
@@ -204,7 +205,14 @@ export default function StudentDashboard() {
   }, [myRequests]);
 
   // Keep the student-facing faculty filter aligned with the approved Provision Account roles.
-  const positionOptions = FACULTY_POSITIONS;
+  const positionOptions = [
+    'Faculty',
+    'Librarian',
+    'Program Head (BS INFO)',
+    'Program Head (BS COMSCI)',
+    'Program Head (BLIS)',
+    'Dean',
+  ];
   const normalizeFacultyPosition = (rawPosition: string = '') => {
     const raw = rawPosition.trim().toLowerCase();
     if (!raw) return '';
@@ -581,10 +589,10 @@ export default function StudentDashboard() {
         </ModalContent>
       </Modal>
 
-      {/* Accomplishment view: read-only summary of a signed-off consultation.
+      {/* Accomplishment view: read-only summary of a completed consultation.
           The student can't edit this — only the faculty member who completed
           the consultation can write casePresented/interventionTaken,
-          via FacultyDashboard's "Complete & Sign Off" form. */}
+          via FacultyDashboard's "Complete & Save" form. */}
       <OnboardingModal
         isOpen={isProfileOpen}
         role="STUDENT"
@@ -643,7 +651,7 @@ export default function StudentDashboard() {
                 <Text color={textColor}>{summaryApt?.interventionTaken || '—'}</Text>
               </Box>
               <Box>
-                <Text fontSize="xs" fontWeight="700" color={mutedText} textTransform="uppercase">Signed Off</Text>
+                <Text fontSize="xs" fontWeight="700" color={mutedText} textTransform="uppercase">Completed on</Text>
                 <Text color={textColor}>{formatDateTime(summaryApt?.completedAt)}</Text>
               </Box>
             </VStack>

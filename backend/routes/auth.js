@@ -95,12 +95,12 @@ router.post('/google', googleLimiter, async (req, res) => {
 router.get('/me', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']), async (req, res) => {
   try {
     const user = await User.findById(req.user.userId)
-      .select('name email role gender programPosition schoolId facultyId onboardingComplete privacyAcceptedAt +avatar');
+      .select('name email role gender programPosition schoolId facultyId onboardingComplete privacyAcceptedAt employmentType programs +avatar');
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({
       name: user.name, email: user.email, role: user.role, gender: user.gender || '',
       programPosition: user.programPosition || '', schoolId: user.schoolId || '', facultyId: user.facultyId || '',
-      privacyAcceptedAt: user.privacyAcceptedAt, profileComplete: isProfileComplete(user), avatar: user.avatar || '',
+      privacyAcceptedAt: user.privacyAcceptedAt, profileComplete: isProfileComplete(user), avatar: user.avatar || '', employmentType: user.employmentType || '', programs: user.programs || [],
     });
   } catch (error) {
     res.status(500).json({ error: 'Could not load your profile.' });
@@ -117,9 +117,7 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
 
     const { gender, programPosition, idValue, privacyAccepted } = req.body || {};
     if (privacyAccepted !== true) return res.status(400).json({ error: 'Please accept the Privacy Policy.' });
-    // Gender is optional (analytics shows a blank as "Not provided"). When given it must be one of the stored values.
-    const genderGiven = gender !== undefined && gender !== null && String(gender).trim() !== '';
-    if (genderGiven && !['Male', 'Female', 'Prefer not to say'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female, or leave gender blank.' });
+    if (!['Male', 'Female', 'Prefer not to say'].includes(gender)) return res.status(400).json({ error: 'Gender is required.' });
     if (!programPosition || !String(programPosition).trim()) {
       return res.status(400).json({ error: user.role === 'STUDENT' ? 'Program, year and section are required.' : 'Position is required.' });
     }
@@ -138,7 +136,7 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
     }
 
     // The name stays as it came from the school Google account.
-    if (genderGiven) user.gender = gender;
+    user.gender = gender;
     user.programPosition = String(programPosition).trim();
     user.privacyAcceptedAt = new Date();
     user.noIdYet = false;
@@ -157,13 +155,14 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
 // NOT editable here (anything else in the body is ignored): email, role, program/section, academic position.
 // Send only the fields that changed. avatar: a data URL to set the photo, or null to remove it.
 const AVATAR_DATA_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const PROGRAMS = ['BS INFO', 'BS COMSCI', 'BLIS'];
 const MAX_AVATAR_CHARS = 90000; // ~65 KB of image; the app resizes photos to 256x256 first (and stays under the default 100 KB JSON limit)
 
 router.patch('/profile', requireAuth(['STUDENT', 'FACULTY']), async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const { name, gender, idValue, avatar } = req.body || {};
+    const { name, gender, idValue, avatar, employmentType, programs } = req.body || {};
 
     if (name !== undefined) {
       const clean = String(name).replace(/\s+/g, ' ').trim();
@@ -187,6 +186,21 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY']), async (req, res) =
       user.noIdYet = false;
     }
 
+    // Faculty only: full-time / part-time, and the program(s) they teach in (one, two or all three).
+    if (employmentType !== undefined || programs !== undefined) {
+      if (user.role !== 'FACULTY') return res.status(400).json({ error: 'Only faculty can set employment type and programs.' });
+      if (employmentType !== undefined) {
+        if (!['Full-time', 'Part-time'].includes(employmentType)) return res.status(400).json({ error: 'Choose Full-time or Part-time.' });
+        user.employmentType = employmentType;
+      }
+      if (programs !== undefined) {
+        if (!Array.isArray(programs) || programs.some(x => !PROGRAMS.includes(x))) return res.status(400).json({ error: 'Choose from BS INFO, BS COMSCI and BLIS.' });
+        const chosen = PROGRAMS.filter(x => programs.includes(x)); // de-duplicated, in a fixed order
+        if (chosen.length === 0) return res.status(400).json({ error: 'Select at least one program.' });
+        user.programs = chosen;
+      }
+    }
+
     if (avatar !== undefined) {
       if (avatar === null || avatar === '') {
         user.avatar = undefined; // remove the photo
@@ -203,7 +217,8 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY']), async (req, res) =
       message: 'Profile saved.',
       profile: {
         name: user.name, gender: user.gender || '', schoolId: user.schoolId || '', facultyId: user.facultyId || '',
-        avatar: user.avatar || '', profileComplete: isProfileComplete(user)
+        avatar: user.avatar || '', profileComplete: isProfileComplete(user),
+        employmentType: user.employmentType || '', programs: user.programs || []
       }
     });
   } catch (error) {

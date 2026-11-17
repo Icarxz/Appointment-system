@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { usePersistedState } from './usePersistedState';
 import { formatDate } from './dateUtils';
 import BroadcastBanner from './BroadcastBanner';
 import {
@@ -40,6 +41,7 @@ import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, Fi
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours";
+const PAGES: readonly Page[] = ["status", "schedule", "requests", "log", "analytics", "profile", "hours"];
 type ViewMode  = "week" | "day";
 type EventType = "teaching" | "appointment" | "consultation" | "note";
 
@@ -178,7 +180,7 @@ export default function FacultyDashboard() {
   const userName = localStorage.getItem('userName');
 
   // ── UI State ─────────────────────────────────────────────────────────────────
-  const [activePage, setActivePage] = useState<Page>("schedule");
+  const [activePage, setActivePage] = usePersistedState<Page>('faculty-page', "schedule", PAGES); // stays on the same page after a reload
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
   const { aptId, closeApt } = useDeepLink<Page>(["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -241,7 +243,7 @@ export default function FacultyDashboard() {
   const [consultLog, setConsultLog] = useState<any[]>([]);
   const [logForm, setLogForm] = useState<{ [id: string]: { casePresented: string; interventionTaken: string } }>({});
   const [savingLogId, setSavingLogId] = useState<string | null>(null);
-  // Shown right after a consultation is successfully signed off.
+  // Shown right after a consultation is successfully completed and saved.
   const [completionModal, setCompletionModal] = useState<{ studentName: string; studentSection: string } | null>(null);
 
 const fetchLog = () => {
@@ -384,7 +386,7 @@ const saveConsultationHours = async () => {
   const [logYear, setLogYear] = useState('');
   const [logSection, setLogSection] = useState('');
   const [logSort, setLogSort] = useState<'desc' | 'asc'>('desc'); // order of the day groups
-  const [logDay, setLogDay] = useState(''); // one chosen day ("YYYY-MM-DD"): the day requested for sign-off rows, the day saved for saved rows
+  const [logDay, setLogDay] = useState(''); // one chosen day ("YYYY-MM-DD"): the day requested for the to-complete rows, the day saved for saved rows
   const logFiltersActive = !!(logSearch || logGender || logProgram || logYear || logSection || logDay || logSort !== 'desc');
   const clearLogFilters = () => { setLogSearch(''); setLogGender(''); setLogProgram(''); setLogYear(''); setLogSection(''); setLogDay(''); setLogSort('desc'); };
   const matchesLogFilters = (apt: any) => {
@@ -397,7 +399,7 @@ const saveConsultationHours = async () => {
       (!logSection || c.section === logSection) &&
       (!q || (apt.studentName || '').toLowerCase().includes(q) || (apt.casePresented || apt.reason || '').toLowerCase().includes(q));
   };
-  // Ready for sign-off is grouped by the day the student REQUESTED; saved records by the day they were SAVED (signed off).
+  // Consultations to complete are grouped by the day the student REQUESTED; saved records by the day they were SAVED (completed).
   const requestedDayOf = (a: any) => manilaDay(a.createdAt);
   const savedDayOf = (a: any) => manilaDay(a.completedAt);
   const signOffAll = myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)');
@@ -745,7 +747,7 @@ const saveConsultationHours = async () => {
     });
 
     // Keep completed consultations visible on the master schedule too, so the
-    // weekly grid still shows who/when even after sign-off — just labeled.
+    // weekly grid still shows who/when even after completion — just labeled.
     const approvedApts = myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'COMPLETED');
     approvedApts.forEach(apt => {
         const aptDate = new Date(apt.date);
@@ -1096,7 +1098,7 @@ const saveConsultationHours = async () => {
               <Box fontSize="40px" mb={2}>✅</Box>
               <Heading size="md" color={textColor} mb={2}>Consultation Completed</Heading>
               <Text color={mutedText} fontSize="sm" mb={6}>
-                {completionModal.studentName}{completionModal.studentSection ? ` (${completionModal.studentSection})` : ''} has been signed off and added to your Consultation Log.
+                {completionModal.studentName}{completionModal.studentSection ? ` (${completionModal.studentSection})` : ''} has been marked as completed and added to your Completed consultations.
               </Text>
               <ChakraButton colorScheme="green" size="sm" onClick={() => setCompletionModal(null)}>Done</ChakraButton>
             </Box>
@@ -1284,9 +1286,9 @@ const saveConsultationHours = async () => {
             </FilterPanel>
 
             <Box className="no-print" bg={cardBg} p={5} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" mb={5}>
-              <Heading size="md" color={textColor} mb={1}>Ready for sign-off</Heading>
+              <Heading size="md" color={textColor} mb={1}>Consultations to complete</Heading>
               <Text color={mutedText} fontSize="sm" mb={4}>
-                Complete the consultation details in the row, then save it to add the entry to your records.
+                These approved consultations still need a record. Choose the intervention in the row, then press Complete &amp; Save to move it to Completed consultations.
               </Text>
               <Box overflowX="auto">
                 <Table size="sm" minW="1120px" variant="simple">
@@ -1303,7 +1305,7 @@ const saveConsultationHours = async () => {
                   </Thead>
                   <Tbody>
                     {pendingSignOff.length === 0 ? (
-                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No consultations are waiting for sign-off.</Td></Tr>
+                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No consultations to complete right now.</Td></Tr>
                     ) : signOffGroups.map(g => (
                       <React.Fragment key={g.day || 'older'}>
                       {dayRow(g.day, 'Requested', 'Earlier requests')}
@@ -1311,7 +1313,7 @@ const saveConsultationHours = async () => {
                         <Tr key={apt._id}>
                           <Td minW="190px" color={textColor}>
                             <PersonCell name={apt.studentName} />
-                            {apt.status === 'MISSED (FACULTY)' && <Badge mt={1} colorScheme="orange">Late sign-off</Badge>}
+                            {apt.status === 'MISSED (FACULTY)' && <Badge mt={1} colorScheme="orange" title="Not completed by the end of the day. You can still complete it if the consultation took place.">Missed (faculty)</Badge>}
                           </Td>
                           <Td minW="95px"><GenderBadge gender={apt.studentId?.gender} /></Td>
                           <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>
@@ -1353,7 +1355,7 @@ const saveConsultationHours = async () => {
                               if (!chosen || chosen === 'Others') { submitLogEntry(apt._id); return; }
                               setConfirmCfg({
                                 title: 'Complete and save this consultation?',
-                                body: `${apt.studentName}'s consultation on ${formatDate(apt.date)} will be signed off and added to your records. Afterwards only the intervention can be edited.`,
+                                body: `${apt.studentName}'s consultation on ${formatDate(apt.date)} will be marked as completed and moved to your Completed consultations. Afterwards only the intervention can be edited.`,
                                 confirmLabel: 'Complete & save', run: () => submitLogEntry(apt._id),
                               });
                             }}>
@@ -1370,7 +1372,7 @@ const saveConsultationHours = async () => {
             </Box>
 
             <Box className="no-print" bg={cardBg} p={5} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-              <Heading size="md" color={textColor} mb={1}>Saved consultation records</Heading>
+              <Heading size="md" color={textColor} mb={1}>Completed consultations</Heading>
               <Text color={mutedText} fontSize="sm" mb={4}>
                 You can edit the case and action fields, then select Save Changes on the same row.
               </Text>
@@ -1389,7 +1391,7 @@ const saveConsultationHours = async () => {
                   </Thead>
                   <Tbody>
                     {savedLog.length === 0 ? (
-                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No saved consultation records yet.</Td></Tr>
+                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No completed consultations yet.</Td></Tr>
                     ) : savedGroups.map(g => (
                       <React.Fragment key={g.day || 'older'}>
                       {dayRow(g.day, 'Saved', 'Earlier records')}
@@ -1425,7 +1427,7 @@ const saveConsultationHours = async () => {
                         <Td minW="125px">
                           <ChakraButton size="sm" colorScheme="blue" onClick={() => setConfirmCfg({
                             title: 'Save changes to this record?',
-                            body: `The intervention for ${apt.studentName} (${formatDate(apt.date)}) will be updated in your consultation records.`,
+                            body: `The intervention for ${apt.studentName} (${formatDate(apt.date)}) will be updated in your completed consultations.`,
                             confirmLabel: 'Save changes', run: () => saveConsultLogChanges(apt),
                           })} isLoading={savingLogId === apt._id}>
                             Save Changes

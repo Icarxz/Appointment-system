@@ -1081,7 +1081,7 @@ router.get('/faculty/:id/public-schedule', async (req, res) => {
   }
 });
 
-// Complete a consultation and record the log entry (digital sign-off)
+// Complete a consultation and record the log entry (sets it to COMPLETED)
 router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, res) => {
   try {
     const interventionValue = String(req.body.interventionTaken ?? '').trim();
@@ -1094,12 +1094,12 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, 
     const caseValue = String(apt.reason ?? '').trim();
     if (!caseValue) return res.status(400).json({ error: 'This appointment has no purpose of meeting to record.' });
     // MISSED (FACULTY) is what the system sets automatically when an approved consultation was
-    // never signed off; the faculty can still log it late if the consultation did take place.
+    // never completed; the faculty can still complete it late if the consultation did take place.
     if (apt.status !== 'APPROVED' && apt.status !== 'MISSED (FACULTY)') {
       return res.status(400).json({ error: 'Only approved consultations can be completed.' });
     }
     if (apt.completedAt) {
-      return res.status(400).json({ error: 'This consultation has already been signed off and cannot be edited.' });
+      return res.status(400).json({ error: 'This consultation has already been completed.' });
     }
 
     apt.casePresented     = caseValue;
@@ -1111,17 +1111,17 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, 
     await notify(await resolveStudentId(apt), {
       type: 'CONSULTATION_LOGGED',
       title: 'Consultation completed',
-      message: `Your consultation on ${fmtDate(apt.date)} was logged and signed off by your instructor.`,
+      message: `Your consultation on ${fmtDate(apt.date)} was marked as completed by your instructor.`,
       appointmentId: apt._id,
     });
 
-    res.json({ message: 'Consultation logged and signed off.', appointment: apt });
+    res.json({ message: 'Consultation completed and saved.', appointment: apt });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-// Edit the two consultation-log fields after sign-off. Only the owning faculty member may update them.
+// Edit the two consultation-log fields after completion. Only the owning faculty member may update them.
 router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), async (req, res) => {
   try {
     const apt = await Appointment.findOne({
@@ -1131,7 +1131,7 @@ router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), asyn
     }).populate('studentId', 'gender');
     if (!apt) return res.status(404).json({ error: 'Completed consultation not found.' });
 
-    // Only the intervention can be changed afterwards. The case presented stays as signed off (the Purpose of Meeting).
+    // Only the intervention can be changed afterwards. The case presented stays as completed (the Purpose of Meeting).
     const interventionTaken = String(req.body.interventionTaken ?? '').trim();
     if (!interventionTaken) {
       return res.status(400).json({ error: 'Select or enter the intervention / action taken.' });
@@ -1154,7 +1154,7 @@ router.patch('/appointment/:id/cancel', requireAuth(['FACULTY']), async (req, re
     if (apt.status !== 'APPROVED') {
       return res.status(400).json({ error: 'Only approved consultations can be cancelled. Use Reject for pending requests.' });
     }
-    // Once the day is over it can no longer be cancelled: it is either signed off or missed.
+    // Once the day is over it can no longer be cancelled: it is either completed or missed.
     if (apt.date < manilaNow().dateStr) {
       return res.status(400).json({ error: 'This consultation date has already passed.' });
     }
