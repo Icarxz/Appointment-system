@@ -104,7 +104,7 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
                 </>
               )}
 
-              <Text fontSize="xs" color={muted}>This is a read-only summary. Approve, cancel or sign off from the page behind this panel.</Text>
+              <Text fontSize="xs" color={muted}>This is a read-only summary. Approve, cancel or save the consultation from the page behind this panel.</Text>
             </VStack>
           )}
         </DrawerBody>

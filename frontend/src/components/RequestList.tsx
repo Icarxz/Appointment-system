@@ -130,7 +130,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
             <Box>
               <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
               {cancelClosed && <Text fontSize="xs" color={C.textMid} mt={1}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before).</Text>}
-              {role === 'FACULTY' && apt.status === 'MISSED (FACULTY)' && <Text fontSize="xs" color={C.textMid} mt={1}>Not signed off. Open Consultation Log if it took place.</Text>}
+              {role === 'FACULTY' && apt.status === 'MISSED (FACULTY)' && <Text fontSize="xs" color={C.textMid} mt={1}>Not saved yet. Open Consultation Log (Pending consultations) if it took place.</Text>}
               {isStudent && apt.cancelReason && ['REJECTED', 'CANCELLED BY FACULTY'].includes(apt.status) && <Text fontSize="xs" color={C.textMid} mt={1}>Reason from professor: {apt.cancelReason}</Text>}
               {!isAdmin && <AppealControls apt={apt} role={role as 'STUDENT' | 'FACULTY'} onChanged={onChanged} />}
             </Box>
