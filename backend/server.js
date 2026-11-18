@@ -4,6 +4,7 @@ require('dotenv').config();
 const startConsultationReminder = require('./jobs/consultationReminder');
 const startMissedAppointments = require('./jobs/missedAppointments');
 const startPendingExpiry = require('./jobs/pendingExpiry');
+const startOutcomePrompt = require('./jobs/outcomePrompt');
 const startScheduleImportActivation = require('./jobs/scheduleImportActivation');
 const express = require('express');
 const mongoose = require('mongoose');
@@ -55,6 +56,7 @@ mongoose.connect(process.env.MONGO_URI)
     startConsultationReminder();
     startMissedAppointments();
     startPendingExpiry();
+    startOutcomePrompt();
     startScheduleImportActivation();
 
     // Say plainly at startup whether email works (it never blocks or stops the server).

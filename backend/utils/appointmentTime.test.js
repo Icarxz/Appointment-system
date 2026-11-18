@@ -86,3 +86,24 @@ test('only missed statuses can be corrected; older records use updatedAt', () =>
   assert.strictEqual(t.canCorrectMiss({ status: 'MISSED (FACULTY)', updatedAt: new Date(now - 3600000) }, now), true);
   assert.strictEqual(t.canCorrectMiss({ status: 'MISSED (FACULTY)' }, now), false); // no date at all: not correctable
 });
+
+// ---- "Did this take place?" reminder ----
+test('the outcome reminder is due 1 hour after the slot ends, once', () => {
+  const approved = { status: 'APPROVED', date: '2026-11-03', time: '10:00', duration: 60 }; // ends 11:00
+  assert.strictEqual(t.OUTCOME_PROMPT_HOURS, 1);
+  assert.strictEqual(t.endMoment(approved).getTime(), at('11:00'));
+  assert.strictEqual(t.isOutcomePromptDue(approved, at('11:59')), false);
+  assert.strictEqual(t.isOutcomePromptDue(approved, at('12:00')), true);
+  assert.strictEqual(t.isOutcomePromptDue({ ...approved, outcomePromptSent: true }, at('13:00')), false);
+  assert.strictEqual(t.isOutcomePromptDue({ ...approved, status: 'COMPLETED' }, at('13:00')), false);
+  assert.strictEqual(t.isOutcomePromptDue({ ...approved, status: 'MISSED (STUDENT)' }, at('13:00')), false);
+});
+
+test('the outcome reminder uses the booked length, 60 minutes when none is saved', () => {
+  const short = { status: 'APPROVED', date: '2026-11-03', time: '10:00', duration: 30 };
+  assert.strictEqual(t.isOutcomePromptDue(short, at('11:30')), true);
+  assert.strictEqual(t.isOutcomePromptDue(short, at('11:29')), false);
+  const noLength = { status: 'APPROVED', date: '2026-11-03', time: '10:00' };
+  assert.strictEqual(t.isOutcomePromptDue(noLength, at('12:00')), true);
+  assert.strictEqual(t.isOutcomePromptDue(noLength, at('11:59')), false);
+});

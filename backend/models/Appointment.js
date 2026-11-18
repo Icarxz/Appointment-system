@@ -18,6 +18,7 @@ const AppointmentSchema = new mongoose.Schema({
   missedBy: { type: String, enum: ['FACULTY', 'STUDENT', 'SYSTEM'] }, // who marked the miss
   correctedAt: { type: Date },                 // when a marked miss was corrected by signing the consultation off as completed
   correctedFrom: { type: String },             // the miss it was before: MISSED (STUDENT) or MISSED (FACULTY)
+  outcomePromptSent: { type: Boolean, default: false }, // has the "Did this take place?" reminder been sent to both people?
   reminderSent: { type: Boolean, default: false }, // has the 1-hour-before reminder already been sent to faculty?
   studentReminderSent: { type: Boolean, default: false }, // ...and to the student (in-app + email)?
 

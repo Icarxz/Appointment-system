@@ -4,6 +4,7 @@ const BOOKING_LEAD_HOURS = 1;  // students may request up to 1 hour before the s
 const CANCEL_CUTOFF_HOURS = 1; // students and faculty may cancel up to 1 hour before the start
 const REMINDER_MINUTES = 30;   // upcoming-consultation reminder
 const MISS_GRACE_MINUTES = 30; // nobody can mark a consultation as missed until this long after its start
+const OUTCOME_PROMPT_HOURS = 1; // "Did this take place?" goes to both people this long after the slot ends, if nobody has recorded an outcome
 const CORRECTION_HOURS = 24;   // after a miss is marked, the faculty member may still correct it (sign it off as completed) for this long
 
 const startMoment = (date, time) => new Date(`${date}T${time}:00+08:00`);
@@ -30,6 +31,12 @@ const canCorrectMiss = (apt, nowMs = Date.now()) => {
   return nowMs - new Date(since).getTime() <= CORRECTION_HOURS * 3600000;
 };
 
+// When the booked slot ends (a Date), and whether the "Did this take place?" reminder is due: an APPROVED consultation, not yet
+// reminded, whose end plus OUTCOME_PROMPT_HOURS has passed.
+const endMoment = (apt) => new Date(startMoment(apt.date, apt.time).getTime() + (Number(apt.duration) || 60) * 60000);
+const isOutcomePromptDue = (apt, nowMs = Date.now()) =>
+  apt.status === 'APPROVED' && !apt.outcomePromptSent && nowMs >= endMoment(apt).getTime() + OUTCOME_PROMPT_HOURS * 3600000;
+
 // The moment a miss can first be marked (a Date), for the message "you can mark it from 9:30 AM".
 const missOpensAt = (apt) => new Date(startMoment(apt.date, apt.time).getTime() + MISS_GRACE_MINUTES * 60000);
 
@@ -49,4 +56,4 @@ function expiryReason(apt, approvedSameDay = []) {
   return taken ? EXPIRY_REASON_TAKEN : EXPIRY_REASON_NO_RESPONSE;
 }
 
-module.exports = { EXPIRY_REASON_TAKEN, EXPIRY_REASON_NO_RESPONSE, expiryReason, BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS, REMINDER_MINUTES, MISS_GRACE_MINUTES, CORRECTION_HOURS, isMissed, canCorrectMiss, canMarkMissed, missOpensAt, startMoment, minutesUntil, isPendingExpired, inReminderWindow, canCancel };
+module.exports = { EXPIRY_REASON_TAKEN, EXPIRY_REASON_NO_RESPONSE, expiryReason, BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS, REMINDER_MINUTES, MISS_GRACE_MINUTES, CORRECTION_HOURS, OUTCOME_PROMPT_HOURS, endMoment, isOutcomePromptDue, isMissed, canCorrectMiss, canMarkMissed, missOpensAt, startMoment, minutesUntil, isPendingExpired, inReminderWindow, canCancel };
