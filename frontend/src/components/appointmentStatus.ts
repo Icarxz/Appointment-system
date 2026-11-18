@@ -115,6 +115,9 @@ export interface RequestRow {
   duration?: number;
   reason: string;
   cancelReason?: string;
+  /** Why it was marked missed (given by whoever marked it, or the system text), and who marked it. */
+  missReason?: string;
+  missedBy?: 'FACULTY' | 'STUDENT' | 'SYSTEM';
   /** Only on a pending request that has not started yet. */
   availableWindow?: AvailableWindow;
   /** Set when the professor approved a different start than the student asked for. */
@@ -124,6 +127,23 @@ export interface RequestRow {
   /** The student view gets the professor as an object; older records may have none. */
   facultyId?: { name: string } | null;
 }
+
+/**
+ * The one reason line a person sees under a status: why it was rejected, cancelled or marked missed, and from whom.
+ * Returns '' when there is nothing to show to this viewer. `role` is the viewer: students and faculty see the
+ * other side's reason; a reason the system wrote is shown to both.
+ */
+export const reasonLine = (apt: { status: string; cancelReason?: string; missReason?: string; missedBy?: string }, role: string): string => {
+  const s = apt.status;
+  if (role === 'STUDENT' && apt.cancelReason && (s === 'REJECTED' || s === 'CANCELLED BY FACULTY' || s === 'CANCELLED (FACULTY ON LEAVE)')) return `Reason from professor: ${apt.cancelReason}`;
+  if (role === 'FACULTY' && apt.cancelReason && s === 'CANCELLED BY STUDENT') return `Reason from student: ${apt.cancelReason}`;
+  if (apt.missReason && s === 'MISSED (STUDENT)' && role === 'STUDENT') return `Reason from professor: ${apt.missReason}`;
+  if (apt.missReason && s === 'MISSED (FACULTY)') {
+    if (apt.missedBy === 'SYSTEM') return `Reason: ${apt.missReason}`;
+    if (role === 'FACULTY') return `Reason from student: ${apt.missReason}`;
+  }
+  return '';
+};
 
 /** Reason the system gives when an unanswered request's hour went to another student (copy of backend/utils/appointmentTime.js). */
 export const REASON_TIME_TAKEN = "Another student's request for this time was accepted.";

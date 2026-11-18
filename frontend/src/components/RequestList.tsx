@@ -6,7 +6,7 @@ import {
 import { RepeatIcon } from '@chakra-ui/icons';
 import { formatTime } from './dateUtils';
 import AppealControls from './AppealControls';
-import { statusColor, statusLabel, isBeforeCutoff, hasStarted, canMarkMissedNow, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
+import { statusColor, statusLabel, isBeforeCutoff, hasStarted, canMarkMissedNow, reasonLine, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
 import { useNavPalette } from '../utils/uiTokens';
 import SearchableSelect from './SearchableSelect';
 import { GENDER_OPTIONS, matchesGender } from './PeopleUi';
@@ -131,7 +131,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
               <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
               {cancelClosed && <Text fontSize="xs" color={C.textMid} mt={1}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before).</Text>}
               {role === 'FACULTY' && apt.status === 'MISSED (FACULTY)' && <Text fontSize="xs" color={C.textMid} mt={1}>Not saved yet. Open Consultation Log (Pending consultations) if it took place.</Text>}
-              {isStudent && apt.cancelReason && ['REJECTED', 'CANCELLED BY FACULTY'].includes(apt.status) && <Text fontSize="xs" color={C.textMid} mt={1}>Reason from professor: {apt.cancelReason}</Text>}
+              {!isAdmin && reasonLine(apt, role) && <Text fontSize="xs" color={C.textMid} mt={1}>{reasonLine(apt, role)}</Text>}
               {!isAdmin && <AppealControls apt={apt} role={role as 'STUDENT' | 'FACULTY'} onChanged={onChanged} />}
             </Box>
           ), true)}

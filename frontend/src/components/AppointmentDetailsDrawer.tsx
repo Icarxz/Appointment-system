@@ -78,6 +78,7 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
                   {expired ? 'Expired (not answered in time)' : taken ? 'Declined (time went to another student)' : statusLabel(apt.status)}
                 </Badge>
                 {apt.cancelReason && <Text fontSize="xs" color={muted} mt={1}>Reason: {apt.cancelReason}</Text>}
+                {apt.missReason && <Text fontSize="xs" color={muted} mt={1}>Reason for the miss ({apt.missedBy === 'SYSTEM' ? 'recorded by the system' : apt.missedBy === 'STUDENT' ? 'given by the student' : 'given by the faculty member'}): {apt.missReason}</Text>}
               </Field>
               <Field label="Faculty"><Text>{apt.facultyId?.name || 'Unknown'}</Text></Field>
               <Field label="Student"><Text>{apt.studentName}{apt.studentSection ? ` (${apt.studentSection})` : ''}</Text></Field>

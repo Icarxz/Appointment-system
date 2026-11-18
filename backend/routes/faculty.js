@@ -58,6 +58,7 @@ const { isEmploymentType } = require('../utils/employment');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { transition, CHANGED_MESSAGE } = require('../utils/statusTransition');
 const { canMarkMissed, missOpensAt, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
+const { cleanReason } = require('../utils/missReason');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
@@ -1437,13 +1438,16 @@ router.patch('/appointment/:id/no-show', requireAuth(['FACULTY', 'DEAN']), async
       const opens = manilaNow(missOpensAt(apt)).hhmm;
       return res.status(400).json({ error: `A consultation can be marked as missed ${MISS_GRACE_MINUTES} minutes after its start, from ${fmtTime(opens)}.` });
     }
-    const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (STUDENT)', missedAt: new Date() });
+    // Like a cancellation, a miss needs a reason, and the student sees it.
+    const reason = cleanReason(req.body && req.body.reason);
+    if (!reason) return res.status(400).json({ error: 'Please select or enter a reason.' });
+    const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (STUDENT)', missedAt: new Date(), missReason: reason, missedBy: 'FACULTY' });
     if (!marked) return res.status(409).json({ error: CHANGED_MESSAGE });
 
     await notify(await resolveStudentId(apt), {
       type: 'APPOINTMENT_UPDATE',
       title: 'Consultation marked Missed by Student',
-      message: `You did not attend your consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)}.`,
+      message: `You did not attend your consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)}. Reason from your instructor: ${reason} If something prevented you, you can add your own reason in CCIS Sync.`,
       appointmentId: apt._id,
     });
     res.json({ message: 'Marked as Missed by Student.', appointment: marked });
