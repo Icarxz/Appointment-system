@@ -3,6 +3,7 @@ const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 const { notify, fmtDate, fmtTime } = require('../utils/notify');
 const { manilaNow } = require('../utils/manilaTime');
+const { transition } = require('../utils/statusTransition');
 
 // An APPROVED consultation that nobody signed off (completed) or marked as a student
 // Missed by Student by the end of its day (Philippine time) is counted as MISSED (FACULTY) (shown as Missed by Faculty).
@@ -11,10 +12,12 @@ const { manilaNow } = require('../utils/manilaTime');
 async function markMissedFaculty() {
   const today = manilaNow().dateStr;
   const overdue = await Appointment.find({ status: 'APPROVED', date: { $lt: today } });
+  let marked = 0;
   for (const apt of overdue) {
-    apt.status = 'MISSED (FACULTY)';
-    apt.missedAt = new Date();
-    await apt.save();
+    // Only if it is still APPROVED right now: the faculty member may have signed it off a moment ago.
+    const updated = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (FACULTY)', missedAt: new Date() });
+    if (!updated) continue;
+    marked += 1;
 
     const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
     await notify(apt.facultyId, {
@@ -31,7 +34,7 @@ async function markMissedFaculty() {
       appointmentId: apt._id,
     });
   }
-  return overdue.length;
+  return marked;
 }
 
 const startMissedAppointments = () => {
