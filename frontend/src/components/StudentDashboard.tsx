@@ -375,7 +375,7 @@ export default function StudentDashboard() {
       userName={userName}
       nav={[
         { key: 'home', section: 'Find & Book', icon: 'users', label: 'Faculty Status', active: activePage === 'home', onClick: () => setActivePage('home') },
-        { key: 'appointments', section: 'Find & Book', icon: 'calendarPlus', label: 'Book Consultation', active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
+        { key: 'appointments', section: 'Find & Book', icon: 'calendarPlus', label: 'Consultation', active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
         { key: 'requests', section: 'My Activity', icon: 'inbox', label: 'My Requests', badge: myRequests.filter(r => r.status === 'PENDING').length, active: activePage === 'requests', onClick: () => setActivePage('requests') },
         { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
       ]}
@@ -385,7 +385,7 @@ export default function StudentDashboard() {
         <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
           <PageTitle>
             {activePage === 'home' && "Faculty Status"}
-            {activePage === 'appointments' && "Book Consultation"}
+            {activePage === 'appointments' && "Consultation"}
             {activePage === 'requests' && "My Requests"}
             {activePage === 'profile' && "My Profile"}
           </PageTitle>
