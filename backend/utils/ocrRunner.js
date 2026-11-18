@@ -22,7 +22,10 @@ function runOcr(buf, opts = {}) {
   if (running) return Promise.reject(new OcrError('OCR_BUSY', 'Another schedule is being read. Try again in a minute.'));
   running = true;
   let dir;
-  const done = () => { running = false; if (dir) fs.rm(dir, { recursive: true, force: true }, () => {}); };
+  // On Windows a folder can stay locked for a moment after its process exits (antivirus, indexer, the killed child's working
+  // directory), and one rm attempt then fails silently and leaves the folder behind for good. Retry briefly (Node's own retry:
+  // up to 10 times, 50 ms apart on EBUSY / EPERM / ENOTEMPTY).
+  const done = () => { running = false; if (dir) fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }, () => {}); };
 
   return new Promise((resolve, reject) => {
     const finish = (fn, v) => { if (finish.called) return; finish.called = true; done(); fn(v); };
