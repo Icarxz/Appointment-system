@@ -6,12 +6,12 @@
 const PAGES: Record<string, readonly string[]> = {
   student: ['home', 'appointments', 'requests', 'profile'],
   faculty: ['status', 'schedule', 'requests', 'log', 'analytics', 'profile'],
-  dean:    ['broadcast', 'roster', 'reports', 'records', 'requests', 'log', 'analytics'], // 'appeals' (Faculty Reasons) was removed
+  dean:    ['broadcast', 'roster', 'reports', 'records', 'requests', 'log', 'analytics', 'schedule', 'hours', 'status'], // 'appeals' (Faculty Reasons) was removed
   admin:   [],
 };
 
 // The page behind the appointment details drawer, per dashboard.
-const APPOINTMENT_PAGE: Record<string, string> = { student: 'requests', faculty: 'requests', dean: 'records' };
+const APPOINTMENT_PAGE: Record<string, string> = { student: 'requests', faculty: 'requests', dean: 'requests' };
 
 const SHAPE = /^\/(student|faculty|dean|admin)-dashboard(?:\?page=([a-z]+)(?:&apt=([0-9a-f]{24}))?)?$/;
 

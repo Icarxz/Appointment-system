@@ -11,6 +11,8 @@ import { useDeepLink } from '../utils/useDeepLink';
 import AnalyticsReport from './AnalyticsReport';
 import ProfilePage from './ProfilePage';
 import DashboardShell from './DashboardShell';
+import DeanConsultationSettings from './DeanConsultationSettings';
+import FacultyDashboard from './FacultyDashboard';
 import PageTitle from './PageTitle';
 import ScrollTable from './ScrollTable';
 import { PROGRAM_OPTIONS, facultyProgram } from '../utils/programs';
@@ -23,7 +25,8 @@ import { GENDER_OPTIONS, matchesGender, GenderBadge, PersonCell, FilterField, Fi
 
 const PAGE_TITLES = {
   reports: 'Reports & Analytics', roster: 'Faculty Roster', records: 'Consultation Records',
-  profile: 'My Profile',
+  requests: 'Requests', settings: 'Consultation Settings', analytics: 'My Analytics', profile: 'My Profile',
+  schedule: 'Master Schedule', log: 'My Consultation Log', hours: 'Consultation Hours', status: 'Status & Notices',
 } as const;
 
 // === Helper function for time formatting ===
@@ -36,18 +39,32 @@ export const formatTime = (timeStr: string) => {
   return `${standardHour}:${minute} ${ampm}`;
 };
 
+type DeanPage = 'roster' | 'reports' | 'records' | 'requests' | 'settings' | 'analytics' | 'profile' | 'schedule' | 'log' | 'hours' | 'status';
+// These pages are the faculty pages, shown inside the Dean's portal (FacultyDashboard in embedded mode).
+const CONSULTATION_PAGES: DeanPage[] = ['schedule', 'requests', 'log', 'hours', 'status', 'analytics'];
+
 export default function DeanDashboard() {
   const userName = localStorage.getItem('userName');
 
   // Unified Page State
-  const [activePage, setActivePage] = useState<'roster' | 'reports' | 'records' | 'profile'>('reports');
+  const [activePage, setActivePage] = useState<DeanPage>('reports');
   // Executive Broadcast is hidden for now (Nov 9): its page and menu item are removed here; DeanBroadcastPanel.tsx is kept.
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink(['roster', 'reports', 'records'] as const, setActivePage);
+  const { aptId, closeApt } = useDeepLink(['roster', 'reports', 'records', 'requests', 'analytics', 'schedule', 'log', 'hours', 'status'] as const, setActivePage);
   
   // Shared navy palette (same colours in every portal)
   const C = useNavPalette();
   const hoverBg = useColorModeValue('blue.50', 'whiteAlpha.100');
+
+  // The Dean's own consultations (off until he switches them on in Consultation Settings).
+  const userId = localStorage.getItem('userId') || '';
+  const [accepts, setAccepts] = useState(false);
+  useEffect(() => {
+    authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/dean/consultation-settings`)
+      .then((r) => r.json())
+      .then((d) => setAccepts(!!d.acceptsConsultations))
+      .catch(() => {});
+  }, []);
 
   const [facultyRoster, setFacultyRoster] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -100,9 +117,16 @@ export default function DeanDashboard() {
     return [...list].sort((a: any, b: any) => recordsSort === 'asc' ? time(a) - time(b) : time(b) - time(a));
   }, [consultationRecords, recordsSearch, recordsFaculty, recordsCase, recordsSort]);
 
+  // Requests waiting for the Dean's own answer (for the menu badge). `appointments` already holds every appointment.
+  const pendingCount = useMemo(
+    () => appointments.filter((a: any) => a.status === 'PENDING' && String(a.facultyId?._id || a.facultyId) === userId).length,
+    [appointments, userId]
+  );
+
   const filteredRoster = useMemo(() => {
     const q = rosterSearch.trim().toLowerCase();
     return facultyRoster.filter(f =>
+      f.role !== 'DEAN' && // the Dean appears in the faculty list for students once he takes consultations, but this is the faculty roster
       (!rosterPosition || f.programPosition === rosterPosition) &&
       (!rosterProgram || facultyProgram(f) === rosterProgram) &&
       (!rosterStatus || facultyStatusOf(f) === rosterStatus) &&
@@ -138,10 +162,23 @@ export default function DeanDashboard() {
         { key: 'reports', section: 'Overview', icon: 'chart', label: 'Reports & Analytics', active: activePage === 'reports', onClick: () => setActivePage('reports') },
         { key: 'roster', section: 'Oversight', icon: 'users', label: 'Faculty Roster', active: activePage === 'roster', onClick: () => setActivePage('roster') },
         { key: 'records', section: 'Oversight', icon: 'file', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
+        // My Consultations: Settings is always there (it is where he switches this on); the rest appears once it is on.
+        { key: 'settings', section: 'My Consultations', icon: 'grid', label: 'Consultation Settings', active: activePage === 'settings', onClick: () => setActivePage('settings') },
+        ...(accepts ? [
+          { key: 'schedule', section: 'My Consultations', icon: 'calendar' as const, label: 'Master Schedule', active: activePage === 'schedule', onClick: () => setActivePage('schedule') },
+          { key: 'requests', section: 'My Consultations', icon: 'inbox' as const, label: 'Requests', badge: pendingCount, active: activePage === 'requests', onClick: () => setActivePage('requests') },
+          { key: 'log', section: 'My Consultations', icon: 'clipboard' as const, label: 'My Consultation Log', active: activePage === 'log', onClick: () => setActivePage('log') },
+          { key: 'hours', section: 'My Consultations', icon: 'clock' as const, label: 'Consultation Hours', active: activePage === 'hours', onClick: () => setActivePage('hours') },
+          { key: 'status', section: 'My Consultations', icon: 'activity' as const, label: 'Status & Notices', active: activePage === 'status', onClick: () => setActivePage('status') },
+          { key: 'analytics', section: 'Insights', icon: 'chart' as const, label: 'My Analytics', active: activePage === 'analytics', onClick: () => setActivePage('analytics') },
+        ] : []),
         { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
       ]}
     >
-      <WelcomeHeader name={userName || ''} actions={activePage === 'reports' ? <ExportBar solid csvPath="/api/analytics/report.csv" fileBase="ccis-sync-report" /> : undefined} />
+      <WelcomeHeader name={userName || ''} actions={activePage === 'reports' ? <ExportBar solid csvPath="/api/analytics/report.csv" fileBase="ccis-sync-report" /> : activePage === 'analytics' && accepts ? <ExportBar solid csvPath="/api/analytics/me.csv" fileBase="my-analytics" /> : undefined} />
+      {CONSULTATION_PAGES.includes(activePage) && accepts ? (
+        <FacultyDashboard key={activePage} embeddedPage={activePage as any} role="DEAN" canImportSchedule={false} />
+      ) : (
       <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
         {activePage !== 'reports' && <PageTitle>{PAGE_TITLES[activePage]}</PageTitle>}
 
@@ -305,9 +342,16 @@ export default function DeanDashboard() {
           </Box>
         )}
 
+        {activePage === 'settings' && <DeanConsultationSettings onChanged={(st) => setAccepts(st.acceptsConsultations)} />}
+
+        {CONSULTATION_PAGES.includes(activePage) && !accepts && (
+          <Text color={C.textMid}>Turn on student consultation requests in Consultation Settings to use this page.</Text>
+        )}
+
         {activePage === 'profile' && <ProfilePage />}
 
       </Box>
+      )}
     </DashboardShell>
     <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
     </>

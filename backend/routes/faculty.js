@@ -68,6 +68,7 @@ const { endFromChoice } = require('../utils/statusDuration');
 // Booking / cancellation time limits (appointment date + time are Manila time)
 const { findConflict, conflictMessage } = require('../utils/duplicateRequest');
 const { consultableFilter } = require('../utils/consultable');
+const { hoursTotalError } = require('../utils/consultationHoursRule');
 const { checkWeeklyLimit, limitMessage, weekBounds, COUNTED_STATUSES } = require('../utils/weeklyLimit');
 const { BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS } = require('../utils/appointmentTime'); // 1 hour to book, 1 hour to cancel
 const hoursUntil = (date, time) => (manilaDate(date, time).getTime() - Date.now()) / 36e5;
@@ -524,7 +525,7 @@ router.get('/slots/:facultyId', requireAuth(ALL_ROLES), async (req, res) => {
 // --- Added consultation hours: extra WEEKLY hours in vacant time, on top of the 4 official weekly hours ---
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-router.get('/added-hours', requireAuth(['FACULTY']), async (req, res) => {
+router.get('/added-hours', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     res.json(await AddedConsultationHours.find({ facultyId: req.user.userId, dayOfWeek: { $in: CONSULTATION_DAYS } }).sort({ dayOfWeek: 1, startTime: 1 }));
   } catch (error) {
@@ -532,7 +533,7 @@ router.get('/added-hours', requireAuth(['FACULTY']), async (req, res) => {
   }
 });
 
-router.post('/added-hours', requireAuth(['FACULTY']), async (req, res) => {
+router.post('/added-hours', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const facultyId = req.user.userId;
     const { dayOfWeek, startTime, endTime } = req.body || {};
@@ -572,7 +573,7 @@ router.get('/added-hours/of/:facultyId', requireAuth(ALL_ROLES), async (req, res
   }
 });
 
-router.delete('/added-hours/:id', requireAuth(['FACULTY']), async (req, res) => {
+router.delete('/added-hours/:id', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const block = await AddedConsultationHours.findOne({ _id: req.params.id, facultyId: req.user.userId });
     if (!block) return res.status(404).json({ error: 'Not found.' });
@@ -947,8 +948,13 @@ router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']
 // 13. PUT ROUTE: Save a Notice
 // 13b. Faculty sets their own manual status (used by the My Status card)
 // ---- My Status: manual statuses that always expire ----------------------------------------------
+<<<<<<< ours
 // Body: { type, duration, untilTime? }  duration = 15 | 30 | 60 | 120 | 'UNTIL' | 'EOD'
 router.post('/status-entry', requireAuth(['FACULTY']), async (req, res) => {
+=======
+// Body: { type, duration, untilTime?, location? }  duration = 15 | 30 | 60 | 120 | 'UNTIL' | 'EOD'
+router.post('/status-entry', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
+>>>>>>> theirs
   try {
     const { type, duration, untilTime } = req.body || {};
     const now = new Date();
@@ -980,7 +986,7 @@ router.post('/status-entry', requireAuth(['FACULTY']), async (req, res) => {
 });
 
 // Clear my current manual status early. A scheduled (future) entry is deleted instead.
-router.delete('/status-entry/:id', requireAuth(['FACULTY']), async (req, res) => {
+router.delete('/status-entry/:id', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     if (!isObjectIdHex(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
     const entry = await FacultyStatusEntry.findById(req.params.id);
@@ -998,7 +1004,7 @@ router.delete('/status-entry/:id', requireAuth(['FACULTY']), async (req, res) =>
 // ---- Post a Notice: a meeting or leave planned ahead (shown to students, closes booking in its window) ----
 // Meeting body: { type:'IN_MEETING', startDate, startTime, endTime, reason, reasonOther?, makeUpInfo? }
 // Leave body:   { type:'ON_LEAVE', startDate, endDate, reason, reasonOther?, makeUpInfo? }
-router.post('/notice-entry', requireAuth(['FACULTY']), async (req, res) => {
+router.post('/notice-entry', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const b = req.body || {};
     const now = new Date();
@@ -1024,7 +1030,7 @@ router.post('/notice-entry', requireAuth(['FACULTY']), async (req, res) => {
 });
 
 // My notices that have not ended yet, soonest first.
-router.get('/notices/mine', requireAuth(['FACULTY']), async (req, res) => {
+router.get('/notices/mine', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const list = await FacultyStatusEntry.find({ facultyId: req.user.userId, isNotice: true, endAt: { $gt: new Date() } })
       .sort({ startAt: 1 }).lean();
@@ -1136,7 +1142,7 @@ router.get('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
 // Faculty sets/updates their consultation hours
 // const timeToMinutes = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
-router.post('/consultation-hours', requireAuth(['FACULTY']), async (req, res) => {
+router.post('/consultation-hours', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const { hours } = req.body; // [{ dayOfWeek, startTime, endTime }, ...]
     const facultyId = req.user.userId; // always the logged-in faculty, never trust the body
@@ -1148,9 +1154,8 @@ router.post('/consultation-hours', requireAuth(['FACULTY']), async (req, res) =>
 
     // 1. Total must be exactly 4 hours (240 minutes)
     const totalMinutes = hours.reduce((sum, h) => sum + (timeToMinutes(h.endTime) - timeToMinutes(h.startTime)), 0);
-    if (totalMinutes !== 240) {
-      return res.status(400).json({ error: `Consultation hours must total exactly 4 hours per week. Currently: ${(totalMinutes / 60).toFixed(1)} hours.` });
-    }
+    const totalError = hoursTotalError(req.user.role, totalMinutes);
+    if (totalError) return res.status(400).json({ error: totalError });
 
     // 2. None of these blocks may overlap the faculty's own teaching schedule
     const teachingSchedule = await Schedule.find({ facultyId });
@@ -1202,7 +1207,7 @@ const validateNote = async (facultyId, { date, startTime, endTime, text }) => {
 };
 
 // List all notes for a faculty member
-router.get('/notes/:facultyId', requireAuth(['FACULTY']), ownerOnly(r => r.params.facultyId), async (req, res) => {
+router.get('/notes/:facultyId', requireAuth(['FACULTY', 'DEAN']), ownerOnly(r => r.params.facultyId), async (req, res) => {
   try {
     const notes = await CalendarNote.find({ facultyId: req.params.facultyId }).sort({ date: 1, startTime: 1 });
     res.json(notes);
@@ -1212,7 +1217,7 @@ router.get('/notes/:facultyId', requireAuth(['FACULTY']), ownerOnly(r => r.param
 });
 
 // Create a note
-router.post('/notes/:facultyId', requireAuth(['FACULTY']), ownerOnly(r => r.params.facultyId), async (req, res) => {
+router.post('/notes/:facultyId', requireAuth(['FACULTY', 'DEAN']), ownerOnly(r => r.params.facultyId), async (req, res) => {
   try {
     const { facultyId } = req.params;
     const { date, startTime, endTime, text } = req.body;
@@ -1227,7 +1232,7 @@ router.post('/notes/:facultyId', requireAuth(['FACULTY']), ownerOnly(r => r.para
 });
 
 // Edit a note (:id is the NOTE id here)
-router.put('/notes/:id', requireAuth(['FACULTY']), async (req, res) => {
+router.put('/notes/:id', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const note = await CalendarNote.findOne({ _id: req.params.id, facultyId: req.user.userId });
     if (!note) return res.status(404).json({ error: 'Note not found.' });
@@ -1245,7 +1250,7 @@ router.put('/notes/:id', requireAuth(['FACULTY']), async (req, res) => {
 });
 
 // Delete a note (:id is the NOTE id)
-router.delete('/notes/:id', requireAuth(['FACULTY']), async (req, res) => {
+router.delete('/notes/:id', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     await CalendarNote.findOneAndDelete({ _id: req.params.id, facultyId: req.user.userId });
     res.json({ message: 'Note removed.' });
@@ -1282,7 +1287,7 @@ router.get('/faculty/:id/public-schedule', async (req, res) => {
 });
 
 // Complete a consultation and record the log entry (digital sign-off)
-router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, res) => {
+router.patch('/appointment/:id/complete', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const interventionValue = String(req.body.interventionTaken ?? '').trim();
     if (!interventionValue) {
@@ -1322,7 +1327,7 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY']), async (req, 
 });
 
 // Edit the two consultation-log fields after sign-off. Only the owning faculty member may update them.
-router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), async (req, res) => {
+router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const apt = await Appointment.findOne({
       _id: req.params.id,
@@ -1347,7 +1352,7 @@ router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY']), asyn
 });
 
 // Faculty cancels an APPROVED consultation (counted as "CANCELLED BY FACULTY" in the reports)
-router.patch('/appointment/:id/cancel', requireAuth(['FACULTY']), async (req, res) => {
+router.patch('/appointment/:id/cancel', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const apt = await Appointment.findOne({ _id: req.params.id, facultyId: req.user.userId });
     if (!apt) return res.status(404).json({ error: 'Appointment not found.' });
@@ -1383,7 +1388,7 @@ router.patch('/appointment/:id/cancel', requireAuth(['FACULTY']), async (req, re
 // Cancel several appointments at once (panelist rule 3.3). Students cancel their own open requests and
 // appointments; faculty cancel approved appointments and decline pending requests. One reason covers all.
 // Each appointment is checked on its own; the ones that cannot be cancelled are reported back, not failed.
-router.post('/appointments/bulk-cancel', requireAuth(['STUDENT', 'FACULTY']), async (req, res) => {
+router.post('/appointments/bulk-cancel', requireAuth(['STUDENT', 'FACULTY', 'DEAN']), async (req, res) => {
   try {
     const ids = Array.isArray(req.body.ids) ? [...new Set(req.body.ids.map(String))] : [];
     const reason = String(req.body.reason || '').trim().slice(0, 300);
@@ -1392,7 +1397,7 @@ router.post('/appointments/bulk-cancel', requireAuth(['STUDENT', 'FACULTY']), as
     if (!reason) return res.status(400).json({ error: 'Please select or enter a reason.' });
 
     const me = await User.findById(req.user.userId).select('name');
-    const role = req.user.role;
+    const role = req.user.role === 'DEAN' ? 'FACULTY' : req.user.role; // a Dean cancels his own consultations like faculty do
     const cancelled = [];
     const skipped = [];
     for (const id of ids) {
@@ -1421,7 +1426,7 @@ router.post('/appointments/bulk-cancel', requireAuth(['STUDENT', 'FACULTY']), as
 });
 
 // Faculty marks that the student did not show up (counted as "MISSED (STUDENT)")
-router.patch('/appointment/:id/no-show', requireAuth(['FACULTY']), async (req, res) => {
+router.patch('/appointment/:id/no-show', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const apt = await Appointment.findOne({ _id: req.params.id, facultyId: req.user.userId });
     if (!apt) return res.status(404).json({ error: 'Appointment not found.' });

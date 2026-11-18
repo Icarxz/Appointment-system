@@ -8,7 +8,7 @@ const ID = '65f1c2a3b4d5e6f708192a3b';
 test('buildLink: appointment links go to the right dashboard and page for each role', () => {
   assert.equal(buildLink('STUDENT', { appointmentId: ID }), `/student-dashboard?page=requests&apt=${ID}`);
   assert.equal(buildLink('FACULTY', { appointmentId: ID }), `/faculty-dashboard?page=requests&apt=${ID}`);
-  assert.equal(buildLink('DEAN', { appointmentId: ID }), `/dean-dashboard?page=records&apt=${ID}`);
+  assert.equal(buildLink('DEAN', { appointmentId: ID }), `/dean-dashboard?page=requests&apt=${ID}`);
 });
 
 test('buildLink: Admin has no mailbox, so no appointment link', () => {
