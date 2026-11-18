@@ -9,7 +9,7 @@ const FacultyStatusEntrySchema = new mongoose.Schema({
   reason:      { type: String, default: '' },
   reasonOther: { type: String, default: '', maxlength: 120 },
   makeUpInfo:  { type: String, default: '', maxlength: 300 },
-  location:    { type: String, default: '' },
+  location:    { type: String, default: '' }, // LEGACY: kept only so old records still load. The status workflow ignores it.
   startAt:     { type: Date, required: true },
   endAt:       { type: Date, required: true, index: true },
   isNotice:    { type: Boolean, default: false }, // posted from Post a Notice (meeting / leave) rather than set quickly in My Status

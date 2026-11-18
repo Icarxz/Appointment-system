@@ -49,3 +49,26 @@ test('slots inside a meeting or leave are removed, others kept', () => {
   const left = dropBlockedSlots(slots, entries);
   assert.deepEqual(left.map((s) => s.start + s.date), ['15:002026-11-20']);
 });
+
+test('meeting: must stay inside the calendar (7:00 AM to 5:00 PM)', () => {
+  const m = (startTime, endTime) => windowFromNotice({ type: 'IN_MEETING', startDate: '2026-11-20', startTime, endTime }, now).ok;
+  assert.equal(m('07:00', '17:00'), true);
+  assert.equal(m('06:00', '08:00'), false);
+  assert.equal(m('16:00', '18:00'), false);
+});
+test('leave: half days. First day from noon, last day until noon', () => {
+  const r = windowFromNotice({ type: 'ON_LEAVE', startDate: '2026-11-20', endDate: '2026-11-23', startPart: 'PM', endPart: 'FULL' }, now);
+  assert.equal(r.startAt.getTime(), t('2026-11-20T12:00:00'));
+  assert.equal(r.endAt.getTime(), t('2026-11-24T00:00:00'));
+  const r2 = windowFromNotice({ type: 'ON_LEAVE', startDate: '2026-11-20', endDate: '2026-11-23', startPart: 'FULL', endPart: 'AM' }, now);
+  assert.equal(r2.startAt.getTime(), t('2026-11-20T00:00:00'));
+  assert.equal(r2.endAt.getTime(), t('2026-11-23T12:00:00'));
+});
+test('leave: a single half day (morning or afternoon); afternoon-to-morning on one day is rejected', () => {
+  const am = windowFromNotice({ type: 'ON_LEAVE', startDate: '2026-11-20', endDate: '2026-11-20', endPart: 'AM' }, now);
+  assert.equal(am.endAt.getTime(), t('2026-11-20T12:00:00'));
+  const pm = windowFromNotice({ type: 'ON_LEAVE', startDate: '2026-11-20', endDate: '2026-11-20', startPart: 'PM' }, now);
+  assert.equal(pm.startAt.getTime(), t('2026-11-20T12:00:00'));
+  assert.equal(windowFromNotice({ type: 'ON_LEAVE', startDate: '2026-11-20', endDate: '2026-11-20', startPart: 'PM', endPart: 'AM' }, now).ok, false);
+  assert.equal(windowFromNotice({ type: 'ON_LEAVE', startDate: '2026-11-20', startPart: 'NOON' }, now).ok, false);
+});

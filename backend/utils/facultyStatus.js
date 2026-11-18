@@ -6,11 +6,17 @@
 //
 // Precedence, highest first:
 //   active manual status > IN_CONSULTATION > IN_CLASS > CONSULTATION_HOURS > VACANT
+//
+// Scheduled day window: VACANT only exists from 7:00 AM until the end of that day's last class or
+// consultation-hours block (whichever ends later). Outside it, and on a day with no blocks at all, the
+// scheduled status is NONE, shown as "--". A manual status still shows whenever it is active.
 
 const { manilaNow, manilaDate } = require('./manilaTime');
 
 const MANUAL_STATUSES = ['IN_MEETING', 'ON_BREAK', 'OUT_OF_OFFICE', 'ON_LEAVE'];
-const SCHEDULED_STATUSES = ['IN_CLASS', 'IN_CONSULTATION', 'CONSULTATION_HOURS', 'VACANT'];
+const SCHEDULED_STATUSES = ['IN_CLASS', 'IN_CONSULTATION', 'CONSULTATION_HOURS', 'VACANT', 'NONE'];
+// Vacant starts at 7:00 AM (minutes after midnight).
+const DAY_WINDOW_START_MIN = 7 * 60;
 // Manual statuses that stop students from booking inside their window.
 const BOOKING_BLOCKING = ['IN_MEETING', 'ON_LEAVE'];
 
@@ -19,6 +25,7 @@ const STATUS_LABELS = {
   IN_CONSULTATION: 'In Consultation',
   CONSULTATION_HOURS: 'Consultation Hours',
   VACANT: 'Vacant',
+  NONE: '--', // outside the scheduled day window: no scheduled status
   IN_MEETING: 'In a Meeting',
   ON_BREAK: 'On Break',
   OUT_OF_OFFICE: 'Out of Office',
@@ -38,6 +45,12 @@ const toMinutes = (t) => {
 };
 
 const covers = (b, nowMin) => toMinutes(b.startTime) <= nowMin && nowMin < toMinutes(b.endTime);
+// The day's scheduled window ends when the later of the last class and the last consultation-hours block ends.
+// Returns minutes after midnight, or null when the day has no blocks.
+function dayWindowEndMin(classBlocks = [], consultBlocks = []) {
+  const ends = [...classBlocks, ...consultBlocks].map((b) => toMinutes(b.endTime)).filter((n) => n > 0);
+  return ends.length ? Math.max(...ends) : null;
+}
 const asDate = (d) => (d instanceof Date ? d : new Date(d));
 
 // An entry is active when startAt <= now < endAt.
@@ -52,12 +65,12 @@ function blockEnd(block, now) {
 
 /**
  * @param {object} input
- * @param {Array}  input.entries        manual status entries ({ type, startAt, endAt, location, reason })
+ * @param {Array}  input.entries        manual status entries ({ type, startAt, endAt, reason })
  * @param {Array}  input.classBlocks    today's classes ({ startTime, endTime, room })
  * @param {Array}  input.consultBlocks  today's consultation hours ({ startTime, endTime })
  * @param {boolean} input.hasBooking    true while an accepted consultation is running right now
  * @param {Date}   now
- * @returns {{ status, label, until: Date|null, source: 'manual'|'scheduled', location?, reason? }}
+ * @returns {{ status, label, until: Date|null, source: 'manual'|'scheduled', reason? }}
  */
 function resolveFacultyStatus(input, now = new Date()) {
   const { entries = [], classBlocks = [], consultBlocks = [], hasBooking = false } = input || {};
@@ -70,7 +83,7 @@ function resolveFacultyStatus(input, now = new Date()) {
   if (active) {
     return {
       status: active.type, label: STATUS_LABELS[active.type], until: asDate(active.endAt),
-      entryId: active._id ? String(active._id) : null, source: 'manual', location: active.location || '', reason: active.reason || '',
+      entryId: active._id ? String(active._id) : null, source: 'manual', reason: active.reason || '',
     };
   }
 
@@ -82,12 +95,17 @@ function resolveFacultyStatus(input, now = new Date()) {
     return { status: 'IN_CONSULTATION', label: STATUS_LABELS.IN_CONSULTATION, until: consultNow ? blockEnd(consultNow, now) : null, source: 'scheduled' };
   }
   if (classNow) {
-    return { status: 'IN_CLASS', label: STATUS_LABELS.IN_CLASS, until: blockEnd(classNow, now), source: 'scheduled', location: classNow.room || '' };
+    return { status: 'IN_CLASS', label: STATUS_LABELS.IN_CLASS, until: blockEnd(classNow, now), source: 'scheduled' };
   }
   if (consultNow) {
     return { status: 'CONSULTATION_HOURS', label: STATUS_LABELS.CONSULTATION_HOURS, until: blockEnd(consultNow, now), source: 'scheduled' };
   }
-  return { status: 'VACANT', label: STATUS_LABELS.VACANT, until: null, source: 'scheduled' };
+  // Nothing running now. Vacant only inside the scheduled day window (7:00 AM to the end of the last block).
+  const endMin = dayWindowEndMin(classBlocks, consultBlocks);
+  if (endMin !== null && nowMin >= DAY_WINDOW_START_MIN && nowMin < endMin) {
+    return { status: 'VACANT', label: STATUS_LABELS.VACANT, until: null, source: 'scheduled' };
+  }
+  return { status: 'NONE', label: STATUS_LABELS.NONE, until: null, source: 'scheduled' };
 }
 
 /**
@@ -125,6 +143,6 @@ function dropBlockedSlots(slots, entries) {
 }
 
 module.exports = {
-  dropBlockedSlots, MANUAL_STATUSES, SCHEDULED_STATUSES, BOOKING_BLOCKING, STATUS_LABELS, NOTICE_REASONS,
+  dropBlockedSlots, MANUAL_STATUSES, SCHEDULED_STATUSES, BOOKING_BLOCKING, STATUS_LABELS, NOTICE_REASONS, DAY_WINDOW_START_MIN, dayWindowEndMin,
   resolveFacultyStatus, validateEntry, blocksBooking,
 };

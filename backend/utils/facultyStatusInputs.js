@@ -35,7 +35,8 @@ function groupStatusInputs(facultyIds, rows, nowMin) {
 }
 
 // Old screens still read currentStatus; keep them working until they use the new fields.
-const toLegacyStatus = (s) => (s === 'VACANT' ? 'AVAILABLE' : s === 'CONSULTATION_HOURS' ? 'IN_CONSULTATION' : s);
+// NONE ("--") has no old equivalent that means "no scheduled status", so it maps to NOT_UPDATED (shown as a plain badge).
+const toLegacyStatus = (s) => (s === 'VACANT' ? 'AVAILABLE' : s === 'CONSULTATION_HOURS' ? 'IN_CONSULTATION' : s === 'NONE' ? 'NOT_UPDATED' : s);
 
 // What students may see: posted meetings and leave that have not ended, soonest first.
 // The "Other" reason shows the faculty's own words. Nothing else about the entry is exposed.

@@ -222,7 +222,7 @@ export default function StudentDashboard() {
     return '';
   };
   const statusGroups: Record<string, string[]> = {
-    IN_CLASS: ['IN_CLASS'], IN_CONSULTATION: ['IN_CONSULTATION', 'CONSULTATION_HOURS'], VACANT: ['VACANT', 'AVAILABLE'], ON_LEAVE: ['ON_LEAVE'],
+    IN_CLASS: ['IN_CLASS'], IN_CONSULTATION: ['IN_CONSULTATION', 'CONSULTATION_HOURS'], VACANT: ['VACANT', 'AVAILABLE'], ON_LEAVE: ['ON_LEAVE'], NONE: ['NONE'],
   };
   const namedStatuses = Object.values(statusGroups).flat();
   const matchesStatus = (st: string) => fStatus === 'OTHER' ? !namedStatuses.includes(st) : statusGroups[fStatus].includes(st);
@@ -411,6 +411,7 @@ export default function StudentDashboard() {
                       { value: 'IN_CONSULTATION', label: 'In Consultation / Consultation Hours' },
                       { value: 'VACANT', label: 'Vacant' },
                       { value: 'ON_LEAVE', label: 'On Leave' },
+                      { value: 'NONE', label: 'Not scheduled (--)' },
                       { value: 'OTHER', label: 'Other (Meeting, Break, Out of Office)' },
                     ]} />
                 </FilterField>

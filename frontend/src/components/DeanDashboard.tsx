@@ -108,17 +108,16 @@ export default function DeanDashboard() {
       (!rosterProgram || facultyProgram(f) === rosterProgram) &&
       (!rosterStatus || facultyStatusOf(f) === rosterStatus) &&
       matchesGender(f.gender, rosterGender) &&
-      (!q || f.name.toLowerCase().includes(q) || (f.programPosition || '').toLowerCase().includes(q) || (f.currentLocation || f.room || '').toLowerCase().includes(q))
+      (!q || f.name.toLowerCase().includes(q) || (f.programPosition || '').toLowerCase().includes(q))
     );
   }, [facultyRoster, rosterPosition, rosterProgram, rosterStatus, rosterGender, rosterSearch]);
 
   // Exports what the roster currently shows (so a filtered view exports as filtered).
   const handleExportCSV = () => {
     const cell = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    let csvContent = "data:text/csv;charset=utf-8,Name,Program/Position,Gender,Status,Location\n";
+    let csvContent = "data:text/csv;charset=utf-8,Name,Program/Position,Gender,Status\n";
     filteredRoster.forEach(f => {
-      const location = f.currentLocation || f.room || 'N/A';
-      csvContent += [f.name, f.programPosition, f.gender || 'Not provided', facultyStatusOf(f), location].map(cell).join(',') + '\n';
+      csvContent += [f.name, f.programPosition, f.gender || 'Not provided', facultyStatusOf(f)].map(cell).join(',') + '\n';
     });
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -271,7 +270,7 @@ export default function DeanDashboard() {
               </FilterField>
               <FilterField label="Search">
                 <Input
-                  placeholder="Name, position or location..."
+                  placeholder="Name or position..."
                   aria-label="Search faculty roster"
                   value={rosterSearch}
                   onChange={(e) => setRosterSearch(e.target.value)}
@@ -282,10 +281,10 @@ export default function DeanDashboard() {
 
             <ScrollTable>
               <Table variant="simple" size="md">
-                <Thead><Tr><Th color={C.textMid}>Name</Th><Th color={C.textMid}>Position</Th><Th color={C.textMid}>Gender</Th><Th color={C.textMid}>Status</Th><Th color={C.textMid}>Location</Th></Tr></Thead>
+                <Thead><Tr><Th color={C.textMid}>Name</Th><Th color={C.textMid}>Position</Th><Th color={C.textMid}>Gender</Th><Th color={C.textMid}>Status</Th></Tr></Thead>
                 <Tbody>
                   {filteredRoster.length === 0 && (
-                    <Tr><Td colSpan={5}><Text color={C.textMid} py={6} textAlign="center">No faculty match these filters.</Text></Td></Tr>
+                    <Tr><Td colSpan={4}><Text color={C.textMid} py={6} textAlign="center">No faculty match these filters.</Text></Td></Tr>
                   )}
                   {filteredRoster.map((prof) => (
                     <Tr key={prof._id} _hover={{ bg: hoverBg }}>
@@ -298,7 +297,6 @@ export default function DeanDashboard() {
                         </Badge>
                         {facultyStatusUntil(prof) && <Text fontSize="xs" color={C.textMid}>{facultyStatusUntil(prof)}</Text>}
                       </Td>
-                      <Td color={C.text}>{prof.currentLocation || prof.room || 'N/A'}</Td>
                     </Tr>
                   ))}
                 </Tbody>

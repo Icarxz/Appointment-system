@@ -167,7 +167,7 @@ router.get('/status', requireAuth(ALL_ROLES), async (req, res) => {
     const facultyFilter = { role: 'FACULTY' };
     if (req.user.role !== 'ADMIN') facultyFilter.accountStatus = { $nin: ['RESTRICTED', 'ARCHIVED'] };
     const facultyList = await User.find(facultyFilter)
-      .select('name gender programPosition program currentStatus currentLocation room statusNote flaggedDate flaggedReason')
+      .select('name gender programPosition program currentStatus room statusNote flaggedDate flaggedReason')
       .sort({ name: 1 });
 
     // Status is worked out here on every request from the schedule, running consultations and
@@ -196,9 +196,9 @@ router.get('/status', requireAuth(ALL_ROLES), async (req, res) => {
       obj.statusEntryId = r.entryId || null;
       obj.notices = publicNotices(inputs.get(String(f._id)).entries, now); // upcoming meetings / leave, for students and staff
       obj.currentStatus = toLegacyStatus(r.status); // old screens keep working until they use the fields above
-      obj.currentLocation = r.location || obj.room || '';
-      // Students never receive classroom locations (also stripped from the schedule endpoint)
-      if (req.user.role === 'STUDENT') { delete obj.room; delete obj.currentLocation; }
+      // No Location comes from the status; students never receive classroom locations (also stripped from the schedule endpoint)
+      delete obj.currentLocation;
+      if (req.user.role === 'STUDENT') delete obj.room;
       return obj;
     });
 
@@ -931,10 +931,10 @@ router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']
 // 13. PUT ROUTE: Save a Notice
 // 13b. PUT ROUTE: Faculty updates their own live status/location (used by FacultyDashboard's status page)
 // ---- My Status: manual statuses that always expire ----------------------------------------------
-// Body: { type, duration, untilTime?, location? }  duration = 15 | 30 | 60 | 120 | 'UNTIL' | 'EOD'
+// Body: { type, duration, untilTime? }  duration = 15 | 30 | 60 | 120 | 'UNTIL' | 'EOD'
 router.post('/status-entry', requireAuth(['FACULTY']), async (req, res) => {
   try {
-    const { type, duration, untilTime, location } = req.body || {};
+    const { type, duration, untilTime } = req.body || {};
     const now = new Date();
     const end = endFromChoice(duration, untilTime, now);
     if (!end.ok) return res.status(400).json({ error: end.error });
@@ -955,9 +955,8 @@ router.post('/status-entry', requireAuth(['FACULTY']), async (req, res) => {
 
     const entry = await FacultyStatusEntry.create({
       facultyId: req.user.userId, type, startAt: now, endAt: end.endAt,
-      location: String(location || '').trim().slice(0, 80),
     });
-    await StatusHistory.create({ facultyId: req.user.userId, status: type, note: entry.location });
+    await StatusHistory.create({ facultyId: req.user.userId, status: type });
     res.status(201).json(entry);
   } catch (err) {
     res.status(500).json({ error: 'Error setting status' });
@@ -982,7 +981,7 @@ router.delete('/status-entry/:id', requireAuth(['FACULTY']), async (req, res) =>
 
 // ---- Post a Notice: a meeting or leave planned ahead (shown to students, closes booking in its window) ----
 // Meeting body: { type:'IN_MEETING', startDate, startTime, endTime, reason, reasonOther?, makeUpInfo? }
-// Leave body:   { type:'ON_LEAVE', startDate, endDate, reason, reasonOther?, makeUpInfo? }
+// Leave body:   { type:'ON_LEAVE', startDate, endDate, startPart?:'FULL'|'PM', endPart?:'FULL'|'AM', reason, reasonOther?, makeUpInfo? }
 router.post('/notice-entry', requireAuth(['FACULTY']), async (req, res) => {
   try {
     const b = req.body || {};

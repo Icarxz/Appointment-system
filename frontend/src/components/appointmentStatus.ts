@@ -24,6 +24,7 @@ export const statusColor = (status: string): string => {
 
 const FACULTY_STATUS_LABELS: Record<string, string> = {
   VACANT: 'Vacant',
+  NONE: '--', // outside the scheduled day (before 7:00 AM, after the last class or consultation hours, or a day with none)
   AVAILABLE: 'Available', // older records only
   IN_CLASS: 'In Class',
   IN_CONSULTATION: 'In Consultation',
