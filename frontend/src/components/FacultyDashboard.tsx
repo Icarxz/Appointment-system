@@ -8,7 +8,7 @@ import BroadcastBanner from './BroadcastBanner';
 import {
   Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Badge, Text, 
   Button as ChakraButton, Input, HStack, useToast, FormControl, 
-  FormLabel, Flex, VStack, Textarea
+  FormLabel, Flex, VStack, Textarea, Tabs, TabList, TabPanels, Tab, TabPanel
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ProfileGate from './ProfileGate';
@@ -407,7 +407,7 @@ const saveConsultationHours = async () => {
   const [logYear, setLogYear] = useState('');
   const [logSection, setLogSection] = useState('');
   const [logSort, setLogSort] = useState<'desc' | 'asc'>('desc'); // order of the day groups
-  const [logDay, setLogDay] = useState(''); // one chosen day ("YYYY-MM-DD"): the day requested for sign-off rows, the day saved for saved rows
+  const [logDay, setLogDay] = useState(''); // one chosen day ("YYYY-MM-DD"): the day requested for pending rows, the day saved for saved rows
   const logFiltersActive = !!(logSearch || logGender || logProgram || logYear || logSection || logDay || logSort !== 'desc');
   const clearLogFilters = () => { setLogSearch(''); setLogGender(''); setLogProgram(''); setLogYear(''); setLogSection(''); setLogDay(''); setLogSort('desc'); };
   const matchesLogFilters = (apt: any) => {
@@ -420,7 +420,7 @@ const saveConsultationHours = async () => {
       (!logSection || c.section === logSection) &&
       (!q || (apt.studentName || '').toLowerCase().includes(q) || (apt.casePresented || apt.reason || '').toLowerCase().includes(q));
   };
-  // Ready for sign-off is grouped by the day the student REQUESTED; saved records by the day they were SAVED (signed off).
+  // Pending consultations are grouped by the day the student REQUESTED; saved consultations by the day they were SAVED.
   const requestedDayOf = (a: any) => manilaDay(a.createdAt);
   const savedDayOf = (a: any) => manilaDay(a.completedAt);
   const signOffAll = myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)');
@@ -1213,7 +1213,7 @@ const saveConsultationHours = async () => {
               <Box fontSize="40px" mb={2}>✅</Box>
               <Heading size="md" color={textColor} mb={2}>Consultation Completed</Heading>
               <Text color={mutedText} fontSize="sm" mb={6}>
-                {completionModal.studentName}{completionModal.studentSection ? ` (${completionModal.studentSection})` : ''} has been signed off and added to your Consultation Log.
+                {completionModal.studentName}{completionModal.studentSection ? ` (${completionModal.studentSection})` : ''} has been saved to your Consultation Log (Saved consultations).
               </Text>
               <ChakraButton colorScheme="green" size="sm" onClick={() => setCompletionModal(null)}>Done</ChakraButton>
             </Box>
@@ -1487,10 +1487,17 @@ const saveConsultationHours = async () => {
               </FilterField>
             </FilterPanel>
 
-            <Box className="no-print" bg={cardBg} p={5} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" mb={5}>
-              <Heading size="md" color={textColor} mb={1}>Ready for sign-off</Heading>
+            <Tabs variant="soft-rounded" size="sm" colorScheme="blue" isLazy={false} className="no-print">
+              <TabList mb={4} flexWrap="wrap" gap={1}>
+                <Tab>Pending consultations ({pendingSignOff.length})</Tab>
+                <Tab>Saved consultations ({savedLog.length})</Tab>
+              </TabList>
+              <TabPanels>
+                <TabPanel px={0} pt={0}>
+            <Box className="no-print" bg={cardBg} p={5} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+              <Heading size="md" color={textColor} mb={1}>Pending consultations</Heading>
               <Text color={mutedText} fontSize="sm" mb={4}>
-                Complete the consultation details in the row, then save it to add the entry to your records.
+                Complete the consultation details in the row, then save it. It moves to Saved consultations.
               </Text>
               <Box overflowX="auto">
                 <Table size="sm" minW="1120px" variant="simple">
@@ -1507,7 +1514,7 @@ const saveConsultationHours = async () => {
                   </Thead>
                   <Tbody>
                     {pendingSignOff.length === 0 ? (
-                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No consultations are waiting for sign-off.</Td></Tr>
+                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No pending consultations.</Td></Tr>
                     ) : signOffGroups.map(g => (
                       <React.Fragment key={g.day || 'older'}>
                       {dayRow(g.day, 'Requested', 'Earlier requests')}
@@ -1515,7 +1522,7 @@ const saveConsultationHours = async () => {
                         <Tr key={apt._id}>
                           <Td minW="190px" color={textColor}>
                             <PersonCell name={apt.studentName} />
-                            {apt.status === 'MISSED (FACULTY)' && <Badge mt={1} colorScheme="orange">Late sign-off</Badge>}
+                            {apt.status === 'MISSED (FACULTY)' && <Badge mt={1} colorScheme="orange">Late</Badge>}
                           </Td>
                           <Td minW="95px"><GenderBadge gender={apt.studentId?.gender} /></Td>
                           <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>
@@ -1557,7 +1564,7 @@ const saveConsultationHours = async () => {
                               if (!chosen || chosen === 'Others') { submitLogEntry(apt._id); return; }
                               setConfirmCfg({
                                 title: 'Complete and save this consultation?',
-                                body: `${apt.studentName}'s consultation on ${formatDate(apt.date)} will be signed off and added to your records. Afterwards only the intervention can be edited.`,
+                                body: `${apt.studentName}'s consultation on ${formatDate(apt.date)} will be saved to your Saved consultations. Afterwards only the intervention can be edited.`,
                                 confirmLabel: 'Complete & save', run: () => submitLogEntry(apt._id),
                               });
                             }}>
@@ -1572,9 +1579,10 @@ const saveConsultationHours = async () => {
                 </Table>
               </Box>
             </Box>
-
+                </TabPanel>
+                <TabPanel px={0} pt={0}>
             <Box className="no-print" bg={cardBg} p={5} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
-              <Heading size="md" color={textColor} mb={1}>Saved consultation records</Heading>
+              <Heading size="md" color={textColor} mb={1}>Saved consultations</Heading>
               <Text color={mutedText} fontSize="sm" mb={4}>
                 You can edit the case and action fields, then select Save Changes on the same row.
               </Text>
@@ -1593,7 +1601,7 @@ const saveConsultationHours = async () => {
                   </Thead>
                   <Tbody>
                     {savedLog.length === 0 ? (
-                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No saved consultation records yet.</Td></Tr>
+                      <Tr><Td colSpan={7} color={mutedText} py={5} textAlign="center">No saved consultations yet.</Td></Tr>
                     ) : savedGroups.map(g => (
                       <React.Fragment key={g.day || 'older'}>
                       {dayRow(g.day, 'Saved', 'Earlier records')}
@@ -1643,6 +1651,9 @@ const saveConsultationHours = async () => {
                 </Table>
               </Box>
             </Box>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
 
             <ConsultationPrintForm facultyName={userName || ''} entries={consultLog} />
           </Box>

@@ -649,7 +649,7 @@ export default function AdminDashboard() {
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <Flex mb={4} align="center" justify="space-between" gap={3} flexWrap="wrap" className="no-print">
               <Text color={mutedText} fontSize="sm">
-                Completed consultations signed off by faculty. {recordsFaculty ? 'The printout is that faculty member\'s Students\' Consultation Form.' : 'Choose a faculty to print their Students\' Consultation Form.'}
+                Saved consultations of faculty. {recordsFaculty ? 'The printout is that faculty member\'s Students\' Consultation Form.' : 'Choose a faculty to print their Students\' Consultation Form.'}
               </Text>
               <ChakraButton colorScheme="blue" size="sm" onClick={printConsultationForm} isDisabled={!printReady}
                 title={recordsFaculty ? undefined : 'Choose a faculty first'}>Print / Save as PDF</ChakraButton>

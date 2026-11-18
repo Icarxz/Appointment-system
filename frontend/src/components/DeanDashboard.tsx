@@ -209,7 +209,7 @@ export default function DeanDashboard() {
         {activePage === 'records' && (
           <Box id="print-area" bg={C.surface} p={6} borderRadius="lg" borderWidth="1px" borderColor={C.border} shadow="sm">
             <Flex mb={4} align="center" justify="space-between" gap={3} flexWrap="wrap" className="no-print">
-              <Text color={C.textMid} fontSize="sm">Completed consultations signed off by faculty.</Text>
+              <Text color={C.textMid} fontSize="sm">Saved consultations of faculty.</Text>
               <ChakraButton colorScheme="blue" size="sm" onClick={() => window.print()}>Print / Save as PDF</ChakraButton>
             </Flex>
 
