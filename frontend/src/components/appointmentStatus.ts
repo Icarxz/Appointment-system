@@ -7,7 +7,7 @@ const LABELS: Record<string, string> = {
   'CANCELLED BY STUDENT': 'Cancelled by Student',
   'CANCELLED BY FACULTY': 'Cancelled by Faculty',
   'CANCELLED (FACULTY ON LEAVE)': 'Cancelled (Faculty on Leave)',
-  'MISSED (STUDENT)': 'Student No-Show',
+  'MISSED (STUDENT)': 'Missed by Student',
   'MISSED (FACULTY)': 'Missed by Faculty',
 };
 

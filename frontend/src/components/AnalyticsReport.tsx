@@ -156,7 +156,7 @@ export default function AnalyticsReport() {
       <Table size="sm">
         <Thead position="sticky" top={0} bg={surface} zIndex={1}><Tr>
           <Th color={muted}>Faculty</Th><Th color={muted} isNumeric>Completed</Th><Th color={muted} isNumeric>Declined</Th><Th color={muted} isNumeric>Expired</Th>
-          <Th color={muted} isNumeric>Cancelled by faculty</Th><Th color={muted} isNumeric>Missed by faculty</Th><Th color={muted} isNumeric>Student no-shows</Th>
+          <Th color={muted} isNumeric>Cancelled by faculty</Th><Th color={muted} isNumeric>Missed by faculty</Th><Th color={muted} isNumeric>Missed by student</Th>
         </Tr></Thead>
         <Tbody>
           {data.facultyOutcomes.map(f => (
@@ -177,7 +177,7 @@ export default function AnalyticsReport() {
       <Table size="sm">
         <Thead position="sticky" top={0} bg={surface} zIndex={1}><Tr>
           <Th color={muted}>Student</Th><Th color={muted} isNumeric>Completed</Th><Th color={muted} isNumeric>Declined</Th>
-          <Th color={muted} isNumeric>Cancelled by student</Th><Th color={muted} isNumeric>No-shows</Th>
+          <Th color={muted} isNumeric>Cancelled by student</Th><Th color={muted} isNumeric>Missed by student</Th>
         </Tr></Thead>
         <Tbody>
           {data.studentOutcomes.map(s => (

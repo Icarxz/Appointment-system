@@ -61,7 +61,7 @@ function buildFacultyOutcomes(rows, faculty) {
 }
 
 // rows: [{ _id: { s: studentKey, st: status }, name, section, count }]
-// -> one line per student who has at least one completed / rejected / cancelled / no-show,
+// -> one line per student who has at least one completed / rejected / cancelled / missed by student,
 //    most completed consultations first
 function buildStudentOutcomes(rows) {
   const by = new Map();

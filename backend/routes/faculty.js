@@ -1420,13 +1420,13 @@ router.post('/appointments/bulk-cancel', requireAuth(['STUDENT', 'FACULTY', 'DEA
   }
 });
 
-// Faculty marks that the student did not show up (counted as "MISSED (STUDENT)")
+// Faculty marks the consultation as Missed by Student (stored as "MISSED (STUDENT)"; the route name is kept)
 router.patch('/appointment/:id/no-show', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const apt = await Appointment.findOne({ _id: req.params.id, facultyId: req.user.userId });
     if (!apt) return res.status(404).json({ error: 'Appointment not found.' });
     if (apt.status !== 'APPROVED') {
-      return res.status(400).json({ error: 'Only approved consultations can be marked as a no-show.' });
+      return res.status(400).json({ error: 'Only approved consultations can be marked as Missed by Student.' });
     }
     // Not before the appointment has actually started (Philippine time)
     if (Date.now() < manilaDate(apt.date, apt.time).getTime()) {
@@ -1438,13 +1438,13 @@ router.patch('/appointment/:id/no-show', requireAuth(['FACULTY', 'DEAN']), async
 
     await notify(await resolveStudentId(apt), {
       type: 'APPOINTMENT_UPDATE',
-      title: 'Consultation missed',
+      title: 'Consultation marked Missed by Student',
       message: `You did not attend your consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)}.`,
       appointmentId: apt._id,
     });
-    res.json({ message: 'Marked as student no-show.', appointment: apt });
+    res.json({ message: 'Marked as Missed by Student.', appointment: apt });
   } catch (error) {
-    res.status(500).json({ error: 'Server error marking no-show.' });
+    res.status(500).json({ error: 'Server error marking as Missed by Student.' });
   }
 });
 

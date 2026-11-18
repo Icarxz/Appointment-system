@@ -804,12 +804,12 @@ const saveConsultationHours = async () => {
 
   // The student did not turn up to an approved consultation
   const markNoShow = async (apt: any) => {
-    if (!window.confirm(`Mark ${apt.studentName} as a no-show for this consultation?`)) return;
+    if (!window.confirm(`Mark ${apt.studentName} as Missed by Student for this consultation?`)) return;
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${apt._id}/no-show`, { method: 'PATCH' });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not mark the no-show.');
-      toast({ title: 'Marked as student no-show', status: 'info' });
+      if (!response.ok) throw new Error(data.error || 'Could not mark as Missed by Student.');
+      toast({ title: 'Marked as Missed by Student', status: 'info' });
       fetchData();
     } catch (error: any) {
       toast({ title: 'Could not update', description: error.message, status: 'error' });

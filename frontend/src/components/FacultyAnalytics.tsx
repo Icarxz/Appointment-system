@@ -112,7 +112,7 @@ export default function FacultyAnalytics() {
         <HBarChart color="#0891b2" items={s.purposes.items.map(p => ({ label: p.label, value: p.count, note: `${p.percent}%` }))} emptyText="No requests yet." />
       </ChartCard>
 
-      <ChartCard title="Reasons from my students" hint="Reasons your students gave for missed or cancelled consultations. They do not remove a no-show from your totals.">
+      <ChartCard title="Reasons from my students" hint="Reasons your students gave for missed or cancelled consultations. They do not remove a Missed by Student from your totals.">
         <AppealsByReason rows={appeals.rows} reasons={appeals.reasons} />
         <Text fontSize="xs" color={muted} mt={2}>
           Reason rate {pctText(appeals.summary.appealRate)} · student reasons: {appeals.summary.total} · my own reasons to the Dean: {appeals.summary.faculty.made}
