@@ -160,9 +160,10 @@ export default function LandingPage() {
   const { isOpen, onOpen, onClose: closeModal } = useDisclosure();
   // Step 1 is always the role choice. It only says which sign-in screen to show (and which audience the server checks);
   // the server still decides the real role.
-  const [authStep, setAuthStep] = React.useState<'role' | 'student' | 'faculty'>('role');
-  const openAuth = () => { setAuthStep('role'); onOpen(); };
-  const onClose = () => { closeModal(); setAuthStep('role'); };
+  const [authStep, setAuthStep] = React.useState<'login' | 'role' | 'student' | 'faculty'>('login');
+  // "Log in" (and the Appoint Consultation buttons) go straight to Google for everyone; "Sign up" starts at the role choice.
+  const openAuth = (step: 'login' | 'role' = 'login') => { setAuthStep(step); onOpen(); };
+  const onClose = () => { closeModal(); setAuthStep('login'); };
 
   const goTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -198,28 +199,25 @@ export default function LandingPage() {
   };
 
   // The only way to sign in. The server verifies the token, checks the school domain and decides the role
-  // (student, faculty, dean or admin) from the roster / ADMIN_EMAILS. `audience` is only the screen the person chose
-  // (STUDENT, or STAFF for Faculty / Dean / Admin); the server uses it to refuse a wrong-screen sign-in.
-  const friendlyError = (message: string, audience: 'STUDENT' | 'STAFF') => {
-    if (audience === 'STAFF' && /not registered as faculty or staff/i.test(message)) {
-      return 'Your faculty account has not been registered. Please contact the System Administrator for assistance.';
-    }
+  // (student, faculty, dean or admin) from the roster / ADMIN_EMAILS. The Student sign-up screen sends audience STUDENT so
+  // a faculty/staff account cannot be used there; Log in sends none, like before.
+  const friendlyError = (message: string) => {
     return (message || 'Please try again.')
-      .replace('Please use the Faculty & Staff tab.', 'Please go back and choose Faculty.')
-      .replace('Please use the Student tab.', 'Please go back and choose Student.');
+      .replace('Please use the Faculty & Staff tab.', 'Faculty, Dean and Admin accounts log in with the Log in button.')
+      .replace('Please use the Student tab.', 'Please use the Log in button.');
   };
-  const handleGoogleCredential = async (credential: string, audience: 'STUDENT' | 'STAFF') => {
+  const handleGoogleCredential = async (credential: string, audience?: 'STUDENT') => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential, audience })
+        body: JSON.stringify(audience ? { credential, audience } : { credential })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       finishLogin(data); // an incomplete profile is finished on the dashboard (ProfileGate)
     } catch (error: any) {
-      toast({ title: 'Sign-in failed', description: friendlyError(error.message, audience), status: 'error', position: 'top' });
+      toast({ title: 'Sign-in failed', description: friendlyError(error.message), status: 'error', position: 'top' });
     }
   };
 
@@ -249,9 +247,20 @@ export default function LandingPage() {
     </Box>
   );
 
-  // Step 1: Student or Faculty. Both "Log in" and "Sign in" open this.
-  // Step 2: the matching Google sign-in screen. There is no faculty sign-up: faculty, Dean and Admin accounts are added by the administrator.
-  const authTabs = authStep === 'role' ? (
+  // Log in: Google only, same for every role (the server decides the role; no audience sent).
+  // Sign up: Student or Faculty first. Students continue with Google; Faculty only sees the administrator message (no faculty sign-up).
+  const authTabs = authStep === 'login' ? (
+    <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
+      <Text fontSize="sm" color={bodyColor}>
+        Sign in with your school Google account. Students, faculty, Dean and Admin all log in here.
+      </Text>
+      <VStack spacing={2}>
+        <GoogleSignInButton onCredential={(c) => handleGoogleCredential(c)} />
+        <Text fontSize="xs" color={bodyColor}>Use your @antiquespride.edu.ph account</Text>
+      </VStack>
+      <Text fontSize="xs" color={bodyColor}>New student? Close this and choose Sign up.</Text>
+    </VStack>
+  ) : authStep === 'role' ? (
     <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
       <Text fontSize="sm" color={bodyColor}>Choose how you will use CCIS Sync.</Text>
       {roleChoice(CapIcon, 'Student', 'Appoint consultations with your faculty.', 'student')}
@@ -273,15 +282,6 @@ export default function LandingPage() {
   ) : (
     <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
       {backToRoles}
-      <Box>
-        <Heading size="md" color={headingColor}>Faculty Access</Heading>
-        <Text fontWeight="700" color={headingColor} mt={1}>Welcome Back!</Text>
-        <Text fontSize="sm" color={bodyColor} mt={1}>Sign in using your registered school Google account.</Text>
-      </Box>
-      <VStack spacing={2}>
-        <GoogleSignInButton text="continue_with" onCredential={(c) => handleGoogleCredential(c, 'STAFF')} />
-        <Text fontSize="xs" color={bodyColor}>Use your @antiquespride.edu.ph account</Text>
-      </VStack>
       <HStack align="flex-start" spacing={3} p={4} borderRadius="lg" borderWidth="1px" borderColor={assistBorder} bg={assistBg} role="note">
         <InfoOutlineIcon mt="3px" color={TEAL} flexShrink={0} />
         <Box>
@@ -313,11 +313,11 @@ export default function LandingPage() {
         size="sm" px={{ base: 3, sm: 5 }} variant="outline" borderRadius="full" borderWidth="2px"
         borderColor={outlineBorder} color={headingColor} fontWeight={700} letterSpacing="0.04em"
         _hover={{ bg: outlineHoverBg }} _active={{ bg: outlineHoverBg }}
-        onClick={() => openAuth()}
+        onClick={() => openAuth('login')}
       >
         Log in
       </Button>
-      <Button size="sm" px={{ base: 3, sm: 5 }} {...pillPrimary} onClick={() => openAuth()}>Sign in</Button>
+      <Button size="sm" px={{ base: 3, sm: 5 }} {...pillPrimary} onClick={() => openAuth('role')}>Sign up</Button>
     </HStack>
   );
 
@@ -523,7 +523,7 @@ export default function LandingPage() {
         <ModalContent borderRadius="2xl" overflow="hidden" bg={modalBg}>
           <ModalHeader display="flex" alignItems="center" gap={3} pr={12} color={headingColor}>
             <LogoMark size={28} color={NAVY} />
-            <Text fontWeight="800" letterSpacing="0.04em">{authStep === 'role' ? 'Welcome to CCIS Sync' : authStep === 'student' ? 'CCIS Sync: Student' : 'CCIS Sync: Faculty'}</Text>
+            <Text fontWeight="800" letterSpacing="0.04em">{authStep === 'login' ? 'Welcome back to CCIS Sync' : authStep === 'role' ? 'Create your CCIS Sync account' : authStep === 'student' ? 'CCIS Sync: Student' : 'CCIS Sync: Faculty'}</Text>
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody p={0}>
