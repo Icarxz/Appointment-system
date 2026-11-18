@@ -948,13 +948,8 @@ router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']
 // 13. PUT ROUTE: Save a Notice
 // 13b. Faculty sets their own manual status (used by the My Status card)
 // ---- My Status: manual statuses that always expire ----------------------------------------------
-<<<<<<< ours
 // Body: { type, duration, untilTime? }  duration = 15 | 30 | 60 | 120 | 'UNTIL' | 'EOD'
-router.post('/status-entry', requireAuth(['FACULTY']), async (req, res) => {
-=======
-// Body: { type, duration, untilTime?, location? }  duration = 15 | 30 | 60 | 120 | 'UNTIL' | 'EOD'
 router.post('/status-entry', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
->>>>>>> theirs
   try {
     const { type, duration, untilTime } = req.body || {};
     const now = new Date();
