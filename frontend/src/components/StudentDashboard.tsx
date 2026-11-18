@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
-import { PROGRAM_OPTIONS, facultyProgram } from '../utils/programs';
+import { PROGRAMS, PROGRAM_OPTIONS, facultyProgram } from '../utils/programs';
 import { formatDate, formatDateTime } from './dateUtils';
 import BroadcastBanner from './BroadcastBanner';
 import OnboardingModal from './OnboardingModal';
@@ -65,12 +65,17 @@ export default function StudentDashboard() {
   const { aptId, closeApt } = useDeepLink(['home', 'appointments', 'requests', 'profile'] as const, setActivePage);
   const [faculty, setFaculty] = useState<any[]>([]);
   const [studentSection] = useState(localStorage.getItem('programPosition') || '');
+  // The student's own program ("BS COMSCI 2A" -> "BS COMSCI"); '' when it is missing or not one of the three. It is only the starting
+  // value of the Program filters below: the student can switch to any other program or to all programs.
+  const studentProgram = (() => { const m = studentSection.trim().match(/^(.*\S)\s+\d+[A-Za-z]+$/); return m && PROGRAMS.includes(m[1]) ? m[1] : ''; })();
+  // A faculty member with no program saved yet is shown under every program, so nobody disappears from the list.
+  const inProgram = (f: any, program: string) => !program || facultyProgram(f) === program || facultyProgram(f) === '';
 
   // Faculty Status: search + filters (Gender, Position, Status) and the master-schedule dialog
   const [statusSearch, setStatusSearch] = useState('');
   const [fGender, setFGender] = useState('');
   const [fPosition, setFPosition] = useState('');
-  const [fProgram, setFProgram] = useState('');
+  const [fProgram, setFProgram] = useState(studentProgram);
   const [fStatus, setFStatus] = useState('');
   const { isOpen: isMasterOpen, onOpen: onMasterOpen, onClose: onMasterClose } = useDisclosure();
   const [masterFaculty, setMasterFaculty] = useState<any>(null);
@@ -78,6 +83,7 @@ export default function StudentDashboard() {
 
   const [selectedFaculty, setSelectedFaculty] = useState('');
   const [facultySearch, setFacultySearch] = useState('');
+  const [bProgram, setBProgram] = useState(studentProgram); // Book Consultation: program shown in the professor list
   // Bookable slots for the chosen professor (hourly pieces of official + added consultation hours, next 4 weeks)
   const [slots, setSlots] = useState<any[]>([]);
   const [busy, setBusy] = useState<any[]>([]);           // class and already-booked times (no names), for the calendar
@@ -230,16 +236,18 @@ export default function StudentDashboard() {
     f.name.toLowerCase().includes(statusSearch.toLowerCase()) &&
     matchesGender(f.gender, fGender) &&
     (!fPosition || normalizeFacultyPosition(f.programPosition || '') === fPosition) &&
-    (!fProgram || facultyProgram(f) === fProgram) &&
+    inProgram(f, fProgram) &&
     (!fStatus || matchesStatus(facultyStatusOf(f)))
   );
 
   const matchingFaculty = faculty.filter(f => f.name.toLowerCase().includes(facultySearch.toLowerCase()));
   const recommendedFaculty = recommendedIds.map(id => matchingFaculty.find(f => f._id === id)).filter(Boolean) as any[];
   // With nothing typed only the recommendations show; once the student types, they stay pinned on top.
+  // Typing searches ALL professors (any program). With nothing typed the list is the chosen program (the student's own by default).
+  const programFaculty = faculty.filter(f => inProgram(f, bProgram));
   const filteredFaculty = [
     ...recommendedFaculty,
-    ...(facultySearch.trim() ? matchingFaculty.filter(f => !recommendedIds.includes(f._id)) : []),
+    ...(facultySearch.trim() ? matchingFaculty : programFaculty).filter(f => !recommendedIds.includes(f._id)),
   ];
 
   const selectedFacultyObj = faculty.find(f => f._id === selectedFaculty);
@@ -476,6 +484,11 @@ export default function StudentDashboard() {
                       <Input value={studentSection} isReadOnly color={textColor} borderColor={borderColor} bg={readOnlyFieldBg} cursor="not-allowed" />
                       <Text fontSize="xs" color={mutedText} mt={1}>From your account registration. Contact an admin if this is wrong.</Text>
                     </FormControl>
+                    <FormControl>
+                      <FormLabel color={textColor}>Program</FormLabel>
+                      <SearchableSelect placeholder="All programs" value={bProgram} onChange={setBProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
+                      <Text fontSize="xs" color={mutedText} mt={1}>Starts on your own program. You can request any professor: change it, or type a name to search all.</Text>
+                    </FormControl>
                     <FormControl isRequired>
                       <FormLabel color={textColor}>Select Professor</FormLabel>
                       <Input
@@ -484,10 +497,10 @@ export default function StudentDashboard() {
                         onChange={(e) => { setFacultySearch(e.target.value); setSelectedFaculty(''); }}
                         color={textColor} borderColor={borderColor} mb={2}
                       />
-                      {!selectedFaculty && (facultySearch.trim() || filteredFaculty.length > 0) && (
+                      {!selectedFaculty && (facultySearch.trim() || filteredFaculty.length > 0 || !!bProgram) && (
                         <Box borderWidth="1px" borderColor={borderColor} borderRadius="md" maxH="180px" overflowY="auto">
                           {!facultySearch.trim() && filteredFaculty.length > 0 && (
-                            <Text px={3} pt={2} fontSize="xs" color={mutedText}>Booked before. Type to search all professors.</Text>
+                            <Text px={3} pt={2} fontSize="xs" color={mutedText}>Booked before on top. Type to search all professors.</Text>
                           )}
                           {filteredFaculty.length === 0 && (
                             <Text p={3} fontSize="sm" color={mutedText}>No professors found.</Text>
