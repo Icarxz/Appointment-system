@@ -6,7 +6,7 @@
 //   POST /:id/rollback       put back the schedule this import replaced (latest ACTIVE import only, and only if nothing changed since)
 //   POST /api/schedule-import/parse     body { draft }  -> editable rows (OCR draft JSON in, cleaned rows out)
 //   POST /api/schedule-import/validate  body { facultyId, classes, consultationHours, metadata, workload, identityConfirmed } -> error / warning report
-// Faculty may only use their own account; Admin may pick any FACULTY account; Dean and Student are refused (403).
+// Faculty and Dean may only use their own account (same importer, same rules); Admin may pick any FACULTY account; Student is refused (403).
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -25,7 +25,9 @@ const { checkPdf, MAX_PDF_BYTES } = require('../utils/pdfUpload');
 const { runOcr, OcrError } = require('../utils/ocrRunner');
 
 const router = express.Router();
-const ALLOWED = ['FACULTY', 'ADMIN'];
+const ALLOWED = ['FACULTY', 'DEAN', 'ADMIN'];
+// The account being imported for must be a faculty account, or the Dean's own (importAccess already limits a Dean to himself).
+const targetRole = (user) => (user && user.role === 'DEAN' ? 'DEAN' : 'FACULTY');
 
 // Phase 5: upload the scanned PDF itself. The body is the raw PDF (no multipart, so no extra dependency).
 //   POST /api/schedule-import/preview?facultyId=<id>   Content-Type: application/pdf  -> same rows as /parse, plus fileHash
@@ -37,7 +39,7 @@ router.post('/preview', requireAuth(ALLOWED), previewLimiter, express.raw({ type
     const { facultyId } = req.query;
     if (!mongoose.isValidObjectId(facultyId)) return res.status(400).json({ error: 'Choose a faculty account.' });
     if (!importAccess(req.user, facultyId)) return res.status(403).json({ error: 'You can only import a schedule for your own account.' });
-    const target = await User.findOne({ _id: facultyId, role: 'FACULTY' }).select('_id').lean();
+    const target = await User.findOne({ _id: facultyId, role: targetRole(req.user) }).select('_id').lean();
     if (!target) return res.status(404).json({ error: 'Faculty account not found.' });
 
     const check = checkPdf(req.body);
@@ -67,7 +69,7 @@ router.post('/validate', requireAuth(ALLOWED), async (req, res) => {
     const access = importAccess(req.user, facultyId);
     if (!access) return res.status(403).json({ error: 'You can only import a schedule for your own account.' });
     // The target has to be a faculty account (a 404 for anything else, so an admin cannot probe other ids). Its name is what the printed one is compared with.
-    const target = await User.findOne({ _id: facultyId, role: 'FACULTY' }).select('name').lean();
+    const target = await User.findOne({ _id: facultyId, role: targetRole(req.user) }).select('name').lean();
     if (!target) return res.status(404).json({ error: 'Faculty account not found.' });
 
     // Never trust the browser's rows: clean them again. Weekend consultations are kept here so they are reported as errors.
@@ -101,7 +103,7 @@ const withLock = async (facultyId, res, fn) => {
 const loadTarget = async (req, res, facultyId) => {
   if (!mongoose.isValidObjectId(facultyId)) { res.status(400).json({ error: 'Choose a faculty account.' }); return null; }
   if (!importAccess(req.user, facultyId)) { res.status(403).json({ error: 'You can only import a schedule for your own account.' }); return null; }
-  const target = await User.findOne({ _id: facultyId, role: 'FACULTY' }).select('name').lean();
+  const target = await User.findOne({ _id: facultyId, role: targetRole(req.user) }).select('name').lean();
   if (!target) { res.status(404).json({ error: 'Faculty account not found.' }); return null; }
   return target;
 };

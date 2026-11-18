@@ -177,7 +177,7 @@ export default function DeanDashboard() {
     >
       <WelcomeHeader name={userName || ''} actions={activePage === 'reports' ? <ExportBar solid csvPath="/api/analytics/report.csv" fileBase="ccis-sync-report" /> : activePage === 'analytics' && accepts ? <ExportBar solid csvPath="/api/analytics/me.csv" fileBase="my-analytics" /> : undefined} />
       {CONSULTATION_PAGES.includes(activePage) && accepts ? (
-        <FacultyDashboard key={activePage} embeddedPage={activePage as any} role="DEAN" canImportSchedule={false} />
+        <FacultyDashboard key={activePage} embeddedPage={activePage as any} role="DEAN" />
       ) : (
       <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
         {activePage !== 'reports' && <PageTitle>{PAGE_TITLES[activePage]}</PageTitle>}
