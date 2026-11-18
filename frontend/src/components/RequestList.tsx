@@ -95,7 +95,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
     const menuItems: { key: string; label: string; danger?: boolean; run: () => void }[] = [];
     if (actions.includes('CAN_CANCEL') && onCancel) menuItems.push({ key: 'cancel', label: apt.status === 'PENDING' ? 'Cancel Request' : 'Cancel Appointment', danger: true, run: () => onCancel(apt) });
     if (actions.includes('HAS_ACCOMPLISHMENT') && onViewAccomplishment) menuItems.push({ key: 'acc', label: 'View Accomplishment', run: () => onViewAccomplishment(apt) });
-    if (actions.includes('CAN_MARK_NO_SHOW') && onNoShow) menuItems.push({ key: 'noshow', label: "Student didn't show", run: () => onNoShow(apt) });
+    if (actions.includes('CAN_MARK_NO_SHOW') && onNoShow) menuItems.push({ key: 'noshow', label: 'Mark Missed by Student', run: () => onNoShow(apt) });
     const bar = answerBar ? answerBar(apt) : null;
     return (
       <Box key={apt._id} bg={C.surface} borderWidth="1px" borderColor={C.border} borderRadius="lg" px={4} py={3}>

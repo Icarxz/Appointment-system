@@ -20,7 +20,7 @@ export const NEXT_ACTION_LABELS: Record<NextAction, string> = {
   CAN_APPEAL: 'Can add a reason',
   HAS_ACCOMPLISHMENT: 'Has accomplishment',
   NEEDS_ANSWER: 'Needs my answer',
-  CAN_MARK_NO_SHOW: 'Student did not show',
+  CAN_MARK_NO_SHOW: 'Mark Missed by Student',
 };
 
 // Statuses a student may appeal (the same list AppealControls and the server use).

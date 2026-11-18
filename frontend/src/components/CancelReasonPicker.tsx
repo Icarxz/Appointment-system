@@ -19,7 +19,6 @@ export const FACULTY_CANCEL_REASONS: CancelReasonOption[] = [
   { label: 'Official University Duties', hint: 'e.g., Administrative meeting, committee assignment, faculty assembly' },
   { label: 'Emergency Leave / Personal Leave', hint: 'e.g., Sick leave, emergency personal leave' },
   { label: 'Teaching Overload / Class Extension', hint: 'e.g., Extended class discussion, makeup class' },
-  { label: 'Student No-Show / Late Response', hint: 'If cancelling after the student fails to arrive within the grace period' },
   { label: 'Slot Unavailable / Fully Booked', hint: 'If the slot was accidentally double-booked or clashed with a fixed consultation limit' },
 ];
 
