@@ -22,6 +22,19 @@ export const FACULTY_CANCEL_REASONS: CancelReasonOption[] = [
   { label: 'Slot Unavailable / Fully Booked', hint: 'If the slot was accidentally double-booked or clashed with a fixed consultation limit' },
 ];
 
+// Reasons for marking a consultation as missed (the other person sees the reason, as with a cancellation).
+export const FACULTY_MISSED_REASONS: CancelReasonOption[] = [
+  { label: 'Did not arrive within 30 minutes', hint: 'The student did not come within the 30-minute grace period' },
+  { label: 'Arrived after the slot ended', hint: 'The student came only after the consultation time was over' },
+  { label: 'Could not be reached', hint: 'No answer to messages or calls during the consultation time' },
+];
+
+export const STUDENT_MISSED_REASONS: CancelReasonOption[] = [
+  { label: 'Instructor did not arrive within 30 minutes', hint: 'You waited and the instructor did not come' },
+  { label: 'Instructor was not at the meeting place', hint: 'The instructor was not where the consultation was to be held' },
+  { label: 'Instructor could not be reached', hint: 'No answer to messages or calls during the consultation time' },
+];
+
 // Reasons for appealing a missed or cancelled consultation (shown in the same dropdown picker).
 export const STUDENT_APPEAL_REASONS: CancelReasonOption[] = [
   { label: 'Medical / Health Emergency', hint: 'e.g., Sudden illness, hospital visit' },

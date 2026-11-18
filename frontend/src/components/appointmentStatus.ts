@@ -95,6 +95,24 @@ export const isBeforeCutoff = (date: string, time: string): boolean =>
 export const hasStarted = (date: string, time: string): boolean =>
   Date.now() >= new Date(`${date}T${time}:00+08:00`).getTime();
 
+// Nobody can mark a consultation as missed (Missed by Student or Missed by Faculty) until 30 minutes after its start
+// (must match MISS_GRACE_MINUTES in backend/utils/appointmentTime.js).
+export const MISS_GRACE_MINUTES = 30;
+
+/** True once the grace period after the start has passed: from here a miss can be marked. */
+export const canMarkMissedNow = (date: string, time: string): boolean =>
+  Date.now() >= new Date(`${date}T${time}:00+08:00`).getTime() + MISS_GRACE_MINUTES * 60000;
+
+// A marked miss can still be corrected (signed off as completed) for 24 hours after it was marked
+// (must match CORRECTION_HOURS in backend/utils/appointmentTime.js).
+export const CORRECTION_HOURS = 24;
+
+export const canCorrectMissNow = (apt: { status: string; missedAt?: string; updatedAt?: string }): boolean => {
+  if (apt.status !== 'MISSED (STUDENT)' && apt.status !== 'MISSED (FACULTY)') return false;
+  const since = apt.missedAt || apt.updatedAt;
+  return !!since && Date.now() - new Date(since).getTime() <= CORRECTION_HOURS * 3600000;
+};
+
 /** The fields the request lists (table rows and phone cards) read from an appointment. The API sends more. */
 /** The free time still left for a pending request (the server sends it with the faculty request list). */
 export interface AvailableWindow { start: string; end: string; minutes: number; maxMinutes: number; label: string }
@@ -107,6 +125,9 @@ export interface RequestRow {
   duration?: number;
   reason: string;
   cancelReason?: string;
+  /** Why it was marked missed (given by whoever marked it, or the system text), and who marked it. */
+  missReason?: string;
+  missedBy?: 'FACULTY' | 'STUDENT' | 'SYSTEM';
   /** Only on a pending request that has not started yet. */
   availableWindow?: AvailableWindow;
   /** Set when the professor approved a different start than the student asked for. */
@@ -116,6 +137,23 @@ export interface RequestRow {
   /** The student view gets the professor as an object; older records may have none. */
   facultyId?: { name: string } | null;
 }
+
+/**
+ * The one reason line a person sees under a status: why it was rejected, cancelled or marked missed, and from whom.
+ * Returns '' when there is nothing to show to this viewer. `role` is the viewer: students and faculty see the
+ * other side's reason; a reason the system wrote is shown to both.
+ */
+export const reasonLine = (apt: { status: string; cancelReason?: string; missReason?: string; missedBy?: string }, role: string): string => {
+  const s = apt.status;
+  if (role === 'STUDENT' && apt.cancelReason && (s === 'REJECTED' || s === 'CANCELLED BY FACULTY' || s === 'CANCELLED (FACULTY ON LEAVE)')) return `Reason from professor: ${apt.cancelReason}`;
+  if (role === 'FACULTY' && apt.cancelReason && s === 'CANCELLED BY STUDENT') return `Reason from student: ${apt.cancelReason}`;
+  if (apt.missReason && s === 'MISSED (STUDENT)' && role === 'STUDENT') return `Reason from professor: ${apt.missReason}`;
+  if (apt.missReason && s === 'MISSED (FACULTY)') {
+    if (apt.missedBy === 'SYSTEM') return `Reason: ${apt.missReason}`;
+    if (role === 'FACULTY') return `Reason from student: ${apt.missReason}`;
+  }
+  return '';
+};
 
 /** Reason the system gives when an unanswered request's hour went to another student (copy of backend/utils/appointmentTime.js). */
 export const REASON_TIME_TAKEN = "Another student's request for this time was accepted.";

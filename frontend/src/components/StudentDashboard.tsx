@@ -15,7 +15,7 @@ import { authFetch } from './authFetch';
 import { BOOKING_LEAD_HOURS, facultyStatusColor, facultyStatusLabel, facultyStatusOf, facultyStatusUntil, noticeWhenText } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
-import CancelReasonPicker, { STUDENT_CANCEL_REASONS } from './CancelReasonPicker';
+import CancelReasonPicker, { STUDENT_CANCEL_REASONS, STUDENT_MISSED_REASONS } from './CancelReasonPicker';
 import BulkCancelModal from './BulkCancelModal';
 import FacultyScheduleModal from './FacultyScheduleModal';
 import DashboardShell from './DashboardShell';
@@ -368,6 +368,32 @@ export default function StudentDashboard() {
     } finally { setCancelBusy(false); }
   };
 
+  // The instructor did not show up: the student reports it with a reason (the faculty member sees it).
+  const [missTarget, setMissTarget] = useState<any | null>(null);
+  const [missReason, setMissReason] = useState('');
+  const [missBusy, setMissBusy] = useState(false);
+
+  const handleReportFacultyMissed = async () => {
+    if (!missTarget) return;
+    setMissBusy(true);
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${missTarget._id}/faculty-missed`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: missReason })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        toast({ title: 'Reported as Missed by Faculty', description: 'The faculty member has been notified, with your reason.', status: 'info' });
+        setMissTarget(null);
+        fetchData();
+      } else {
+        toast({ title: 'Could not report', description: data.error || 'Please try again.', status: 'error' });
+      }
+    } catch (error) {
+      toast({ title: 'Could not report', description: 'Network error. Please try again.', status: 'error' });
+    } finally { setMissBusy(false); }
+  };
+
   return (
     <>
     <DashboardShell
@@ -574,6 +600,7 @@ export default function StudentDashboard() {
                 requests={myRequests}
                 onViewDetails={setDetailsId}
                 onCancel={(apt) => { setCancelReason(''); setCancelTarget(apt); }}
+                onReportFacultyMissed={(apt) => { setMissReason(''); setMissTarget(apt); }}
                 onViewAccomplishment={viewAccomplishment}
                 onChanged={fetchData}
               />
@@ -602,6 +629,29 @@ export default function StudentDashboard() {
           <ModalFooter>
             <ChakraButton variant="ghost" mr={3} onClick={() => setCancelTarget(null)} isDisabled={cancelBusy}>Keep it</ChakraButton>
             <ChakraButton colorScheme="red" onClick={handleCancelAppointment} isLoading={cancelBusy} isDisabled={!cancelReason.trim()}>Confirm cancel</ChakraButton>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Report dialog: the instructor did not show up. A reason is required; the faculty member sees it. */}
+      <Modal isOpen={!!missTarget} onClose={() => !missBusy && setMissTarget(null)} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Report Missed by Faculty?</ModalHeader>
+          <ModalCloseButton isDisabled={missBusy} />
+          <ModalBody>
+            {missTarget && (
+              <Text fontSize="sm" mb={4} color={mutedText}>
+                {missTarget.facultyId ? missTarget.facultyId.name : 'The professor'} — {formatDate(missTarget.date)} at {formatTime(missTarget.time)}. The professor will be notified and will see your reason.
+              </Text>
+            )}
+            {missTarget && (
+              <CancelReasonPicker key={missTarget._id} options={STUDENT_MISSED_REASONS} onChange={setMissReason} />
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <ChakraButton variant="ghost" mr={3} onClick={() => setMissTarget(null)} isDisabled={missBusy}>Cancel</ChakraButton>
+            <ChakraButton colorScheme="orange" onClick={handleReportFacultyMissed} isLoading={missBusy} isDisabled={!missReason.trim()}>Report</ChakraButton>
           </ModalFooter>
         </ModalContent>
       </Modal>

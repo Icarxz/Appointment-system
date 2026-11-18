@@ -14,21 +14,23 @@ export interface ListItem {
 }
 
 /** What the student can do next with a request. */
-export type NextAction = 'CAN_CANCEL' | 'CAN_APPEAL' | 'HAS_ACCOMPLISHMENT' | 'NEEDS_ANSWER' | 'CAN_MARK_NO_SHOW';
+export type NextAction = 'CAN_CANCEL' | 'CAN_APPEAL' | 'HAS_ACCOMPLISHMENT' | 'NEEDS_ANSWER' | 'CAN_MARK_NO_SHOW' | 'CAN_REPORT_FACULTY_MISSED';
 export const NEXT_ACTION_LABELS: Record<NextAction, string> = {
   CAN_CANCEL: 'Can cancel',
   CAN_APPEAL: 'Can add a reason',
   HAS_ACCOMPLISHMENT: 'Has accomplishment',
   NEEDS_ANSWER: 'Needs my answer',
   CAN_MARK_NO_SHOW: 'Mark Missed by Student',
+  CAN_REPORT_FACULTY_MISSED: 'Report Missed by Faculty',
 };
 
 // Statuses a student may appeal (the same list AppealControls and the server use).
 const STUDENT_APPEALABLE = ['MISSED (STUDENT)', 'CANCELLED BY STUDENT'];
 
-export function nextActions(apt: ListItem, canCancelNow: (a: ListItem) => boolean): NextAction[] {
+export function nextActions(apt: ListItem, canCancelNow: (a: ListItem) => boolean, missOpen: (a: ListItem) => boolean = () => false): NextAction[] {
   const out: NextAction[] = [];
   if ((apt.status === 'PENDING' || apt.status === 'APPROVED') && canCancelNow(apt)) out.push('CAN_CANCEL');
+  if (apt.status === 'APPROVED' && missOpen(apt)) out.push('CAN_REPORT_FACULTY_MISSED'); // the instructor did not show (30 minutes after the start)
   if (STUDENT_APPEALABLE.includes(apt.status) && !(apt.appeal && apt.appeal.status)) out.push('CAN_APPEAL');
   if (apt.status === 'COMPLETED') out.push('HAS_ACCOMPLISHMENT');
   return out;
@@ -37,12 +39,12 @@ export function nextActions(apt: ListItem, canCancelNow: (a: ListItem) => boolea
 // Statuses a faculty member may appeal (the same list AppealControls and the server use).
 const FACULTY_APPEALABLE = ['MISSED (FACULTY)', 'CANCELLED BY FACULTY'];
 
-/** What the faculty member can do next with a request. `started`: the requested time has already begun. */
-export function facultyNextActions(apt: ListItem, o: { canCancel: boolean; started: boolean }): NextAction[] {
+/** What the faculty member can do next with a request. `started`: the requested time has already begun. `missOpen`: the 30-minute grace period after the start is over. */
+export function facultyNextActions(apt: ListItem, o: { canCancel: boolean; started: boolean; missOpen: boolean }): NextAction[] {
   const out: NextAction[] = [];
   if (apt.status === 'PENDING' && !o.started) out.push('NEEDS_ANSWER');
   if (apt.status === 'APPROVED' && o.canCancel) out.push('CAN_CANCEL');
-  if (apt.status === 'APPROVED' && o.started) out.push('CAN_MARK_NO_SHOW');
+  if (apt.status === 'APPROVED' && o.missOpen) out.push('CAN_MARK_NO_SHOW');
   if (FACULTY_APPEALABLE.includes(apt.status) && !(apt.appeal && apt.appeal.status)) out.push('CAN_APPEAL');
   return out;
 }

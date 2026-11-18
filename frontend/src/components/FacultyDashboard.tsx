@@ -12,11 +12,11 @@ import {
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ProfileGate from './ProfileGate';
-import { hasStarted } from './appointmentStatus';
+import { hasStarted, canCorrectMissNow } from './appointmentStatus';
 import type { AvailableWindow, RequestRow } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
-import CancelReasonPicker, { FACULTY_CANCEL_REASONS } from './CancelReasonPicker';
+import CancelReasonPicker, { FACULTY_CANCEL_REASONS, FACULTY_MISSED_REASONS } from './CancelReasonPicker';
 import BulkCancelModal from './BulkCancelModal';
 import FacultyAnalytics from './FacultyAnalytics';
 import DashboardShell from './DashboardShell';
@@ -423,7 +423,7 @@ const saveConsultationHours = async () => {
   // Pending consultations are grouped by the day the student REQUESTED; saved consultations by the day they were SAVED.
   const requestedDayOf = (a: any) => manilaDay(a.createdAt);
   const savedDayOf = (a: any) => manilaDay(a.completedAt);
-  const signOffAll = myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)');
+  const signOffAll = myAppointments.filter(a => a.status === 'APPROVED' || canCorrectMissNow(a)); // approved, or marked missed within the last 24 hours
   const pendingSignOff = signOffAll.filter(a => matchesLogFilters(a) && (!logDay || requestedDayOf(a) === logDay));
   const savedLog = consultLog.filter(a => matchesLogFilters(a) && (!logDay || savedDayOf(a) === logDay));
   const signOffGroups = groupByDay(pendingSignOff, requestedDayOf, a => a.createdAt || '', logSort);
@@ -802,18 +802,28 @@ const saveConsultationHours = async () => {
     } finally { setCancelBusy(false); }
   };
 
-  // The student did not turn up to an approved consultation
-  const markNoShow = async (apt: any) => {
-    if (!window.confirm(`Mark ${apt.studentName} as Missed by Student for this consultation?`)) return;
+  // The student did not turn up to an approved consultation: ask for a reason (the student will see it), then mark it.
+  const [missTarget, setMissTarget] = useState<any | null>(null);
+  const [missReason, setMissReason] = useState('');
+  const [missBusy, setMissBusy] = useState(false);
+
+  const markNoShow = (apt: any) => { setMissReason(''); setMissTarget(apt); };
+
+  const confirmMissedByStudent = async () => {
+    if (!missTarget) return;
+    setMissBusy(true);
     try {
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${apt._id}/no-show`, { method: 'PATCH' });
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/appointment/${missTarget._id}/no-show`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: missReason })
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not mark as Missed by Student.');
-      toast({ title: 'Marked as Missed by Student', status: 'info' });
+      toast({ title: 'Marked as Missed by Student', description: 'The student has been notified, with your reason.', status: 'info' });
+      setMissTarget(null);
       fetchData();
     } catch (error: any) {
       toast({ title: 'Could not update', description: error.message, status: 'error' });
-    }
+    } finally { setMissBusy(false); }
   };
 
   // ── DYNAMIC DATA TRANSLATOR ──────────────────────────────────
@@ -1200,6 +1210,31 @@ const saveConsultationHours = async () => {
           </Box>
         )}
 
+        {missTarget && (
+          <Box
+            position="fixed" top="0" left="0" right="0" bottom="0" bg="rgba(0,0,0,0.45)"
+            display="flex" alignItems="center" justifyContent="center" zIndex={60}
+            onClick={() => !missBusy && setMissTarget(null)}
+          >
+            <Box
+              bg={cardBg} borderRadius="lg" shadow="xl" p={7} w="90%" maxW="420px"
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            >
+              <Heading size="md" color={textColor} mb={1}>Mark as Missed by Student?</Heading>
+              <Text color={mutedText} fontSize="sm" mb={4}>
+                {missTarget.studentName} — {formatDate(missTarget.date)} at {formatTime(missTarget.time)}. The student will be notified and will see your reason.
+              </Text>
+              <Box mb={4}>
+                <CancelReasonPicker key={missTarget._id} options={FACULTY_MISSED_REASONS} onChange={setMissReason} />
+              </Box>
+              <HStack justify="flex-end" spacing={3}>
+                <ChakraButton size="sm" variant="ghost" onClick={() => setMissTarget(null)} isDisabled={missBusy}>Keep it</ChakraButton>
+                <ChakraButton size="sm" colorScheme="orange" onClick={confirmMissedByStudent} isLoading={missBusy} isDisabled={!missReason.trim()}>Mark as missed</ChakraButton>
+              </HStack>
+            </Box>
+          </Box>
+        )}
+
         {completionModal && (
           <Box
             position="fixed" top="0" left="0" right="0" bottom="0" bg="rgba(0,0,0,0.45)"
@@ -1522,7 +1557,7 @@ const saveConsultationHours = async () => {
                         <Tr key={apt._id}>
                           <Td minW="190px" color={textColor}>
                             <PersonCell name={apt.studentName} />
-                            {apt.status === 'MISSED (FACULTY)' && <Badge mt={1} colorScheme="orange">Late</Badge>}
+                            {apt.status.startsWith('MISSED') && <Badge mt={1} colorScheme="orange">Marked missed: complete it to correct it</Badge>}
                           </Td>
                           <Td minW="95px"><GenderBadge gender={apt.studentId?.gender} /></Td>
                           <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>

@@ -56,6 +56,10 @@ const { isValidCohort, cohortLabel } = require('../utils/studentCohort');
 const { isProgram, programOfPosition, effectiveProgram } = require('../utils/programs');
 const { isEmploymentType } = require('../utils/employment');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
+const { transition, CHANGED_MESSAGE } = require('../utils/statusTransition');
+const { canMarkMissed, missOpensAt, canCorrectMiss, CORRECTION_HOURS, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
+const { cleanReason } = require('../utils/missReason');
+const { reportDecision } = require('../utils/reportFacultyMissed');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
@@ -219,7 +223,7 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
     const reason = String(req.body.reason || '').trim().slice(0, 300);
     
     // Replace with your actual Appointment model reference if imported differently
-    const targetApt = await Appointment.findById(req.params.id);
+    let targetApt = await Appointment.findById(req.params.id);
 
     if (!targetApt) {
       return res.status(404).json({ error: 'Appointment not found.' });
@@ -256,6 +260,7 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
     // free time that is left (consultation hours + vacant hours, up to the next class or approved appointment): the first
     // approval may take 8:00-8:30, the next can then be given 8:30 onward. Nothing is declined automatically.
     let movedFrom = null; // the start the student asked for, when the approval gave a different one
+    const changes = {};   // time fields an approval may change; written together with the status below
     if (status === 'APPROVED') {
       const facultyId = targetApt.facultyId;
       const dayOfWeek = dayOfWeekOf(targetApt.date); // from the date text itself, not the server's timezone
@@ -275,15 +280,19 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
       if (isOverlapping(plan.time, [...dayClasses, ...approvedAppointments], plan.duration)) {
         return res.status(409).json({ error: 'Double-Booking Prevented: This time block conflicts with an existing class or approved appointment.' });
       }
-      if (plan.moved) { movedFrom = targetApt.time; targetApt.requestedTime = targetApt.time; targetApt.time = plan.time; }
-      targetApt.duration = plan.duration;
+      if (plan.moved) { movedFrom = targetApt.time; changes.requestedTime = targetApt.time; changes.time = plan.time; }
+      changes.duration = plan.duration;
     }
 
-    // If math clears (or if they are just rejecting/canceling), execute the database write
+    // If math clears (or if they are just rejecting/canceling), write it in ONE step that only succeeds while the
+    // appointment still has the status we read above (so a student cancelling and the faculty approving at the same
+    // moment cannot both win).
     const previousStatus = targetApt.status;
-    targetApt.status = status;
-    if (status === 'CANCELLED BY STUDENT' || status === 'REJECTED') targetApt.cancelReason = reason;
-    await targetApt.save();
+    const set = { ...changes, status };
+    if (status === 'CANCELLED BY STUDENT' || status === 'REJECTED') set.cancelReason = reason;
+    const saved = await transition(Appointment, targetApt._id, previousStatus, set);
+    if (!saved) return res.status(409).json({ error: CHANGED_MESSAGE });
+    targetApt = saved; // from here on, the saved version (new status, time and duration) is used
 
     if (status !== previousStatus) {
       const when = `${fmtDate(targetApt.date)} at ${fmtTime(targetApt.time)}`;
@@ -1293,29 +1302,35 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY', 'DEAN']), asyn
     // The case presented is the student's Purpose of Meeting and is not editable: the body value is ignored.
     const caseValue = String(apt.reason ?? '').trim();
     if (!caseValue) return res.status(400).json({ error: 'This appointment has no purpose of meeting to record.' });
-    // MISSED (FACULTY) is what the system sets automatically when an approved consultation was
-    // never signed off; the faculty can still log it late if the consultation did take place.
-    if (apt.status !== 'APPROVED' && apt.status !== 'MISSED (FACULTY)') {
+    // A consultation marked as missed (by the faculty member, the student or the system) can still be signed off as
+    // completed if it did take place, but only for CORRECTION_HOURS after the miss was marked.
+    const wasMissed = apt.status === 'MISSED (STUDENT)' || apt.status === 'MISSED (FACULTY)';
+    if (apt.status !== 'APPROVED' && !wasMissed) {
       return res.status(400).json({ error: 'Only approved consultations can be completed.' });
+    }
+    if (wasMissed && !canCorrectMiss(apt)) {
+      return res.status(400).json({ error: `A missed consultation can only be corrected within ${CORRECTION_HOURS} hours of being marked missed.` });
     }
     if (apt.completedAt) {
       return res.status(400).json({ error: 'This consultation has already been signed off and cannot be edited.' });
     }
 
-    apt.casePresented     = caseValue;
-    apt.interventionTaken = interventionValue;
-    apt.status            = 'COMPLETED';
-    apt.completedAt       = new Date();
-    await apt.save();
+    const done = await transition(Appointment, apt._id, ['APPROVED', 'MISSED (STUDENT)', 'MISSED (FACULTY)'], {
+      casePresented: caseValue, interventionTaken: interventionValue, status: 'COMPLETED', completedAt: new Date(),
+      ...(wasMissed ? { correctedAt: new Date(), correctedFrom: apt.status } : {}),
+    }, { completedAt: { $exists: false } });
+    if (!done) return res.status(409).json({ error: CHANGED_MESSAGE });
 
     await notify(await resolveStudentId(apt), {
       type: 'CONSULTATION_LOGGED',
       title: 'Consultation completed',
-      message: `Your consultation on ${fmtDate(apt.date)} was logged and signed off by your instructor.`,
+      message: wasMissed
+        ? `Your consultation on ${fmtDate(apt.date)} was logged and signed off by your instructor. It is no longer counted as ${apt.status === 'MISSED (STUDENT)' ? 'Missed by Student' : 'Missed by Faculty'}.`
+        : `Your consultation on ${fmtDate(apt.date)} was logged and signed off by your instructor.`,
       appointmentId: apt._id,
     });
 
-    res.json({ message: 'Consultation logged and signed off.', appointment: apt });
+    res.json({ message: 'Consultation logged and signed off.', appointment: done });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -1363,9 +1378,8 @@ router.patch('/appointment/:id/cancel', requireAuth(['FACULTY', 'DEAN']), async 
     }
     const reason = String(req.body.reason || '').trim().slice(0, 300);
     if (!reason) return res.status(400).json({ error: 'Please select or enter a reason.' });
-    apt.status = 'CANCELLED BY FACULTY';
-    apt.cancelReason = reason;
-    await apt.save();
+    const cancelled = await transition(Appointment, apt._id, 'APPROVED', { status: 'CANCELLED BY FACULTY', cancelReason: reason });
+    if (!cancelled) return res.status(409).json({ error: CHANGED_MESSAGE });
 
     const faculty = await User.findById(req.user.userId).select('name');
     await notify(await resolveStudentId(apt), {
@@ -1374,7 +1388,7 @@ router.patch('/appointment/:id/cancel', requireAuth(['FACULTY', 'DEAN']), async 
       message: `${faculty ? faculty.name : 'Your instructor'} cancelled your consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)}.${reason ? ` Reason: ${reason}` : ''}`,
       appointmentId: apt._id,
     });
-    res.json({ message: 'Consultation cancelled.', appointment: apt });
+    res.json({ message: 'Consultation cancelled.', appointment: cancelled });
   } catch (error) {
     res.status(500).json({ error: 'Server error cancelling consultation.' });
   }
@@ -1400,9 +1414,8 @@ router.post('/appointments/bulk-cancel', requireAuth(['STUDENT', 'FACULTY', 'DEA
       const d = bulkCancelDecision({ role, userId: req.user.userId, userName: me && me.name, apt, nowMs: Date.now() });
       if (!d.ok) { skipped.push({ id, reason: d.reason }); continue; }
 
-      apt.status = d.newStatus;
-      apt.cancelReason = reason;
-      await apt.save();
+      const moved = await transition(Appointment, apt._id, apt.status, { status: d.newStatus, cancelReason: reason });
+      if (!moved) { skipped.push({ id, reason: 'Just updated by someone else.' }); continue; }
       cancelled.push(id);
 
       const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
@@ -1428,27 +1441,54 @@ router.patch('/appointment/:id/no-show', requireAuth(['FACULTY', 'DEAN']), async
     if (apt.status !== 'APPROVED') {
       return res.status(400).json({ error: 'Only approved consultations can be marked as Missed by Student.' });
     }
-    // Not before the appointment has actually started (Philippine time)
-    if (Date.now() < manilaDate(apt.date, apt.time).getTime()) {
-      return res.status(400).json({ error: 'This consultation has not started yet.' });
+    // Not before the grace period after the start has passed (Philippine time)
+    if (!canMarkMissed(apt)) {
+      const opens = manilaNow(missOpensAt(apt)).hhmm;
+      return res.status(400).json({ error: `A consultation can be marked as missed ${MISS_GRACE_MINUTES} minutes after its start, from ${fmtTime(opens)}.` });
     }
-    apt.status = 'MISSED (STUDENT)';
-    apt.missedAt = new Date();
-    await apt.save();
+    // Like a cancellation, a miss needs a reason, and the student sees it.
+    const reason = cleanReason(req.body && req.body.reason);
+    if (!reason) return res.status(400).json({ error: 'Please select or enter a reason.' });
+    const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (STUDENT)', missedAt: new Date(), missReason: reason, missedBy: 'FACULTY' });
+    if (!marked) return res.status(409).json({ error: CHANGED_MESSAGE });
 
     await notify(await resolveStudentId(apt), {
       type: 'APPOINTMENT_UPDATE',
       title: 'Consultation marked Missed by Student',
-      message: `You did not attend your consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)}.`,
+      message: `You did not attend your consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)}. Reason from your instructor: ${reason} If something prevented you, you can add your own reason in CCIS Sync.`,
       appointmentId: apt._id,
     });
-    res.json({ message: 'Marked as Missed by Student.', appointment: apt });
+    res.json({ message: 'Marked as Missed by Student.', appointment: marked });
   } catch (error) {
     res.status(500).json({ error: 'Server error marking as Missed by Student.' });
   }
 });
 
 // Fetch a faculty member's consultation log (completed entries, oldest first like the paper form)
+// The student reports that the instructor did not show up: the consultation becomes Missed by Faculty
+// (stored as "MISSED (FACULTY)"). Allowed 30 minutes after the start; a reason is required and the faculty member sees it.
+router.patch('/appointment/:id/faculty-missed', requireAuth(['STUDENT']), async (req, res) => {
+  try {
+    const apt = mongoose.isValidObjectId(req.params.id) ? await Appointment.findById(req.params.id) : null;
+    const me = await User.findById(req.user.userId).select('name');
+    const d = reportDecision({ apt, userId: req.user.userId, userName: me && me.name, reason: req.body && req.body.reason });
+    if (!d.ok) return res.status(d.status).json({ error: d.error });
+
+    const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (FACULTY)', missedAt: new Date(), missReason: d.reason, missedBy: 'STUDENT' });
+    if (!marked) return res.status(409).json({ error: CHANGED_MESSAGE });
+
+    await notify(apt.facultyId, {
+      type: 'APPOINTMENT_UPDATE',
+      title: 'Consultation marked Missed by Faculty',
+      message: `${apt.studentName} reported that the consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)} did not take place. Reason from the student: ${d.reason} If it did take place, you can correct it in your Consultation Log within ${CORRECTION_HOURS} hours.`,
+      appointmentId: apt._id,
+    });
+    res.json({ message: 'Reported as Missed by Faculty.', appointment: marked });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error reporting the missed consultation.' });
+  }
+});
+
 router.get('/consultation-log/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']), ownerOrStaff(r => r.params.facultyId), async (req, res) => {
   try {
     const log = await Appointment.find({ 
