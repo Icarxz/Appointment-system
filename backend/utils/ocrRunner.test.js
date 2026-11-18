@@ -14,12 +14,18 @@ const crash = script('crash.js', `process.exit(1);`);
 const failed = script('failed.js', `console.log(JSON.stringify({status:'FAILED',error:'layout'}));process.exit(2);`);
 const slow = script('slow.js', `setTimeout(()=>{},60000);`);
 const opts = s => ({ python: process.execPath, script: s });
-const tmpLeft = () => fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('sched-ocr-'));
+const tmpNow = () => fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('sched-ocr-'));
+// The system temp folder is shared: a stale folder from an older or crashed run, or another test process running OCR at the
+// same time, must not fail these tests. Only folders that appear DURING a test and stay are a leak.
+let before = new Set();
+const snapshot = () => { before = new Set(tmpNow()); };
+const tmpLeft = () => tmpNow().filter(n => !before.has(n));
 
 test('returns the program output, passes the PDF by path, and deletes the temp folder', async () => {
+  snapshot();
   const out = await runOcr(Buffer.from('hello'), opts(ok));
   assert.strictEqual(out.bytes, 5);
-  await new Promise(r => setTimeout(r, 100));
+  await new Promise(r => setTimeout(r, 500));
   assert.strictEqual(fs.existsSync(out.pdf), false);
   assert.strictEqual(tmpLeft().length, 0);
   assert.strictEqual(isBusy(), false);
@@ -35,8 +41,9 @@ test('a FAILED draft (unsupported layout) is passed through, not thrown', async 
   assert.strictEqual(out.status, 'FAILED');
 });
 test('timeout kills the program and cleans up', async () => {
+  snapshot();
   await assert.rejects(runOcr(Buffer.from('x'), { ...opts(slow), timeoutMs: 300 }), { code: 'OCR_TIMEOUT' });
-  await new Promise(r => setTimeout(r, 100));
+  await new Promise(r => setTimeout(r, 500));   // a slow disk or Windows lock gets a moment; the rm retries up to ~0.5 s
   assert.strictEqual(tmpLeft().length, 0);
   assert.strictEqual(isBusy(), false);
 });
