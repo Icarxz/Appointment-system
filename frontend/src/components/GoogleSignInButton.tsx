@@ -9,7 +9,7 @@ declare global {
 
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
 
-export default function GoogleSignInButton({ onCredential }: { onCredential: (credential: string) => void }) {
+export default function GoogleSignInButton({ onCredential, text = 'signin_with' }: { onCredential: (credential: string) => void; text?: 'signin_with' | 'continue_with' }) {
   const holder = useRef<HTMLDivElement>(null);
   const cb = useRef(onCredential);
   cb.current = onCredential;
@@ -24,7 +24,7 @@ export default function GoogleSignInButton({ onCredential }: { onCredential: (cr
         callback: (r: { credential: string }) => cb.current(r.credential),
       });
       window.google.accounts.id.renderButton(holder.current, {
-        theme: 'outline', size: 'large', text: 'signin_with', shape: 'rectangular', width: 320,
+        theme: 'outline', size: 'large', text, shape: 'rectangular', width: 320,
       });
     };
     if (window.google) { render(); return; }
@@ -36,7 +36,7 @@ export default function GoogleSignInButton({ onCredential }: { onCredential: (cr
     }
     script.addEventListener('load', render);
     return () => script?.removeEventListener('load', render);
-  }, [clientId]);
+  }, [clientId, text]);
 
   if (!clientId) {
     return <Box fontSize="sm" color="red.500">Google sign-in is not configured (missing VITE_GOOGLE_CLIENT_ID).</Box>;

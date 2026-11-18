@@ -1,5 +1,5 @@
 import React from 'react';
-import { EmailIcon, PhoneIcon, CalendarIcon, CheckCircleIcon, ChevronRightIcon } from '@chakra-ui/icons';
+import { EmailIcon, PhoneIcon, CalendarIcon, CheckCircleIcon, ChevronRightIcon, ArrowBackIcon, InfoOutlineIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
 import { isSafeAppLink, linkMatchesRole } from '../utils/deepLink';
 import GoogleSignInButton from './GoogleSignInButton';
@@ -151,10 +151,18 @@ export default function LandingPage() {
   const faqHoverBg = useColorModeValue('#f3fafd', 'gray.700');
   const outlineBorder = useColorModeValue(NAVY, 'whiteAlpha.700');
   const outlineHoverBg = useColorModeValue('#dff0f8', 'whiteAlpha.200');
+  const choiceBg = useColorModeValue('#f3fafd', 'whiteAlpha.100');
+  const choiceBorder = useColorModeValue('#cfe3ef', 'whiteAlpha.300');
+  const assistBg = useColorModeValue('#eaf5fb', 'whiteAlpha.100');
+  const assistBorder = useColorModeValue('#9fd0e6', 'whiteAlpha.300');
 
   // Login / registration modal ("Book" buttons open it)
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const openAuth = () => onOpen();
+  const { isOpen, onOpen, onClose: closeModal } = useDisclosure();
+  // Step 1 is always the role choice. It only says which sign-in screen to show (and which audience the server checks);
+  // the server still decides the real role.
+  const [authStep, setAuthStep] = React.useState<'role' | 'student' | 'faculty'>('role');
+  const openAuth = () => { setAuthStep('role'); onOpen(); };
+  const onClose = () => { closeModal(); setAuthStep('role'); };
 
   const goTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -190,35 +198,100 @@ export default function LandingPage() {
   };
 
   // The only way to sign in. The server verifies the token, checks the school domain and decides the role
-  // (student, faculty, dean or admin) from the roster / ADMIN_EMAILS, so there is no Student / Faculty choice here.
-  const handleGoogleCredential = async (credential: string) => {
+  // (student, faculty, dean or admin) from the roster / ADMIN_EMAILS. `audience` is only the screen the person chose
+  // (STUDENT, or STAFF for Faculty / Dean / Admin); the server uses it to refuse a wrong-screen sign-in.
+  const friendlyError = (message: string, audience: 'STUDENT' | 'STAFF') => {
+    if (audience === 'STAFF' && /not registered as faculty or staff/i.test(message)) {
+      return 'Your faculty account has not been registered. Please contact the System Administrator for assistance.';
+    }
+    return (message || 'Please try again.')
+      .replace('Please use the Faculty & Staff tab.', 'Please go back and choose Faculty.')
+      .replace('Please use the Student tab.', 'Please go back and choose Student.');
+  };
+  const handleGoogleCredential = async (credential: string, audience: 'STUDENT' | 'STAFF') => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential })
+        body: JSON.stringify({ credential, audience })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       finishLogin(data); // an incomplete profile is finished on the dashboard (ProfileGate)
     } catch (error: any) {
-      toast({ title: 'Sign-in failed', description: error.message, status: 'error', position: 'top' });
+      toast({ title: 'Sign-in failed', description: friendlyError(error.message, audience), status: 'error', position: 'top' });
     }
   };
 
-  // The sign-in box: Google only. New students are created on first sign-in; faculty, Dean and Admin accounts are added
-  // by the administrator, so their first sign-in simply works once they are on the list.
-  const authTabs = (
-    <Box p={8}>
-      <Text fontSize="sm" color="gray.600" mb={6}>
-        Sign in with your school Google account. First time here as a student? Signing in creates your account, and you
-        will then complete your profile with your School ID. Faculty, Dean and Admin accounts are added by the administrator.
+  const backToRoles = (
+    <Button variant="ghost" size="sm" leftIcon={<ArrowBackIcon />} color={headingColor} onClick={() => setAuthStep('role')} alignSelf="flex-start">
+      Back to Role Selection
+    </Button>
+  );
+
+  const roleChoice = (icon: any, title: string, text: string, step: 'student' | 'faculty') => (
+    <Box
+      as="button" type="button" onClick={() => setAuthStep(step)} textAlign="left" w="100%"
+      p={4} borderWidth="2px" borderColor={choiceBorder} bg={choiceBg} borderRadius="xl"
+      _hover={{ borderColor: TEAL, transform: 'translateY(-1px)' }} _focusVisible={{ boxShadow: `0 0 0 3px ${TEAL}` }}
+      transition="all 0.15s"
+    >
+      <HStack spacing={4} align="center">
+        <Flex w="48px" h="48px" borderRadius="full" bg={NAVY} color="white" align="center" justify="center" flexShrink={0}>
+          <Icon as={icon} boxSize={6} />
+        </Flex>
+        <Box flex="1" minW={0}>
+          <Text fontWeight="800" color={headingColor}>{title}</Text>
+          <Text fontSize="sm" color={bodyColor}>{text}</Text>
+        </Box>
+        <ChevronRightIcon boxSize={6} color={bodyColor} />
+      </HStack>
+    </Box>
+  );
+
+  // Step 1: Student or Faculty. Both "Log in" and "Sign in" open this.
+  // Step 2: the matching Google sign-in screen. There is no faculty sign-up: faculty, Dean and Admin accounts are added by the administrator.
+  const authTabs = authStep === 'role' ? (
+    <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
+      <Text fontSize="sm" color={bodyColor}>Choose how you will use CCIS Sync.</Text>
+      {roleChoice(CapIcon, 'Student', 'Book consultations with your faculty.', 'student')}
+      {roleChoice(ChatBubbleIcon, 'Faculty', 'Faculty, Dean and Admin access.', 'faculty')}
+    </VStack>
+  ) : authStep === 'student' ? (
+    <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
+      {backToRoles}
+      <Heading size="md" color={headingColor}>Student Access</Heading>
+      <Text fontSize="sm" color={bodyColor}>
+        Sign in with your school Google account. First time here? Signing in creates your account, and you will then
+        complete your profile with your School ID.
       </Text>
       <VStack spacing={2}>
-        <GoogleSignInButton onCredential={handleGoogleCredential} />
-        <Text fontSize="xs" color="gray.500">Use your @antiquespride.edu.ph account</Text>
+        <GoogleSignInButton onCredential={(c) => handleGoogleCredential(c, 'STUDENT')} />
+        <Text fontSize="xs" color={bodyColor}>Use your @antiquespride.edu.ph account</Text>
       </VStack>
-    </Box>
+    </VStack>
+  ) : (
+    <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
+      {backToRoles}
+      <Box>
+        <Heading size="md" color={headingColor}>Faculty Access</Heading>
+        <Text fontWeight="700" color={headingColor} mt={1}>Welcome Back!</Text>
+        <Text fontSize="sm" color={bodyColor} mt={1}>Sign in using your registered school Google account.</Text>
+      </Box>
+      <VStack spacing={2}>
+        <GoogleSignInButton text="continue_with" onCredential={(c) => handleGoogleCredential(c, 'STAFF')} />
+        <Text fontSize="xs" color={bodyColor}>Use your @antiquespride.edu.ph account</Text>
+      </VStack>
+      <HStack align="flex-start" spacing={3} p={4} borderRadius="lg" borderWidth="1px" borderColor={assistBorder} bg={assistBg} role="note">
+        <InfoOutlineIcon mt="3px" color={TEAL} flexShrink={0} />
+        <Box>
+          <Text fontWeight="800" fontSize="sm" color={headingColor}>Faculty Account Assistance</Text>
+          <Text fontSize="sm" color={bodyColor}>
+            Please Contact the System Administrator To Create Your Account or Assist Your Log In Credentials.
+          </Text>
+        </Box>
+      </HStack>
+    </VStack>
   );
 
   const NAV_LINKS = [
@@ -450,7 +523,7 @@ export default function LandingPage() {
         <ModalContent borderRadius="2xl" overflow="hidden" bg={modalBg}>
           <ModalHeader display="flex" alignItems="center" gap={3} pr={12} color={headingColor}>
             <LogoMark size={28} color={NAVY} />
-            <Text fontWeight="800" letterSpacing="0.04em">Welcome to CCIS Sync</Text>
+            <Text fontWeight="800" letterSpacing="0.04em">{authStep === 'role' ? 'Welcome to CCIS Sync' : authStep === 'student' ? 'CCIS Sync: Student' : 'CCIS Sync: Faculty'}</Text>
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody p={0}>
