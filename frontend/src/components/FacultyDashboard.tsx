@@ -12,7 +12,7 @@ import {
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ProfileGate from './ProfileGate';
-import { hasStarted } from './appointmentStatus';
+import { hasStarted, canCorrectMissNow } from './appointmentStatus';
 import type { AvailableWindow, RequestRow } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
@@ -423,7 +423,7 @@ const saveConsultationHours = async () => {
   // Pending consultations are grouped by the day the student REQUESTED; saved consultations by the day they were SAVED.
   const requestedDayOf = (a: any) => manilaDay(a.createdAt);
   const savedDayOf = (a: any) => manilaDay(a.completedAt);
-  const signOffAll = myAppointments.filter(a => a.status === 'APPROVED' || a.status === 'MISSED (FACULTY)');
+  const signOffAll = myAppointments.filter(a => a.status === 'APPROVED' || canCorrectMissNow(a)); // approved, or marked missed within the last 24 hours
   const pendingSignOff = signOffAll.filter(a => matchesLogFilters(a) && (!logDay || requestedDayOf(a) === logDay));
   const savedLog = consultLog.filter(a => matchesLogFilters(a) && (!logDay || savedDayOf(a) === logDay));
   const signOffGroups = groupByDay(pendingSignOff, requestedDayOf, a => a.createdAt || '', logSort);
@@ -1557,7 +1557,7 @@ const saveConsultationHours = async () => {
                         <Tr key={apt._id}>
                           <Td minW="190px" color={textColor}>
                             <PersonCell name={apt.studentName} />
-                            {apt.status === 'MISSED (FACULTY)' && <Badge mt={1} colorScheme="orange">Late</Badge>}
+                            {apt.status.startsWith('MISSED') && <Badge mt={1} colorScheme="orange">Marked missed: complete it to correct it</Badge>}
                           </Td>
                           <Td minW="95px"><GenderBadge gender={apt.studentId?.gender} /></Td>
                           <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>

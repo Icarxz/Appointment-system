@@ -24,7 +24,7 @@ async function markMissedFaculty() {
     await notify(apt.facultyId, {
       type: 'APPOINTMENT_UPDATE',
       title: 'Consultation not signed off',
-      message: `Your approved consultation with ${apt.studentName} on ${when} was never completed or marked as Missed by Student, so it is now shown as Missed by Faculty. Reason: ${REASON_NOT_SIGNED_OFF} If it did take place, you can still log it in your Consultation Log.`,
+      message: `Your approved consultation with ${apt.studentName} on ${when} was never completed or marked as Missed by Student, so it is now shown as Missed by Faculty. Reason: ${REASON_NOT_SIGNED_OFF} If it did take place, you can correct it in your Consultation Log within 24 hours.`,
       appointmentId: apt._id,
     });
     const student = apt.studentId || (await User.findOne({ role: 'STUDENT', name: apt.studentName }).select('_id'))?._id;

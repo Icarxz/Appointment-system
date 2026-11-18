@@ -4,6 +4,7 @@ const BOOKING_LEAD_HOURS = 1;  // students may request up to 1 hour before the s
 const CANCEL_CUTOFF_HOURS = 1; // students and faculty may cancel up to 1 hour before the start
 const REMINDER_MINUTES = 30;   // upcoming-consultation reminder
 const MISS_GRACE_MINUTES = 30; // nobody can mark a consultation as missed until this long after its start
+const CORRECTION_HOURS = 24;   // after a miss is marked, the faculty member may still correct it (sign it off as completed) for this long
 
 const startMoment = (date, time) => new Date(`${date}T${time}:00+08:00`);
 const minutesUntil = (date, time, nowMs = Date.now()) => (startMoment(date, time).getTime() - nowMs) / 60000;
@@ -19,6 +20,16 @@ const inReminderWindow = (apt, nowMs = Date.now(), minutes = REMINDER_MINUTES) =
 
 // A miss (Missed by Student or Missed by Faculty) may be marked once the grace period after the start has passed.
 const canMarkMissed = (apt, nowMs = Date.now()) => minutesUntil(apt.date, apt.time, nowMs) <= -MISS_GRACE_MINUTES;
+// A marked miss (MISSED (STUDENT) or MISSED (FACULTY)) can be corrected by signing off the consultation, for 24 hours after it
+// was marked. Older records without missedAt fall back to the last update time.
+const isMissed = (apt) => apt.status === 'MISSED (STUDENT)' || apt.status === 'MISSED (FACULTY)';
+const canCorrectMiss = (apt, nowMs = Date.now()) => {
+  if (!isMissed(apt)) return false;
+  const since = apt.missedAt || apt.updatedAt;
+  if (!since) return false;
+  return nowMs - new Date(since).getTime() <= CORRECTION_HOURS * 3600000;
+};
+
 // The moment a miss can first be marked (a Date), for the message "you can mark it from 9:30 AM".
 const missOpensAt = (apt) => new Date(startMoment(apt.date, apt.time).getTime() + MISS_GRACE_MINUTES * 60000);
 
@@ -38,4 +49,4 @@ function expiryReason(apt, approvedSameDay = []) {
   return taken ? EXPIRY_REASON_TAKEN : EXPIRY_REASON_NO_RESPONSE;
 }
 
-module.exports = { EXPIRY_REASON_TAKEN, EXPIRY_REASON_NO_RESPONSE, expiryReason, BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS, REMINDER_MINUTES, MISS_GRACE_MINUTES, canMarkMissed, missOpensAt, startMoment, minutesUntil, isPendingExpired, inReminderWindow, canCancel };
+module.exports = { EXPIRY_REASON_TAKEN, EXPIRY_REASON_NO_RESPONSE, expiryReason, BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS, REMINDER_MINUTES, MISS_GRACE_MINUTES, CORRECTION_HOURS, isMissed, canCorrectMiss, canMarkMissed, missOpensAt, startMoment, minutesUntil, isPendingExpired, inReminderWindow, canCancel };

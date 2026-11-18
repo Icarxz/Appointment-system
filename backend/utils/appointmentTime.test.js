@@ -67,3 +67,22 @@ test('missOpensAt is the start plus 30 minutes', () => {
   const opens = t.missOpensAt({ date: '2026-11-03', time: '10:00' });
   assert.strictEqual(opens.getTime(), at('10:30'));
 });
+
+// ---- 24-hour correction of a marked miss ----
+test('a marked miss can be corrected for 24 hours', () => {
+  assert.strictEqual(t.CORRECTION_HOURS, 24);
+  const missedAt = new Date('2026-11-03T11:00:00+08:00');
+  const missed = { status: 'MISSED (STUDENT)', missedAt };
+  assert.strictEqual(t.canCorrectMiss(missed, missedAt.getTime() + 23 * 3600000), true);
+  assert.strictEqual(t.canCorrectMiss(missed, missedAt.getTime() + 24 * 3600000), true);
+  assert.strictEqual(t.canCorrectMiss(missed, missedAt.getTime() + 24 * 3600000 + 1), false);
+  assert.strictEqual(t.canCorrectMiss({ ...missed, status: 'MISSED (FACULTY)' }, missedAt.getTime() + 3600000), true);
+});
+
+test('only missed statuses can be corrected; older records use updatedAt', () => {
+  const now = new Date('2026-11-03T12:00:00+08:00').getTime();
+  assert.strictEqual(t.canCorrectMiss({ status: 'APPROVED', missedAt: new Date(now) }, now), false);
+  assert.strictEqual(t.canCorrectMiss({ status: 'COMPLETED', missedAt: new Date(now) }, now), false);
+  assert.strictEqual(t.canCorrectMiss({ status: 'MISSED (FACULTY)', updatedAt: new Date(now - 3600000) }, now), true);
+  assert.strictEqual(t.canCorrectMiss({ status: 'MISSED (FACULTY)' }, now), false); // no date at all: not correctable
+});

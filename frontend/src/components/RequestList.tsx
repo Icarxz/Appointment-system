@@ -6,7 +6,7 @@ import {
 import { RepeatIcon } from '@chakra-ui/icons';
 import { formatTime } from './dateUtils';
 import AppealControls from './AppealControls';
-import { statusColor, statusLabel, isBeforeCutoff, hasStarted, canMarkMissedNow, reasonLine, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
+import { statusColor, statusLabel, isBeforeCutoff, hasStarted, canMarkMissedNow, canCorrectMissNow, reasonLine, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
 import { useNavPalette } from '../utils/uiTokens';
 import SearchableSelect from './SearchableSelect';
 import { GENDER_OPTIONS, matchesGender } from './PeopleUi';
@@ -133,7 +133,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
             <Box>
               <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
               {cancelClosed && <Text fontSize="xs" color={C.textMid} mt={1}>Cancellation closed (less than {CANCEL_CUTOFF_HOURS} hour before).</Text>}
-              {role === 'FACULTY' && apt.status === 'MISSED (FACULTY)' && <Text fontSize="xs" color={C.textMid} mt={1}>Not saved yet. Open Consultation Log (Pending consultations) if it took place.</Text>}
+              {role === 'FACULTY' && canCorrectMissNow(apt) && <Text fontSize="xs" color={C.textMid} mt={1}>If it did take place, open the Consultation Log (Pending consultations) within 24 hours of the miss to correct it.</Text>}
               {!isAdmin && reasonLine(apt, role) && <Text fontSize="xs" color={C.textMid} mt={1}>{reasonLine(apt, role)}</Text>}
               {!isAdmin && <AppealControls apt={apt} role={role as 'STUDENT' | 'FACULTY'} onChanged={onChanged} />}
             </Box>

@@ -103,6 +103,16 @@ export const MISS_GRACE_MINUTES = 30;
 export const canMarkMissedNow = (date: string, time: string): boolean =>
   Date.now() >= new Date(`${date}T${time}:00+08:00`).getTime() + MISS_GRACE_MINUTES * 60000;
 
+// A marked miss can still be corrected (signed off as completed) for 24 hours after it was marked
+// (must match CORRECTION_HOURS in backend/utils/appointmentTime.js).
+export const CORRECTION_HOURS = 24;
+
+export const canCorrectMissNow = (apt: { status: string; missedAt?: string; updatedAt?: string }): boolean => {
+  if (apt.status !== 'MISSED (STUDENT)' && apt.status !== 'MISSED (FACULTY)') return false;
+  const since = apt.missedAt || apt.updatedAt;
+  return !!since && Date.now() - new Date(since).getTime() <= CORRECTION_HOURS * 3600000;
+};
+
 /** The fields the request lists (table rows and phone cards) read from an appointment. The API sends more. */
 /** The free time still left for a pending request (the server sends it with the faculty request list). */
 export interface AvailableWindow { start: string; end: string; minutes: number; maxMinutes: number; label: string }

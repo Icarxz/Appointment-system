@@ -57,7 +57,7 @@ const { isProgram, programOfPosition, effectiveProgram } = require('../utils/pro
 const { isEmploymentType } = require('../utils/employment');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { transition, CHANGED_MESSAGE } = require('../utils/statusTransition');
-const { canMarkMissed, missOpensAt, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
+const { canMarkMissed, missOpensAt, canCorrectMiss, CORRECTION_HOURS, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
 const { cleanReason } = require('../utils/missReason');
 const { reportDecision } = require('../utils/reportFacultyMissed');
 const { canViewAppointment } = require('../utils/appointmentAccess');
@@ -1302,24 +1302,31 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY', 'DEAN']), asyn
     // The case presented is the student's Purpose of Meeting and is not editable: the body value is ignored.
     const caseValue = String(apt.reason ?? '').trim();
     if (!caseValue) return res.status(400).json({ error: 'This appointment has no purpose of meeting to record.' });
-    // MISSED (FACULTY) is what the system sets automatically when an approved consultation was
-    // never signed off; the faculty can still log it late if the consultation did take place.
-    if (apt.status !== 'APPROVED' && apt.status !== 'MISSED (FACULTY)') {
+    // A consultation marked as missed (by the faculty member, the student or the system) can still be signed off as
+    // completed if it did take place, but only for CORRECTION_HOURS after the miss was marked.
+    const wasMissed = apt.status === 'MISSED (STUDENT)' || apt.status === 'MISSED (FACULTY)';
+    if (apt.status !== 'APPROVED' && !wasMissed) {
       return res.status(400).json({ error: 'Only approved consultations can be completed.' });
+    }
+    if (wasMissed && !canCorrectMiss(apt)) {
+      return res.status(400).json({ error: `A missed consultation can only be corrected within ${CORRECTION_HOURS} hours of being marked missed.` });
     }
     if (apt.completedAt) {
       return res.status(400).json({ error: 'This consultation has already been signed off and cannot be edited.' });
     }
 
-    const done = await transition(Appointment, apt._id, ['APPROVED', 'MISSED (FACULTY)'], {
+    const done = await transition(Appointment, apt._id, ['APPROVED', 'MISSED (STUDENT)', 'MISSED (FACULTY)'], {
       casePresented: caseValue, interventionTaken: interventionValue, status: 'COMPLETED', completedAt: new Date(),
+      ...(wasMissed ? { correctedAt: new Date(), correctedFrom: apt.status } : {}),
     }, { completedAt: { $exists: false } });
     if (!done) return res.status(409).json({ error: CHANGED_MESSAGE });
 
     await notify(await resolveStudentId(apt), {
       type: 'CONSULTATION_LOGGED',
       title: 'Consultation completed',
-      message: `Your consultation on ${fmtDate(apt.date)} was logged and signed off by your instructor.`,
+      message: wasMissed
+        ? `Your consultation on ${fmtDate(apt.date)} was logged and signed off by your instructor. It is no longer counted as ${apt.status === 'MISSED (STUDENT)' ? 'Missed by Student' : 'Missed by Faculty'}.`
+        : `Your consultation on ${fmtDate(apt.date)} was logged and signed off by your instructor.`,
       appointmentId: apt._id,
     });
 
@@ -1473,7 +1480,7 @@ router.patch('/appointment/:id/faculty-missed', requireAuth(['STUDENT']), async 
     await notify(apt.facultyId, {
       type: 'APPOINTMENT_UPDATE',
       title: 'Consultation marked Missed by Faculty',
-      message: `${apt.studentName} reported that the consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)} did not take place. Reason from the student: ${d.reason} If it did take place, you can log it in your Consultation Log.`,
+      message: `${apt.studentName} reported that the consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)} did not take place. Reason from the student: ${d.reason} If it did take place, you can correct it in your Consultation Log within ${CORRECTION_HOURS} hours.`,
       appointmentId: apt._id,
     });
     res.json({ message: 'Reported as Missed by Faculty.', appointment: marked });
