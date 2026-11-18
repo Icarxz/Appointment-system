@@ -64,7 +64,7 @@ async function loadFacultyAnalytics(facultyId) {
   return buildFacultyAnalytics({ appointments, official, added, todayIso: manilaNow().dateStr });
 }
 
-router.get('/me', requireAuth(['FACULTY']), async (req, res) => {
+router.get('/me', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     res.json({ generatedAt: new Date().toISOString(), ...(await loadFacultyAnalytics(req.user.userId)) });
   } catch (error) {
@@ -74,7 +74,7 @@ router.get('/me', requireAuth(['FACULTY']), async (req, res) => {
 });
 
 // CSV of the logged-in faculty member's own analytics (never anyone else's: the id comes from the token).
-router.get('/me.csv', requireAuth(['FACULTY']), async (req, res) => {
+router.get('/me.csv', requireAuth(['FACULTY', 'DEAN']), async (req, res) => {
   try {
     const [report, me] = await Promise.all([loadFacultyAnalytics(req.user.userId), User.findById(req.user.userId).select('name').lean()]);
     res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="my-analytics-${manilaNow().dateStr}.csv"` });

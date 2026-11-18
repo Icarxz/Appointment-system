@@ -82,6 +82,10 @@ facultyId: {
   program: { type: String, enum: PROGRAMS },
   // Full-time or part-time (optional; faculty only). Set on the faculty's own profile or by the Admin.
   employmentType: { type: String, enum: EMPLOYMENT_TYPES },
+  // DEAN only: the Dean can switch on student consultation requests (see utils/consultable.js). Off by default, so nothing changes for a Dean who does not want them.
+  acceptsConsultations: { type: Boolean, default: false },
+  // Most consultation requests ONE student may make with this person in a Monday-Sunday week (utils/weeklyLimit.js). Empty = no limit (all faculty). The Dean starts at 5.
+  weeklyRequestLimit: { type: Number, min: 1, max: 50 },
   currentStatus: {
       type: String,
       enum: ['AVAILABLE', 'IN_CLASS', 'IN_CONSULTATION', 'IN_MEETING', 'ON_BREAK', 'OUT_OF_OFFICE', 'ON_LEAVE', 'ABSENT', 'NOT_UPDATED'],

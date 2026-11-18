@@ -8,7 +8,7 @@ const ID = '65f1c2a3b4d5e6f708192a3b';
 test('buildLink: appointment links go to the right dashboard and page for each role', () => {
   assert.equal(buildLink('STUDENT', { appointmentId: ID }), `/student-dashboard?page=requests&apt=${ID}`);
   assert.equal(buildLink('FACULTY', { appointmentId: ID }), `/faculty-dashboard?page=requests&apt=${ID}`);
-  assert.equal(buildLink('DEAN', { appointmentId: ID }), `/dean-dashboard?page=appeals&apt=${ID}`);
+  assert.equal(buildLink('DEAN', { appointmentId: ID }), `/dean-dashboard?page=records&apt=${ID}`);
 });
 
 test('buildLink: Admin has no mailbox, so no appointment link', () => {
@@ -56,7 +56,7 @@ test('isSafeLink: rejects open-redirect and injection attempts', () => {
     `/student-dashboard?apt=${ID}`,                       // apt without a page
     `/student-dashboard?page=requests&apt=${ID}#x`,
     `/student-dashboard?page=schedule`,                   // a faculty page on the student dashboard
-    `/dean-dashboard?page=requests&apt=${ID}`,            // the dean's appointment page is "appeals"
+    `/dean-dashboard?page=appeals&apt=${ID}`,             // the old Faculty Reasons page no longer exists
     `/admin-dashboard?page=home&apt=${ID}`,
     '/Student-Dashboard', '/login', '/', null, undefined, 42, {}, ['/student-dashboard'],
     `/student-dashboard?page=requests&apt=${ID.toUpperCase()}`,
