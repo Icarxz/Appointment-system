@@ -6,11 +6,15 @@
 //
 // Precedence, highest first:
 //   active manual status > IN_CONSULTATION > IN_CLASS > CONSULTATION_HOURS > VACANT
+// Vacant only applies from 7:00 AM until the day's last class or consultation block ends.
+// Before that, after that, or on a day with no schedule the status is OFF_SCHEDULE (shown as "--").
 
 const { manilaNow, manilaDate } = require('./manilaTime');
 
 const MANUAL_STATUSES = ['IN_MEETING', 'ON_BREAK', 'OUT_OF_OFFICE', 'ON_LEAVE'];
-const SCHEDULED_STATUSES = ['IN_CLASS', 'IN_CONSULTATION', 'CONSULTATION_HOURS', 'VACANT'];
+const SCHEDULED_STATUSES = ['IN_CLASS', 'IN_CONSULTATION', 'CONSULTATION_HOURS', 'VACANT', 'OFF_SCHEDULE'];
+// Scheduled statuses only apply from this time until the end of the day's last class or consultation block.
+const WORKDAY_START_MIN = 7 * 60;
 // Manual statuses that stop students from booking inside their window.
 const BOOKING_BLOCKING = ['IN_MEETING', 'ON_LEAVE'];
 
@@ -19,6 +23,7 @@ const STATUS_LABELS = {
   IN_CONSULTATION: 'In Consultation',
   CONSULTATION_HOURS: 'Consultation Hours',
   VACANT: 'Vacant',
+  OFF_SCHEDULE: '--', // outside the working window: nothing to show
   IN_MEETING: 'In a Meeting',
   ON_BREAK: 'On Break',
   OUT_OF_OFFICE: 'Out of Office',
@@ -87,7 +92,11 @@ function resolveFacultyStatus(input, now = new Date()) {
   if (consultNow) {
     return { status: 'CONSULTATION_HOURS', label: STATUS_LABELS.CONSULTATION_HOURS, until: blockEnd(consultNow, now), source: 'scheduled' };
   }
-  return { status: 'VACANT', label: STATUS_LABELS.VACANT, until: null, source: 'scheduled' };
+  const lastEnd = Math.max(0, ...classBlocks.map((b) => toMinutes(b.endTime)), ...consultBlocks.map((b) => toMinutes(b.endTime)));
+  if (nowMin >= WORKDAY_START_MIN && nowMin < lastEnd) {
+    return { status: 'VACANT', label: STATUS_LABELS.VACANT, until: null, source: 'scheduled' };
+  }
+  return { status: 'OFF_SCHEDULE', label: STATUS_LABELS.OFF_SCHEDULE, until: null, source: 'scheduled' };
 }
 
 /**

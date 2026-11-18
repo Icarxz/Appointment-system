@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { formatDate } from './dateUtils';
+import NoticeCalendarPicker from './NoticeCalendarPicker';
+import type { PickedWhen } from './NoticeCalendarPicker';
 import BroadcastBanner from './BroadcastBanner';
 import {
   Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Badge, Text, 
@@ -193,12 +195,10 @@ export default function FacultyDashboard() {
   const [myDuration, setMyDuration] = useState('');       // 15 | 30 | 60 | 120 | UNTIL | EOD
   const [myUntil, setMyUntil] = useState('');             // "HH:MM", used when duration is UNTIL
   const [myCurrent, setMyCurrent] = useState<any>(null);  // my effective status from the server
-  const [myLocation, setMyLocation] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [mySchedule, setMySchedule] = useState<any[]>([]);
   const [myConsultHours, setMyConsultHours] = useState<any[]>([]);
   const [myAppointments, setMyAppointments] = useState<any[]>([]);
-  const hasSyncedRef = useRef(false);
   // Post a Notice form + my upcoming notices
   const [myNotices, setMyNotices] = useState<any[]>([]);
   const [nType, setNType] = useState('');              // IN_MEETING | ON_LEAVE
@@ -476,13 +476,6 @@ const saveConsultationHours = async () => {
       .then((res) => res.json())
       .then((data) => {
         if (userId && Array.isArray(data)) setMyCurrent(data.find((f: any) => f._id === userId) || null);
-        if (userId && data.length > 0 && !hasSyncedRef.current) {
-          const me = data.find((f: any) => f._id === userId);
-          if (me) { 
-            setMyLocation(me.currentLocation || me.room || '');
-            hasSyncedRef.current = true;
-          }
-        }
       });
       
     if (userId) {
@@ -518,11 +511,11 @@ const saveConsultationHours = async () => {
 
   // ── Existing Status Handlers ────────────────────────────────────────
   const STATUS_LABELS: Record<string, string> = {
-    IN_CLASS: 'In Class', IN_CONSULTATION: 'In Consultation', CONSULTATION_HOURS: 'Consultation Hours', VACANT: 'Vacant',
+    IN_CLASS: 'In Class', IN_CONSULTATION: 'In Consultation', CONSULTATION_HOURS: 'Consultation Hours', VACANT: 'Vacant', OFF_SCHEDULE: '--',
     IN_MEETING: 'In a Meeting', ON_BREAK: 'On Break', OUT_OF_OFFICE: 'Out of Office', ON_LEAVE: 'On Leave',
   };
   const STATUS_COLORS: Record<string, string> = {
-    IN_CLASS: 'orange', IN_CONSULTATION: 'purple', CONSULTATION_HOURS: 'teal', VACANT: 'green',
+    IN_CLASS: 'orange', IN_CONSULTATION: 'purple', CONSULTATION_HOURS: 'teal', VACANT: 'green', OFF_SCHEDULE: 'gray',
     IN_MEETING: 'blue', ON_BREAK: 'yellow', OUT_OF_OFFICE: 'gray', ON_LEAVE: 'red',
   };
   // Only these are chosen by hand. Each has its own list of "how long" choices.
@@ -536,17 +529,30 @@ const saveConsultationHours = async () => {
   const fmtUntil = (iso?: string) => iso ? new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }) : '';
   const statusSourceText = (c: any) => {
     if (!c) return '';
+    if (c.status === 'OFF_SCHEDULE') return 'Outside your class schedule (7 AM until your last class)';
     const until = c.statusUntil ? ` until ${fmtUntil(c.statusUntil)}` : '';
     return c.statusSource === 'manual' ? `Set by you${until}` : `Scheduled${until}`;
   };
   const durationLabel = () => (DURATION_CHOICES[myStatus] || []).find(([v]) => v === myDuration)?.[1] || '';
+
+  // Times for "Until a time..." in 30-minute steps from the next half-hour (Manila), so nothing is typed.
+  const untilTimeOptions = (() => {
+    const t = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: false });
+    const [h, m] = t.split(':').map(Number);
+    const out: { value: string; label: string }[] = [];
+    for (let min = Math.ceil((h * 60 + m + 1) / 30) * 30; min <= 23 * 60 + 30; min += 30) {
+      const v = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+      out.push({ value: v, label: formatTime(v) });
+    }
+    return out;
+  })();
 
   const handleUpdateMyStatus = async () => {
     setIsUpdating(true);
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status-entry`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: myStatus, duration: myDuration, untilTime: myUntil, location: myLocation })
+        body: JSON.stringify({ type: myStatus, duration: myDuration, untilTime: myUntil })
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -586,6 +592,18 @@ const saveConsultationHours = async () => {
     return fmtDay(n.startAt) === fmtDay(lastDay) ? fmtDay(n.startAt) : `${fmtDay(n.startAt)} to ${fmtDay(lastDay)}`;
   };
   const noticeReasonText = (n: any) => (n.reason === 'Other' && n.reasonOther ? n.reasonOther : n.reason);
+  // "Fri, Nov 20, 2026, 1:00 PM to 3:00 PM" or "Mon, Nov 23, 2026 to Wed, Nov 25, 2026"
+  const whenText = (type: string, sd: string, ed: string, st: string, et: string) => {
+    if (!sd) return '';
+    if (type === 'IN_MEETING') return `${formatDate(sd)}, ${formatTime(st)} to ${formatTime(et)}`;
+    return !ed || ed === sd ? formatDate(sd) : `${formatDate(sd)} to ${formatDate(ed)}`;
+  };
+  const handlePickWhen = (p: PickedWhen) => setConfirmCfg({
+    title: nType === 'IN_MEETING' ? 'Use this meeting time?' : 'Use these leave days?',
+    body: whenText(nType, p.startDate, p.endDate, p.startTime, p.endTime),
+    confirmLabel: 'Use this',
+    run: () => { setNStartDate(p.startDate); setNEndDate(p.endDate); setNStartTime(p.startTime); setNEndTime(p.endTime); },
+  });
   const noticeReady = !!nType && !!nStartDate && !!nReason && (nReason !== 'Other' || !!nReasonOther.trim())
     && (nType === 'IN_MEETING' ? !!nStartTime && !!nEndTime : true);
 
@@ -603,11 +621,11 @@ const saveConsultationHours = async () => {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || `Failed to post notice (${response.status})`);
       }
-      toast({ title: 'Notice posted!', status: 'success', duration: 2000 });
+      toast({ title: 'Announced to students!', status: 'success', duration: 2000 });
       setNType(''); setNStartDate(''); setNEndDate(''); setNStartTime(''); setNEndTime(''); setNReason(''); setNReasonOther(''); setNMakeUp('');
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not post notice', description: error.message, status: 'error' });
+      toast({ title: 'Could not announce', description: error.message, status: 'error' });
     }
     setIsPosting(false);
   };
@@ -616,10 +634,10 @@ const saveConsultationHours = async () => {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status-entry/${id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Failed to cancel notice');
-      toast({ title: 'Notice cancelled', status: 'success', duration: 2000 });
+      toast({ title: 'Announcement cancelled', status: 'success', duration: 2000 });
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not cancel notice', description: error.message, status: 'error' });
+      toast({ title: 'Could not cancel the announcement', description: error.message, status: 'error' });
     }
   };
 
@@ -1201,7 +1219,8 @@ const saveConsultationHours = async () => {
             <Box display="flex" gap={6} flexDirection={{ base: 'column', md: 'row' }}>
               
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
-                <Heading size="md" color={textColor} mb={6}>My Status</Heading>
+                <Heading size="md" color={textColor} mb={2}>My Status</Heading>
+                <Text fontSize="sm" color={mutedText} mb={5}>Your status follows your schedule automatically. Use the options below only to change it for a while, for example a break.</Text>
                 <VStack spacing={4} alignItems="flex-start">
                   <FormControl><FormLabel color={textColor}>Current Status</FormLabel>
                     <HStack spacing={3} flexWrap="wrap">
@@ -1218,8 +1237,8 @@ const saveConsultationHours = async () => {
                       })}>Clear status</ChakraButton>
                     )}
                   </FormControl>
-                  <FormControl><FormLabel color={textColor}>Set a status</FormLabel>
-                    <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Set a status" placeholder="Status" value={myStatus}
+                  <FormControl><FormLabel color={textColor}>Change my status for a while</FormLabel>
+                    <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Change my status for a while" placeholder="Choose a status" value={myStatus}
                       onChange={(v: string) => { setMyStatus(v); setMyDuration(''); setMyUntil(''); }}
                       options={MANUAL_STATUS_OPTIONS.map(value => ({ value, label: STATUS_LABELS[value] }))} />
                   </FormControl>
@@ -1232,13 +1251,13 @@ const saveConsultationHours = async () => {
                   )}
                   {myDuration === 'UNTIL' && (
                     <FormControl><FormLabel color={textColor}>Until what time</FormLabel>
-                      <Input type="time" maxW="200px" value={myUntil} onChange={(e) => setMyUntil(e.target.value)} color={textColor} />
+                      <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Until what time" placeholder="Choose a time" value={myUntil}
+                        onChange={setMyUntil} options={untilTimeOptions} />
                     </FormControl>
                   )}
-                  <FormControl><FormLabel color={textColor}>Location</FormLabel><Input value={myLocation} onChange={(e) => setMyLocation(e.target.value)} color={textColor} /></FormControl>
                   <ChakraButton colorScheme="blue" isDisabled={!myStatus || !myDuration || (myDuration === 'UNTIL' && !myUntil)} onClick={() => setConfirmCfg({
                     title: 'Set your status?',
-                    body: `Students will see you as "${STATUS_LABELS[myStatus] || myStatus}" ${myDuration === 'UNTIL' ? `until ${myUntil}` : myDuration === 'EOD' ? 'for the rest of today' : `for ${durationLabel()}`}${myLocation.trim() ? ` at "${myLocation.trim()}"` : ''}. It ends by itself.`,
+                    body: `Students will see you as "${STATUS_LABELS[myStatus] || myStatus}" ${myDuration === 'UNTIL' ? `until ${formatTime(myUntil)}` : myDuration === 'EOD' ? 'for the rest of today' : `for ${durationLabel()}`}. It ends by itself.`,
                     confirmLabel: 'Set status', run: handleUpdateMyStatus,
                   })} isLoading={isUpdating} w="100%">Set Status</ChakraButton>
                 </VStack>
@@ -1246,39 +1265,31 @@ const saveConsultationHours = async () => {
 
               
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" flex="1">
-                <Heading size="md" color={textColor} mb={6}>Post a Notice (Students)</Heading>
+                <Heading size="md" color={textColor} mb={2}>Announce a Meeting or Leave</Heading>
+                <Text fontSize="sm" color={mutedText} mb={5}>Tell students ahead of time when you will be away. Students cannot book consultations during these times. Bookings you already have stay as they are.</Text>
                 <VStack spacing={4} alignItems="flex-start">
-                  <FormControl><FormLabel color={textColor}>Type</FormLabel>
-                    <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Notice type" placeholder="Meeting or Leave" value={nType}
-                      onChange={(v: string) => { setNType(v); setNReason(''); setNReasonOther(''); setNEndDate(''); setNStartTime(''); setNEndTime(''); }}
-                      options={[{ value: 'IN_MEETING', label: 'Meeting' }, { value: 'ON_LEAVE', label: 'Leave' }]} />
+                  <FormControl><FormLabel color={textColor}>What are you announcing?</FormLabel>
+                    <SearchableSelect maxW="320px" searchable={false} clearable={false} ariaLabel="What are you announcing?" placeholder="Choose one" value={nType}
+                      onChange={(v: string) => { setNType(v); setNReason(''); setNReasonOther(''); setNStartDate(''); setNEndDate(''); setNStartTime(''); setNEndTime(''); }}
+                      options={[{ value: 'IN_MEETING', label: 'Meeting (a few hours)' }, { value: 'ON_LEAVE', label: 'Leave (whole days)' }]} />
                   </FormControl>
                   {nType && (
-                    <HStack spacing={3} alignItems="flex-end" flexWrap="wrap" w="100%">
-                      <FormControl maxW="200px"><FormLabel color={textColor}>{nType === 'ON_LEAVE' ? 'From' : 'Date'}</FormLabel>
-                        <Input type="date" min={todayManila} value={nStartDate} color={textColor}
-                          onChange={(e) => { setNStartDate(e.target.value); if (nEndDate && e.target.value > nEndDate) setNEndDate(''); }} />
-                      </FormControl>
-                      {nType === 'ON_LEAVE' && (
-                        <FormControl maxW="200px"><FormLabel color={textColor}>To</FormLabel>
-                          <Input type="date" min={nStartDate || todayManila} value={nEndDate} color={textColor} onChange={(e) => setNEndDate(e.target.value)} />
-                        </FormControl>
-                      )}
-                      {nType === 'IN_MEETING' && (
-                        <>
-                          <FormControl maxW="150px"><FormLabel color={textColor}>Start</FormLabel>
-                            <Input type="time" value={nStartTime} color={textColor} onChange={(e) => setNStartTime(e.target.value)} />
-                          </FormControl>
-                          <FormControl maxW="150px"><FormLabel color={textColor}>End</FormLabel>
-                            <Input type="time" value={nEndTime} color={textColor} onChange={(e) => setNEndTime(e.target.value)} />
-                          </FormControl>
-                        </>
-                      )}
-                    </HStack>
+                    <FormControl><FormLabel color={textColor}>{nType === 'IN_MEETING' ? 'When is the meeting?' : 'Which days will you be on leave?'}</FormLabel>
+                      <NoticeCalendarPicker key={nType} mode={nType as 'IN_MEETING' | 'ON_LEAVE'} today={todayManila} onPick={handlePickWhen}
+                        classes={Array.isArray(mySchedule) ? mySchedule : []}
+                        consult={[...(Array.isArray(myConsultHours) ? myConsultHours : []), ...(Array.isArray(addedHours) ? addedHours : [])]} />
+                    </FormControl>
                   )}
-                  {nType && (
+                  {nStartDate && (
+                    <Box w="100%" p={3} borderWidth="1px" borderColor={borderColor} borderRadius="md">
+                      <Text fontSize="xs" color={mutedText}>Selected</Text>
+                      <Text fontSize="sm" fontWeight="600" color={textColor}>{whenText(nType, nStartDate, nEndDate, nStartTime, nEndTime)}</Text>
+                      <Text fontSize="xs" color={mutedText} mt={1}>To change it, tap the calendar again.</Text>
+                    </Box>
+                  )}
+                  {nStartDate && (
                     <FormControl><FormLabel color={textColor}>Reason</FormLabel>
-                      <SearchableSelect maxW="280px" searchable={false} clearable={false} ariaLabel="Reason" placeholder="Choose a reason" value={nReason}
+                      <SearchableSelect maxW="320px" searchable={false} clearable={false} ariaLabel="Reason" placeholder="Choose a reason" value={nReason}
                         onChange={(v: string) => { setNReason(v); if (v !== 'Other') setNReasonOther(''); }}
                         options={(NOTICE_REASONS[nType] || []).map(value => ({ value, label: value }))} />
                     </FormControl>
@@ -1288,21 +1299,21 @@ const saveConsultationHours = async () => {
                       <Input maxLength={120} value={nReasonOther} onChange={(e) => setNReasonOther(e.target.value)} color={textColor} />
                     </FormControl>
                   )}
-                  {nType && (
-                    <FormControl><FormLabel color={textColor}>Make-up info (optional)</FormLabel>
-                      <Textarea maxLength={300} placeholder="e.g. Make up class on Friday." value={nMakeUp} onChange={e => setNMakeUp(e.target.value)} rows={3} color={textColor} />
+                  {nStartDate && (
+                    <FormControl><FormLabel color={textColor}>Message for students (optional)</FormLabel>
+                      <Textarea maxLength={300} placeholder="e.g. Make-up class on Friday." value={nMakeUp} onChange={e => setNMakeUp(e.target.value)} rows={3} color={textColor} />
                     </FormControl>
                   )}
                   <ChakraButton colorScheme="blue" variant="outline" w="100%" isDisabled={!noticeReady} isLoading={isPosting} onClick={() => setConfirmCfg({
-                    title: 'Post this notice?',
-                    body: `${nType === 'IN_MEETING' ? 'Meeting' : 'Leave'}: ${nStartDate}${nType === 'ON_LEAVE' && nEndDate && nEndDate !== nStartDate ? ` to ${nEndDate}` : ''}${nType === 'IN_MEETING' ? `, ${nStartTime} to ${nEndTime}` : ''}. Students cannot book new consultations in this time. Bookings you already have stay as they are.`,
-                    confirmLabel: 'Post notice', run: handlePostNotice,
-                  })}>Post Notice</ChakraButton>
+                    title: 'Announce this to students?',
+                    body: `${nType === 'IN_MEETING' ? 'Meeting' : 'Leave'}: ${whenText(nType, nStartDate, nEndDate, nStartTime, nEndTime)}. Students cannot book new consultations in this time. Bookings you already have stay as they are.`,
+                    confirmLabel: 'Announce', run: handlePostNotice,
+                  })}>Announce to Students</ChakraButton>
 
                   <Box w="100%" pt={2}>
-                    <Heading size="sm" color={textColor} mb={3}>Upcoming notices</Heading>
+                    <Heading size="sm" color={textColor} mb={3}>Your announced meetings and leave</Heading>
                     {myNotices.length === 0 ? (
-                      <Text fontSize="sm" color={mutedText}>No meetings or leave posted.</Text>
+                      <Text fontSize="sm" color={mutedText}>Nothing announced yet.</Text>
                     ) : (
                       <VStack spacing={2} alignItems="stretch">
                         {myNotices.map((n: any) => (
@@ -1315,9 +1326,9 @@ const saveConsultationHours = async () => {
                               <Text fontSize="xs" color={mutedText}>{noticeWhen(n)}</Text>
                             </Box>
                             <ChakraButton size="xs" variant="outline" colorScheme="red" onClick={() => setConfirmCfg({
-                              title: 'Cancel this notice?',
+                              title: 'Cancel this announcement?',
                               body: 'Students will be able to book that time again.',
-                              confirmLabel: 'Cancel notice', run: () => handleCancelNotice(n._id),
+                              confirmLabel: 'Cancel announcement', run: () => handleCancelNotice(n._id),
                             })}>Cancel</ChakraButton>
                           </Flex>
                         ))}

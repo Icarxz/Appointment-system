@@ -945,12 +945,12 @@ router.get('/appointments/me/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']
 });
 
 // 13. PUT ROUTE: Save a Notice
-// 13b. PUT ROUTE: Faculty updates their own live status/location (used by FacultyDashboard's status page)
+// 13b. Faculty sets their own manual status (used by the My Status card)
 // ---- My Status: manual statuses that always expire ----------------------------------------------
-// Body: { type, duration, untilTime?, location? }  duration = 15 | 30 | 60 | 120 | 'UNTIL' | 'EOD'
+// Body: { type, duration, untilTime? }  duration = 15 | 30 | 60 | 120 | 'UNTIL' | 'EOD'
 router.post('/status-entry', requireAuth(['FACULTY']), async (req, res) => {
   try {
-    const { type, duration, untilTime, location } = req.body || {};
+    const { type, duration, untilTime } = req.body || {};
     const now = new Date();
     const end = endFromChoice(duration, untilTime, now);
     if (!end.ok) return res.status(400).json({ error: end.error });
@@ -971,9 +971,8 @@ router.post('/status-entry', requireAuth(['FACULTY']), async (req, res) => {
 
     const entry = await FacultyStatusEntry.create({
       facultyId: req.user.userId, type, startAt: now, endAt: end.endAt,
-      location: String(location || '').trim().slice(0, 80),
     });
-    await StatusHistory.create({ facultyId: req.user.userId, status: type, note: entry.location });
+    await StatusHistory.create({ facultyId: req.user.userId, status: type });
     res.status(201).json(entry);
   } catch (err) {
     res.status(500).json({ error: 'Error setting status' });
