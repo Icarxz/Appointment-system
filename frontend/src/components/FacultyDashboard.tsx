@@ -172,7 +172,17 @@ function getEventPos(event: ScheduleEvent): { top: number; height: number } {
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function FacultyDashboard() {
+// The Dean's own consultation pages are these same pages, shown inside the Dean's portal: pass `embeddedPage` and the
+// component draws only that page (no menu, no welcome header). The Dean cannot import a schedule PDF yet (needs the adviser), so
+// `canImportSchedule` is false for him. His hours may total 30 minutes to 4 hours (utils/consultationHoursRule.js on the server).
+const EmbeddedFrame = ({ children }: { children?: React.ReactNode } & Record<string, unknown>) => <>{children}</>;
+
+interface FacultyDashboardProps { embeddedPage?: Page; role?: 'FACULTY' | 'DEAN'; canImportSchedule?: boolean }
+
+export default function FacultyDashboard({ embeddedPage, role = 'FACULTY', canImportSchedule = true }: FacultyDashboardProps = {}) {
+  const isDean = role === 'DEAN';
+  const embedded = embeddedPage !== undefined;
+  const Frame: React.ComponentType<any> = embedded ? EmbeddedFrame : DashboardShell;
   const toast = useToast();
   const palette = useNavPalette();
   
@@ -180,9 +190,9 @@ export default function FacultyDashboard() {
   const userName = localStorage.getItem('userName');
 
   // ── UI State ─────────────────────────────────────────────────────────────────
-  const [activePage, setActivePage] = useState<Page>("schedule");
+  const [activePage, setActivePage] = useState<Page>(embeddedPage ?? "schedule");
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink<Page>(["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage);
+  const { aptId, closeApt } = useDeepLink<Page>(embedded ? [] : ["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage); // embedded: the Dean dashboard handles links itself
   const [weekOffset, setWeekOffset] = useState(0);
   const [importOpen, setImportOpen] = useState(false); // Master Schedule: import my schedule from a scanned PDF
   const [showWeekend, setShowWeekend] = useState(false); // display preference: reveal empty Saturday / Sunday columns
@@ -241,7 +251,7 @@ export default function FacultyDashboard() {
     return sum + ((eh * 60 + em) - (sh * 60 + sm));
   }, 0);
   const totalHours = (totalMinutes / 60).toFixed(1);
-  const isValidTotal = totalMinutes === 240;
+  const isValidTotal = isDean ? totalMinutes >= 30 && totalMinutes <= 240 : totalMinutes === 240; // faculty: exactly 4 hours; Dean: 30 minutes to 4 hours
 
   const addBlock = () => setConsultBlocks([...consultBlocks, { dayOfWeek: 1, startTime: '', endTime: '' }]);
   const removeBlock = (index: number) => setConsultBlocks(consultBlocks.filter((_, i) => i !== index));
@@ -373,7 +383,7 @@ const saveConsultLogChanges = async (apt: any) => {
 
 const saveConsultationHours = async () => {
   if (!isValidTotal) {
-    return toast({ title: 'Invalid Total', description: `Must total exactly 4 hours. Currently ${totalHours} hours.`, status: 'warning' });
+    return toast({ title: 'Invalid Total', description: isDean ? `Must be between 30 minutes and 4 hours. Currently ${totalHours} hours.` : `Must total exactly 4 hours. Currently ${totalHours} hours.`, status: 'warning' });
   }
   try {
     const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/consultation-hours`, {
@@ -920,7 +930,7 @@ const saveConsultationHours = async () => {
 
   return (
     <>
-    <DashboardShell
+    <Frame
       portalLabel="Faculty Portal"
       userName={userName || ''}
       extras={<ProfileGate role="FACULTY" />}
@@ -936,8 +946,8 @@ const saveConsultationHours = async () => {
         key: page, ...item, active: activePage === page, onClick: () => setActivePage(page),
       }))}
     >
-        <WelcomeHeader name={userName || ''} actions={activePage === 'analytics' ? <ExportBar solid csvPath="/api/analytics/me.csv" fileBase="my-analytics" /> : undefined} />
-        <BroadcastBanner userRole="FACULTY" />
+        {!embedded && <WelcomeHeader name={userName || ''} actions={activePage === 'analytics' ? <ExportBar solid csvPath="/api/analytics/me.csv" fileBase="my-analytics" /> : undefined} />}
+        {!embedded && <BroadcastBanner userRole="FACULTY" />}
 
         {/* ───────────────────────────────────────────────────────────────
             PAGE: MASTER SCHEDULE
@@ -1113,7 +1123,7 @@ const saveConsultationHours = async () => {
 
               {userId && (
                 <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "flex-end" }}>
-                  <button className="touch-target" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule." style={{ ...btnBase, padding: "8px 14px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "12px" }}>Import Schedule PDF</button>
+                  {canImportSchedule && <button className="touch-target" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule." style={{ ...btnBase, padding: "8px 14px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "12px" }}>Import Schedule PDF</button>}
                   <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} onApplied={fetchData} />
                 </div>
               )}
@@ -1347,7 +1357,7 @@ const saveConsultationHours = async () => {
             <PageTitle>Consultation Hours</PageTitle>
             <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm" maxW="760px">
               <Heading size="md" color={textColor} mb={2}>Fixed Consultation Hours</Heading>
-              <Text fontSize="sm" color={mutedText} mb={4}>Must total exactly 4 hours per week, distributed however you like.</Text>
+              <Text fontSize="sm" color={mutedText} mb={4}>{isDean ? 'Between 30 minutes and 4 hours per week, distributed however you like.' : 'Must total exactly 4 hours per week, distributed however you like.'}</Text>
               <VStack spacing={3} align="stretch">
                 {consultBlocks.map((block, i) => (
                   <HStack key={i}>
@@ -1359,7 +1369,7 @@ const saveConsultationHours = async () => {
                     <ChakraButton size="sm" colorScheme="red" variant="ghost" onClick={() => removeBlock(i)}>✕</ChakraButton>
                   </HStack>
                 ))}
-                <ChakraButton size="sm" variant="outline" onClick={addBlock} isDisabled={isValidTotal}>+ Add Block</ChakraButton>
+                <ChakraButton size="sm" variant="outline" onClick={addBlock} isDisabled={totalMinutes >= 240}>+ Add Block</ChakraButton>
                 <Text fontSize="sm" fontWeight="bold" color={isValidTotal ? 'green.500' : 'red.500'}>
                   Total: {totalHours} / 4.0 hours
                 </Text>
@@ -1637,9 +1647,9 @@ const saveConsultationHours = async () => {
             <ConsultationPrintForm facultyName={userName || ''} entries={consultLog} />
           </Box>
         )}
-    </DashboardShell>
+    </Frame>
     <ConfirmAction config={confirmCfg} onClose={() => setConfirmCfg(null)} />
-    <AppointmentDetailsDrawer aptId={detailsId ?? aptId} onClose={() => { setDetailsId(null); closeApt(); }} />
+    <AppointmentDetailsDrawer aptId={detailsId ?? (embedded ? null : aptId)} onClose={() => { setDetailsId(null); closeApt(); }} />
     </>
   );
 }
