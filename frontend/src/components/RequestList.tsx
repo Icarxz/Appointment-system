@@ -6,7 +6,7 @@ import {
 import { RepeatIcon } from '@chakra-ui/icons';
 import { formatTime } from './dateUtils';
 import AppealControls from './AppealControls';
-import { statusColor, statusLabel, isBeforeCutoff, hasStarted, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
+import { statusColor, statusLabel, isBeforeCutoff, hasStarted, canMarkMissedNow, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
 import { useNavPalette } from '../utils/uiTokens';
 import SearchableSelect from './SearchableSelect';
 import { GENDER_OPTIONS, matchesGender } from './PeopleUi';
@@ -59,7 +59,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
   const isStudent = role === 'STUDENT';
   const isAdmin = role === 'ADMIN';
   const personKey = isStudent || isAdmin ? professorKey : studentKey; // the one person filter: a student filters by professor, the Admin too
-  const actionsOf = (a: ListItem): NextAction[] => (isAdmin ? [] : isStudent ? nextActions(a, canCancelNow) : facultyNextActions(a, { canCancel: canCancelNow(a), started: hasStarted(a.date, a.time) }));
+  const actionsOf = (a: ListItem): NextAction[] => (isAdmin ? [] : isStudent ? nextActions(a, canCancelNow) : facultyNextActions(a, { canCancel: canCancelNow(a), started: hasStarted(a.date, a.time), missOpen: canMarkMissedNow(a.date, a.time) }));
 
   const people = new Map<string, string>();
   requests.forEach(a => people.set(personKey(a), isStudent || isAdmin ? (a.facultyId ? a.facultyId.name : 'Unknown') : `${a.studentName || 'Unknown'} (${a.studentSection || ''})`));

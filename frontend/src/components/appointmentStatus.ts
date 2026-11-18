@@ -95,6 +95,14 @@ export const isBeforeCutoff = (date: string, time: string): boolean =>
 export const hasStarted = (date: string, time: string): boolean =>
   Date.now() >= new Date(`${date}T${time}:00+08:00`).getTime();
 
+// Nobody can mark a consultation as missed (Missed by Student or Missed by Faculty) until 30 minutes after its start
+// (must match MISS_GRACE_MINUTES in backend/utils/appointmentTime.js).
+export const MISS_GRACE_MINUTES = 30;
+
+/** True once the grace period after the start has passed: from here a miss can be marked. */
+export const canMarkMissedNow = (date: string, time: string): boolean =>
+  Date.now() >= new Date(`${date}T${time}:00+08:00`).getTime() + MISS_GRACE_MINUTES * 60000;
+
 /** The fields the request lists (table rows and phone cards) read from an appointment. The API sends more. */
 /** The free time still left for a pending request (the server sends it with the faculty request list). */
 export interface AvailableWindow { start: string; end: string; minutes: number; maxMinutes: number; label: string }

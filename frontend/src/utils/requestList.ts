@@ -37,12 +37,12 @@ export function nextActions(apt: ListItem, canCancelNow: (a: ListItem) => boolea
 // Statuses a faculty member may appeal (the same list AppealControls and the server use).
 const FACULTY_APPEALABLE = ['MISSED (FACULTY)', 'CANCELLED BY FACULTY'];
 
-/** What the faculty member can do next with a request. `started`: the requested time has already begun. */
-export function facultyNextActions(apt: ListItem, o: { canCancel: boolean; started: boolean }): NextAction[] {
+/** What the faculty member can do next with a request. `started`: the requested time has already begun. `missOpen`: the 30-minute grace period after the start is over. */
+export function facultyNextActions(apt: ListItem, o: { canCancel: boolean; started: boolean; missOpen: boolean }): NextAction[] {
   const out: NextAction[] = [];
   if (apt.status === 'PENDING' && !o.started) out.push('NEEDS_ANSWER');
   if (apt.status === 'APPROVED' && o.canCancel) out.push('CAN_CANCEL');
-  if (apt.status === 'APPROVED' && o.started) out.push('CAN_MARK_NO_SHOW');
+  if (apt.status === 'APPROVED' && o.missOpen) out.push('CAN_MARK_NO_SHOW');
   if (FACULTY_APPEALABLE.includes(apt.status) && !(apt.appeal && apt.appeal.status)) out.push('CAN_APPEAL');
   return out;
 }

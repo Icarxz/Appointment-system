@@ -57,6 +57,7 @@ const { isProgram, programOfPosition, effectiveProgram } = require('../utils/pro
 const { isEmploymentType } = require('../utils/employment');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { transition, CHANGED_MESSAGE } = require('../utils/statusTransition');
+const { canMarkMissed, missOpensAt, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
@@ -1431,9 +1432,10 @@ router.patch('/appointment/:id/no-show', requireAuth(['FACULTY', 'DEAN']), async
     if (apt.status !== 'APPROVED') {
       return res.status(400).json({ error: 'Only approved consultations can be marked as Missed by Student.' });
     }
-    // Not before the appointment has actually started (Philippine time)
-    if (Date.now() < manilaDate(apt.date, apt.time).getTime()) {
-      return res.status(400).json({ error: 'This consultation has not started yet.' });
+    // Not before the grace period after the start has passed (Philippine time)
+    if (!canMarkMissed(apt)) {
+      const opens = manilaNow(missOpensAt(apt)).hhmm;
+      return res.status(400).json({ error: `A consultation can be marked as missed ${MISS_GRACE_MINUTES} minutes after its start, from ${fmtTime(opens)}.` });
     }
     const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (STUDENT)', missedAt: new Date() });
     if (!marked) return res.status(409).json({ error: CHANGED_MESSAGE });
