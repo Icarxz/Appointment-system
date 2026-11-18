@@ -8,8 +8,24 @@ const cls = [{ startTime: '09:00', endTime: '10:30', room: 'IICT 306' }];
 const consult = [{ startTime: '13:00', endTime: '15:00' }];
 const entry = (type, s, e, extra = {}) => ({ type, startAt: at(s), endAt: at(e), ...extra });
 
-test('vacant with nothing scheduled', () => {
-  assert.equal(resolveFacultyStatus({}, at('08:00')).status, 'VACANT');
+test('nothing scheduled that day: "--", not Vacant', () => {
+  assert.equal(resolveFacultyStatus({}, at('08:00')).status, 'OFF_SCHEDULE');
+  assert.equal(resolveFacultyStatus({}, at('08:00')).label, '--');
+});
+test('Vacant between 7 AM and the end of the last block', () => {
+  const day = { classBlocks: [{ startTime: '09:00', endTime: '10:30' }], consultBlocks: [{ startTime: '13:00', endTime: '15:00' }] };
+  assert.equal(resolveFacultyStatus(day, at('07:00')).status, 'VACANT');
+  assert.equal(resolveFacultyStatus(day, at('11:00')).status, 'VACANT');
+  assert.equal(resolveFacultyStatus(day, at('14:59')).status, 'CONSULTATION_HOURS');
+});
+test('before 7 AM and after the last block: "--"', () => {
+  const day = { classBlocks: [{ startTime: '09:00', endTime: '10:30' }], consultBlocks: [{ startTime: '13:00', endTime: '15:00' }] };
+  assert.equal(resolveFacultyStatus(day, at('06:59')).status, 'OFF_SCHEDULE');
+  assert.equal(resolveFacultyStatus(day, at('15:00')).status, 'OFF_SCHEDULE');
+  assert.equal(resolveFacultyStatus(day, at('22:00')).status, 'OFF_SCHEDULE');
+});
+test('a manual status still shows outside the working window', () => {
+  assert.equal(resolveFacultyStatus({ entries: [entry('ON_LEAVE', '00:00', '23:59')] }, at('06:00')).status, 'ON_LEAVE');
 });
 test('in class, with an until time', () => {
   const r = resolveFacultyStatus({ classBlocks: cls }, at('09:30'));
@@ -18,7 +34,8 @@ test('in class, with an until time', () => {
   assert.equal(r.source, 'scheduled');
 });
 test('class end time is exclusive', () => {
-  assert.equal(resolveFacultyStatus({ classBlocks: cls }, at('10:30')).status, 'VACANT');
+  assert.equal(resolveFacultyStatus({ classBlocks: cls }, at('10:30')).status, 'OFF_SCHEDULE'); // last block of the day has ended
+  assert.equal(resolveFacultyStatus({ classBlocks: cls, consultBlocks: consult }, at('10:30')).status, 'VACANT');
 });
 test('consultation hours', () => {
   assert.equal(resolveFacultyStatus({ consultBlocks: consult }, at('13:30')).status, 'CONSULTATION_HOURS');
@@ -37,7 +54,7 @@ test('expired manual status falls back to scheduled', () => {
   assert.equal(r.status, 'IN_CLASS');
 });
 test('a future notice does not apply yet', () => {
-  assert.equal(resolveFacultyStatus({ entries: [entry('ON_LEAVE', '12:00', '23:00')] }, at('09:00')).status, 'VACANT');
+  assert.equal(resolveFacultyStatus({ classBlocks: cls, entries: [entry('ON_LEAVE', '12:00', '23:00')] }, at('10:00')).status, 'IN_CLASS');
 });
 test('overlapping manual: the one ending last wins', () => {
   const r = resolveFacultyStatus({ entries: [entry('ON_BREAK', '09:00', '09:30'), entry('ON_LEAVE', '08:00', '18:00')] }, at('09:10'));

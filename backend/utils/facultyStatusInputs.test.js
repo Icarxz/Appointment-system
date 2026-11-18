@@ -23,6 +23,7 @@ test('booking running: inside the duration only', () => {
 test('legacy mapping', () => {
   assert.equal(toLegacyStatus('VACANT'), 'AVAILABLE');
   assert.equal(toLegacyStatus('CONSULTATION_HOURS'), 'IN_CONSULTATION');
+  assert.equal(toLegacyStatus('OFF_SCHEDULE'), 'NOT_UPDATED');
   assert.equal(toLegacyStatus('ON_LEAVE'), 'ON_LEAVE');
 });
 test('manual entry id is returned by the resolver', () => {
