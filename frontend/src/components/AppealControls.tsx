@@ -56,7 +56,7 @@ export default function AppealControls({ apt, role, onChanged }: Props) {
       {appeal && (
         <>
           <Badge colorScheme="blue" textTransform="none">
-            {appeal.by === 'FACULTY' && role !== 'FACULTY' ? 'Faculty reason' : appeal.by === 'STUDENT' && role !== 'STUDENT' ? 'Student reason' : 'Your reason'}: submitted
+            {appeal.by === 'FACULTY' && role !== 'FACULTY' ? 'Reason from professor' : appeal.by === 'STUDENT' && role !== 'STUDENT' ? 'Student reason' : 'Your reason'}: submitted
           </Badge>
           <Text fontSize="xs" color={mutedText}>Reason: {appeal.reason}</Text>
         </>
@@ -74,7 +74,7 @@ export default function AppealControls({ apt, role, onChanged }: Props) {
             <Text fontSize="sm" mb={3}>
               {role === 'STUDENT'
                 ? 'Tell the professor why you missed or cancelled. It is a record of your reason; no approval is needed.'
-                : 'Tell the Dean why you missed or cancelled. It is a record of your reason; no approval is needed.'}
+                : 'Tell the student why the consultation was missed or cancelled. They will be notified and can read it; no approval is needed.'}
             </Text>
             <CancelReasonPicker key={apt._id} options={role === 'STUDENT' ? STUDENT_APPEAL_REASONS : FACULTY_APPEAL_REASONS} onChange={setReason} />
           </ModalBody>

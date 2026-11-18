@@ -67,6 +67,8 @@ const { endFromChoice } = require('../utils/statusDuration');
 
 // Booking / cancellation time limits (appointment date + time are Manila time)
 const { findConflict, conflictMessage } = require('../utils/duplicateRequest');
+const { consultableFilter } = require('../utils/consultable');
+const { checkWeeklyLimit, limitMessage, weekBounds, COUNTED_STATUSES } = require('../utils/weeklyLimit');
 const { BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS } = require('../utils/appointmentTime'); // 1 hour to book, 1 hour to cancel
 const hoursUntil = (date, time) => (manilaDate(date, time).getTime() - Date.now()) / 36e5;
 
@@ -164,10 +166,10 @@ router.post('/login', loginLimiter, async (req, res) => {
 router.get('/status', requireAuth(ALL_ROLES), async (req, res) => {
   try {
     // Disabled (RESTRICTED) / archived faculty are hidden from booking lists. Only the Admin still sees them (to re-enable).
-    const facultyFilter = { role: 'FACULTY' };
+    const facultyFilter = consultableFilter(); // every faculty member, plus a Dean who has switched consultations on
     if (req.user.role !== 'ADMIN') facultyFilter.accountStatus = { $nin: ['RESTRICTED', 'ARCHIVED'] };
     const facultyList = await User.find(facultyFilter)
-      .select('name gender programPosition program currentStatus currentLocation room statusNote flaggedDate flaggedReason')
+      .select('name role gender programPosition program currentStatus currentLocation room statusNote flaggedDate flaggedReason weeklyRequestLimit')
       .sort({ name: 1 });
 
     // Status is worked out here on every request from the schedule, running consultations and
@@ -223,8 +225,8 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
     }
 
     // Who may change this appointment, and to what
-    if (req.user.role === 'FACULTY' && String(targetApt.facultyId) !== String(req.user.userId)) {
-      return res.status(403).json({ error: 'Forbidden' });
+    if ((req.user.role === 'FACULTY' || req.user.role === 'DEAN') && String(targetApt.facultyId) !== String(req.user.userId)) {
+      return res.status(403).json({ error: 'Forbidden' }); // a Dean answers only requests made to him
     }
     if (req.user.role === 'STUDENT') {
       const me = await User.findById(req.user.userId).select('name');
@@ -508,7 +510,7 @@ async function loadSlots(facultyId, flaggedDate = '') {
 
 router.get('/slots/:facultyId', requireAuth(ALL_ROLES), async (req, res) => {
   try {
-    const faculty = await User.findOne({ _id: req.params.facultyId, role: 'FACULTY' }).select('flaggedDate accountStatus');
+    const faculty = await User.findOne(consultableFilter({ _id: req.params.facultyId })).select('flaggedDate accountStatus');
     if (!faculty || (req.user.role !== 'ADMIN' && ['RESTRICTED', 'ARCHIVED'].includes(faculty.accountStatus))) {
       return res.status(404).json({ error: 'Faculty member not found.' });
     }
@@ -603,7 +605,7 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
     // The request must match a real, open slot (consultation hours or a vacant hour, Mon-Fri 8 AM-5 PM): this covers
     // the 1-hour lead time, operating hours, classes, approved appointments and the faculty's
     // out-of-office date. The duration comes from the slot, not from the student.
-    const faculty = await User.findOne({ _id: facultyId, role: 'FACULTY' }).select('flaggedDate accountStatus');
+    const faculty = await User.findOne(consultableFilter({ _id: facultyId })).select('name flaggedDate accountStatus weeklyRequestLimit');
     if (!faculty || ['RESTRICTED', 'ARCHIVED'].includes(faculty.accountStatus)) {
       return res.status(404).json({ error: 'Faculty member not found.' });
     }
@@ -623,6 +625,14 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
       return res.status(409).json({ error: conflictMessage(conflict, f?.name || 'this professor'), code: conflict.code });
     }
 
+    // Weekly limit per student with this person (the Dean: 5 a week; faculty: none). Counted by consultation date, Mon-Sun.
+    const week = weekBounds(date);
+    const sameWeek = () => Appointment.find({ studentId, facultyId: faculty._id, status: { $in: COUNTED_STATUSES }, date: { $gte: week.start, $lte: week.end } }).select('date status').lean();
+    const limitCheck = checkWeeklyLimit(await sameWeek(), date, faculty.weeklyRequestLimit);
+    if (!limitCheck.ok) {
+      return res.status(429).json({ error: limitMessage(faculty.name, limitCheck.limit), code: 'WEEKLY_LIMIT', used: limitCheck.used, limit: limitCheck.limit });
+    }
+
     // Save the pending request
     const newAppointment = await Appointment.create({
       facultyId,
@@ -635,6 +645,12 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
       reason,
       status: 'PENDING'
     });
+
+    // Two requests sent at the same moment can both pass the check above: count again and undo this one if it went over.
+    if (limitCheck.limit && (await sameWeek()).length > limitCheck.limit) { // this request is already saved, so it is counted too
+      await Appointment.deleteOne({ _id: newAppointment._id });
+      return res.status(429).json({ error: limitMessage(faculty.name, limitCheck.limit), code: 'WEEKLY_LIMIT', limit: limitCheck.limit });
+    }
 
     await notify(facultyId, {
       type: 'APPOINTMENT_REQUEST',
@@ -1029,11 +1045,13 @@ const APPEALABLE = {
   FACULTY: ['MISSED (FACULTY)', 'CANCELLED BY FACULTY'],
 };
 
-router.post('/appointment/:id/appeal', requireAuth(['STUDENT', 'FACULTY']), async (req, res) => {
+// A reason is a record only (no review). A student's reason goes to the professor. The professor's reason (a Dean who takes
+// consultations counts as the professor for his own appointments) goes to the STUDENT, so they know why it was cancelled or missed.
+router.post('/appointment/:id/appeal', requireAuth(['STUDENT', 'FACULTY', 'DEAN']), async (req, res) => {
   try {
     const apt = await Appointment.findById(req.params.id);
     if (!apt) return res.status(404).json({ error: 'Appointment not found.' });
-    const role = req.user.role;
+    const role = req.user.role === 'STUDENT' ? 'STUDENT' : 'FACULTY'; // which side of the consultation this person is on
     const mine = role === 'FACULTY'
       ? String(apt.facultyId) === String(req.user.userId)
       : String(apt.studentId) === String(req.user.userId);
@@ -1053,7 +1071,7 @@ router.post('/appointment/:id/appeal', requireAuth(['STUDENT', 'FACULTY']), asyn
       await notify(apt.facultyId, { type: 'APPEAL', title: 'Student reason', message: `${apt.studentName} added a reason for the missed or cancelled consultation on ${when}. Reason: ${reason}`, appointmentId: apt._id });
     } else {
       const me = await User.findById(req.user.userId).select('name');
-      await notifyRole('DEAN', { type: 'APPEAL', title: 'Faculty reason', message: `${me ? me.name : 'A faculty member'} added a reason for the missed or cancelled consultation with ${apt.studentName} on ${when}. Reason: ${reason}`, appointmentId: apt._id });
+      await notify(await resolveStudentId(apt), { type: 'APPOINTMENT_UPDATE', title: 'Reason from your instructor', message: `${me ? me.name : 'Your instructor'} added a reason for the missed or cancelled consultation on ${when}. Reason: ${reason}`, appointmentId: apt._id });
     }
     res.json({ message: 'Reason submitted.', appointment: apt });
   } catch (error) {
@@ -1061,13 +1079,34 @@ router.post('/appointment/:id/appeal', requireAuth(['STUDENT', 'FACULTY']), asyn
   }
 });
 
-// The Dean's list of faculty appeals
-router.get('/appeals', requireAuth(['DEAN']), async (req, res) => {
+// The Dean switches student consultation requests on or off, and sets the weekly limit per student (default 5).
+router.get('/dean/consultation-settings', requireAuth(['DEAN']), async (req, res) => {
   try {
-    const list = await Appointment.find({ 'appeal.by': 'FACULTY' }).populate('facultyId', 'name').sort({ 'appeal.submittedAt': -1 });
-    res.json(list);
+    const me = await User.findById(req.user.userId).select('acceptsConsultations weeklyRequestLimit').lean();
+    res.json({ acceptsConsultations: !!(me && me.acceptsConsultations), weeklyRequestLimit: (me && me.weeklyRequestLimit) || 5 });
   } catch (error) {
-    res.status(500).json({ error: 'Server error fetching appeals.' });
+    res.status(500).json({ error: 'Server error fetching your consultation settings.' });
+  }
+});
+
+router.patch('/dean/consultation-settings', requireAuth(['DEAN']), async (req, res) => {
+  try {
+    const set = {};
+    if (req.body.acceptsConsultations !== undefined) {
+      if (typeof req.body.acceptsConsultations !== 'boolean') return res.status(400).json({ error: 'acceptsConsultations must be true or false.' });
+      set.acceptsConsultations = req.body.acceptsConsultations;
+    }
+    if (req.body.weeklyRequestLimit !== undefined) {
+      const n = Number(req.body.weeklyRequestLimit);
+      if (!Number.isInteger(n) || n < 1 || n > 20) return res.status(400).json({ error: 'The weekly limit must be a whole number from 1 to 20.' });
+      set.weeklyRequestLimit = n;
+    }
+    const me = await User.findById(req.user.userId).select('weeklyRequestLimit');
+    if (set.acceptsConsultations === true && !set.weeklyRequestLimit && !me.weeklyRequestLimit) set.weeklyRequestLimit = 5;
+    const updated = await User.findByIdAndUpdate(req.user.userId, { $set: set }, { new: true }).select('acceptsConsultations weeklyRequestLimit').lean();
+    res.json({ acceptsConsultations: !!updated.acceptsConsultations, weeklyRequestLimit: updated.weeklyRequestLimit || 5 });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error saving your consultation settings.' });
   }
 });
 

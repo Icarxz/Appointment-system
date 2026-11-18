@@ -17,12 +17,13 @@ const ROOTS = {
 const PAGES = {
   STUDENT: ['home', 'appointments', 'requests', 'profile'],
   FACULTY: ['status', 'schedule', 'requests', 'log', 'analytics', 'profile'],
-  DEAN:    ['broadcast', 'roster', 'reports', 'records', 'appeals'],
+  DEAN:    ['broadcast', 'roster', 'reports', 'records', 'requests', 'log', 'analytics'], // the old 'appeals' page was removed
   ADMIN:   [], // the Admin dashboard has no mailbox, so there is nothing to open
 };
 
 // Where an appointment's details drawer opens for each role. The drawer itself is the same everywhere.
-const APPOINTMENT_PAGE = { STUDENT: 'requests', FACULTY: 'requests', DEAN: 'appeals' };
+// A Dean opens his own request page (when he takes consultations) or the records table; both show the same details drawer.
+const APPOINTMENT_PAGE = { STUDENT: 'requests', FACULTY: 'requests', DEAN: 'records' };
 
 const OBJECT_ID = /^[0-9a-f]{24}$/; // ObjectId strings are always lower-case hex
 const isObjectIdHex = (v) => typeof v === 'string' && OBJECT_ID.test(v);
