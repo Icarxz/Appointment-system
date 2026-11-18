@@ -27,7 +27,7 @@ const dayHeading = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateStr
 const canCancelNow = (a: ListItem) => isBeforeCutoff(a.date, a.time);
 
 const ACTION_OPTIONS: Record<'STUDENT' | 'FACULTY', NextAction[]> = { // the Admin list has no actions, so no Action filter
-  STUDENT: ['CAN_CANCEL', 'CAN_APPEAL', 'HAS_ACCOMPLISHMENT'],
+  STUDENT: ['CAN_CANCEL', 'CAN_REPORT_FACULTY_MISSED', 'CAN_APPEAL', 'HAS_ACCOMPLISHMENT'],
   FACULTY: ['NEEDS_ANSWER', 'CAN_CANCEL', 'CAN_MARK_NO_SHOW', 'CAN_APPEAL'],
 };
 
@@ -42,13 +42,15 @@ interface Props {
   onViewAccomplishment?: (apt: any) => void;
   /** Faculty only: the student did not turn up. */
   onNoShow?: (apt: any) => void;
+  /** Student only: the instructor did not turn up. */
+  onReportFacultyMissed?: (apt: any) => void;
   /** Faculty only: the Approve / Reject bar shown under a request that waits for an answer (null for other rows). */
   answerBar?: (apt: any) => ReactNode;
   /** Called after something changed on the server (an appeal) so the list reloads. */
   onChanged: () => void;
 }
 
-export default function RequestList({ role, requests, onViewDetails, onCancel, onViewAccomplishment, onNoShow, answerBar, onChanged }: Props) {
+export default function RequestList({ role, requests, onViewDetails, onCancel, onViewAccomplishment, onNoShow, onReportFacultyMissed, answerBar, onChanged }: Props) {
   const C = useNavPalette();
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
@@ -59,7 +61,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
   const isStudent = role === 'STUDENT';
   const isAdmin = role === 'ADMIN';
   const personKey = isStudent || isAdmin ? professorKey : studentKey; // the one person filter: a student filters by professor, the Admin too
-  const actionsOf = (a: ListItem): NextAction[] => (isAdmin ? [] : isStudent ? nextActions(a, canCancelNow) : facultyNextActions(a, { canCancel: canCancelNow(a), started: hasStarted(a.date, a.time), missOpen: canMarkMissedNow(a.date, a.time) }));
+  const actionsOf = (a: ListItem): NextAction[] => (isAdmin ? [] : isStudent ? nextActions(a, canCancelNow, (x) => canMarkMissedNow(x.date, x.time)) : facultyNextActions(a, { canCancel: canCancelNow(a), started: hasStarted(a.date, a.time), missOpen: canMarkMissedNow(a.date, a.time) }));
 
   const people = new Map<string, string>();
   requests.forEach(a => people.set(personKey(a), isStudent || isAdmin ? (a.facultyId ? a.facultyId.name : 'Unknown') : `${a.studentName || 'Unknown'} (${a.studentSection || ''})`));
@@ -95,6 +97,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
     const menuItems: { key: string; label: string; danger?: boolean; run: () => void }[] = [];
     if (actions.includes('CAN_CANCEL') && onCancel) menuItems.push({ key: 'cancel', label: apt.status === 'PENDING' ? 'Cancel Request' : 'Cancel Appointment', danger: true, run: () => onCancel(apt) });
     if (actions.includes('HAS_ACCOMPLISHMENT') && onViewAccomplishment) menuItems.push({ key: 'acc', label: 'View Accomplishment', run: () => onViewAccomplishment(apt) });
+    if (actions.includes('CAN_REPORT_FACULTY_MISSED') && onReportFacultyMissed) menuItems.push({ key: 'facultymissed', label: 'Report Missed by Faculty', run: () => onReportFacultyMissed(apt) });
     if (actions.includes('CAN_MARK_NO_SHOW') && onNoShow) menuItems.push({ key: 'noshow', label: 'Mark Missed by Student', run: () => onNoShow(apt) });
     const bar = answerBar ? answerBar(apt) : null;
     return (

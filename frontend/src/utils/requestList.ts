@@ -14,21 +14,23 @@ export interface ListItem {
 }
 
 /** What the student can do next with a request. */
-export type NextAction = 'CAN_CANCEL' | 'CAN_APPEAL' | 'HAS_ACCOMPLISHMENT' | 'NEEDS_ANSWER' | 'CAN_MARK_NO_SHOW';
+export type NextAction = 'CAN_CANCEL' | 'CAN_APPEAL' | 'HAS_ACCOMPLISHMENT' | 'NEEDS_ANSWER' | 'CAN_MARK_NO_SHOW' | 'CAN_REPORT_FACULTY_MISSED';
 export const NEXT_ACTION_LABELS: Record<NextAction, string> = {
   CAN_CANCEL: 'Can cancel',
   CAN_APPEAL: 'Can add a reason',
   HAS_ACCOMPLISHMENT: 'Has accomplishment',
   NEEDS_ANSWER: 'Needs my answer',
   CAN_MARK_NO_SHOW: 'Mark Missed by Student',
+  CAN_REPORT_FACULTY_MISSED: 'Report Missed by Faculty',
 };
 
 // Statuses a student may appeal (the same list AppealControls and the server use).
 const STUDENT_APPEALABLE = ['MISSED (STUDENT)', 'CANCELLED BY STUDENT'];
 
-export function nextActions(apt: ListItem, canCancelNow: (a: ListItem) => boolean): NextAction[] {
+export function nextActions(apt: ListItem, canCancelNow: (a: ListItem) => boolean, missOpen: (a: ListItem) => boolean = () => false): NextAction[] {
   const out: NextAction[] = [];
   if ((apt.status === 'PENDING' || apt.status === 'APPROVED') && canCancelNow(apt)) out.push('CAN_CANCEL');
+  if (apt.status === 'APPROVED' && missOpen(apt)) out.push('CAN_REPORT_FACULTY_MISSED'); // the instructor did not show (30 minutes after the start)
   if (STUDENT_APPEALABLE.includes(apt.status) && !(apt.appeal && apt.appeal.status)) out.push('CAN_APPEAL');
   if (apt.status === 'COMPLETED') out.push('HAS_ACCOMPLISHMENT');
   return out;

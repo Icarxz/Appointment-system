@@ -59,6 +59,7 @@ const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { transition, CHANGED_MESSAGE } = require('../utils/statusTransition');
 const { canMarkMissed, missOpensAt, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
 const { cleanReason } = require('../utils/missReason');
+const { reportDecision } = require('../utils/reportFacultyMissed');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
@@ -1457,6 +1458,30 @@ router.patch('/appointment/:id/no-show', requireAuth(['FACULTY', 'DEAN']), async
 });
 
 // Fetch a faculty member's consultation log (completed entries, oldest first like the paper form)
+// The student reports that the instructor did not show up: the consultation becomes Missed by Faculty
+// (stored as "MISSED (FACULTY)"). Allowed 30 minutes after the start; a reason is required and the faculty member sees it.
+router.patch('/appointment/:id/faculty-missed', requireAuth(['STUDENT']), async (req, res) => {
+  try {
+    const apt = mongoose.isValidObjectId(req.params.id) ? await Appointment.findById(req.params.id) : null;
+    const me = await User.findById(req.user.userId).select('name');
+    const d = reportDecision({ apt, userId: req.user.userId, userName: me && me.name, reason: req.body && req.body.reason });
+    if (!d.ok) return res.status(d.status).json({ error: d.error });
+
+    const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (FACULTY)', missedAt: new Date(), missReason: d.reason, missedBy: 'STUDENT' });
+    if (!marked) return res.status(409).json({ error: CHANGED_MESSAGE });
+
+    await notify(apt.facultyId, {
+      type: 'APPOINTMENT_UPDATE',
+      title: 'Consultation marked Missed by Faculty',
+      message: `${apt.studentName} reported that the consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)} did not take place. Reason from the student: ${d.reason} If it did take place, you can log it in your Consultation Log.`,
+      appointmentId: apt._id,
+    });
+    res.json({ message: 'Reported as Missed by Faculty.', appointment: marked });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error reporting the missed consultation.' });
+  }
+});
+
 router.get('/consultation-log/:facultyId', requireAuth(['FACULTY','ADMIN','DEAN']), ownerOrStaff(r => r.params.facultyId), async (req, res) => {
   try {
     const log = await Appointment.find({ 
