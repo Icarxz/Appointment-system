@@ -76,7 +76,7 @@ function HeroWaves() {
 // Flat illustration: code window + booking calendar + chat bubble
 function HeroArt() {
   return (
-    <svg viewBox="0 0 520 420" role="img" aria-label="Illustration of a consultation booking calendar and code editor" style={{ width: '100%', height: 'auto' }}>
+    <svg viewBox="0 0 520 420" role="img" aria-label="Illustration of a consultation appointment calendar and code editor" style={{ width: '100%', height: 'auto' }}>
       <path d="M62 214C36 124 118 38 232 48C304 54 336 18 416 58C494 98 506 200 474 272C442 344 362 394 272 384C192 376 152 404 100 352C66 320 80 252 62 214Z" fill="#0b4a7e" />
       <path d="M62 214C36 124 118 38 232 48C304 54 336 18 416 58" fill="none" stroke={TEAL} strokeWidth="5" strokeLinecap="round" opacity=".7" />
       <rect x="92" y="96" width="196" height="132" rx="10" fill="#082a4d" />
@@ -116,7 +116,7 @@ function HeroArt() {
 const SERVICES = [
   { icon: CapIcon, title: 'Need Academic Advising?', text: 'Course planning, program requirements, and strategies for academic success.' },
   { icon: RocketIcon, title: 'Need Capstone & Project Help?', text: 'From capstone proposals to coding issues, get guidance from your faculty.' },
-  { icon: ChatBubbleIcon, title: 'Open Consultation?', text: 'Grades, schedules, or anything else. Book a time with the right faculty member.' },
+  { icon: ChatBubbleIcon, title: 'Open Consultation?', text: 'Grades, schedules, or anything else. Set an appointment with the right faculty member.' },
 ];
 
 const STEPS = [
@@ -127,7 +127,7 @@ const STEPS = [
 
 const FAQS = [
   { q: 'Who can use CCIS Sync?', a: 'Students and faculty of the College of Computing and Information Sciences. Sign in with your school Google account (@antiquespride.edu.ph) and complete your profile with your School/Employee ID.' },
-  { q: 'How do I book a consultation?', a: 'Log in, choose a faculty member and an available time, then submit your request with a short reason. The faculty member approves or declines it, and you are notified in your Mail.' },
+  { q: 'How do I appoint a consultation?', a: 'Log in, choose a faculty member and an available time, then submit your request with a short reason. The faculty member approves or declines it, and you are notified in your Mail.' },
   { q: 'Can I cancel an appointment?', a: 'Yes. You can cancel your own appointment from your dashboard, and the faculty member is notified.' },
   { q: 'Why is my account still pending?', a: 'New student and faculty accounts are reviewed by an administrator before access is granted. You will get an email once yours is approved; click the link in it to confirm your email, then log in.' },
   { q: 'What if a faculty member is on leave?', a: 'When a faculty member declares leave for a date, appointments on that date are cancelled automatically and the affected students are notified.' },
@@ -254,7 +254,7 @@ export default function LandingPage() {
   const authTabs = authStep === 'role' ? (
     <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
       <Text fontSize="sm" color={bodyColor}>Choose how you will use CCIS Sync.</Text>
-      {roleChoice(CapIcon, 'Student', 'Book consultations with your faculty.', 'student')}
+      {roleChoice(CapIcon, 'Student', 'Appoint consultations with your faculty.', 'student')}
       {roleChoice(ChatBubbleIcon, 'Faculty', 'Faculty, Dean and Admin access.', 'faculty')}
     </VStack>
   ) : authStep === 'student' ? (
@@ -363,7 +363,7 @@ export default function LandingPage() {
                 Unlock your tech potential. Schedule your consultation today.
               </Heading>
               <Text fontSize={{ base: 'md', md: 'lg' }} color={bodyColor} mb={8} maxW="lg" mx={{ base: 'auto', md: 0 }}>
-                Streamline your academic schedule. Book consultations with CCIS faculty without the wait.
+                Streamline your academic schedule. Appoint consultations with CCIS faculty without the wait.
               </Text>
               <Button
                 size="lg" px={10} bg={ORANGE} color="white" borderRadius="full" fontWeight="800" letterSpacing="0.06em"
@@ -371,7 +371,7 @@ export default function LandingPage() {
                 _hover={{ bg: ORANGE_HOVER, transform: 'translateY(-2px)' }} _active={{ bg: ORANGE_HOVER }}
                 onClick={() => openAuth()}
               >
-                BOOK NOW
+                APPOINT CONSULTATION
               </Button>
             </Box>
             <Box flex="1" w="100%" maxW={{ base: '420px', md: '540px' }}>
@@ -396,7 +396,7 @@ export default function LandingPage() {
                 <Heading as="h3" fontSize="md" fontWeight="800" letterSpacing="0.06em" textTransform="uppercase">{s.title}</Heading>
                 <Text fontSize="sm" color="whiteAlpha.900" flex="1">{s.text}</Text>
                 <Button size="sm" px={8} mt={2} bg="white" color={NAVY} borderRadius="full" fontWeight="800"
-                  _hover={{ bg: 'blue.50' }} onClick={() => openAuth()}>BOOK NOW!</Button>
+                  _hover={{ bg: 'blue.50' }} onClick={() => openAuth()}>APPOINT CONSULTATION</Button>
               </VStack>
             ))}
           </SimpleGrid>
@@ -457,7 +457,7 @@ export default function LandingPage() {
           <Text fontSize="md" color={bodyColor} textAlign="center" maxW="3xl" mx="auto" mb={12}>
             {/* TODO: replace with your real About Us copy */}
             CCIS Sync is a scheduling platform built by students, for students — designed to make
-            booking faculty consultations simple, fast, and transparent for the whole college.
+            making faculty consultation appointments simple, fast, and transparent for the whole college.
           </Text>
           <SimpleGrid columns={{ base: 1, md: 3 }} spacing={10}>
             {[
