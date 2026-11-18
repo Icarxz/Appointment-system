@@ -181,12 +181,12 @@ function validateDraft({ classes = [], consultationHours = [], metadata = {}, wo
   };
 }
 
-// Who may import for whom. Faculty: only their own account. Admin: any faculty account. Dean and Student: never.
-// Returns 'self' | 'admin' | null. (The route still checks that an admin's target really is a FACULTY account.)
+// Who may import for whom. Faculty and Dean: only their own account (the Dean uses the same importer and rules as faculty). Admin: any faculty account. Student: never.
+// Returns 'self' | 'admin' | null. (The route still checks the target account: an admin's must be FACULTY, a Dean's own.)
 function importAccess(user, facultyId) {
   if (!user || !facultyId) return null;
   if (user.role === 'ADMIN') return 'admin';
-  if (user.role === 'FACULTY' && String(user.userId) === String(facultyId)) return 'self';
+  if ((user.role === 'FACULTY' || user.role === 'DEAN') && String(user.userId) === String(facultyId)) return 'self';
   return null;
 }
 

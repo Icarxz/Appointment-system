@@ -201,11 +201,12 @@ test('round trip: the real Percy draft equals the demo schedule, and every diffe
   });
 });
 
-test('importAccess: faculty only for themselves, admin for anyone, dean and student never', () => {
+test('importAccess: faculty and dean only for themselves, admin for any faculty, student never', () => {
   assert.strictEqual(importAccess({ role: 'FACULTY', userId: 'f1' }, 'f1'), 'self');
   assert.strictEqual(importAccess({ role: 'FACULTY', userId: 'f1' }, 'f2'), null);
   assert.strictEqual(importAccess({ role: 'ADMIN', userId: 'a1' }, 'f2'), 'admin');
-  assert.strictEqual(importAccess({ role: 'DEAN', userId: 'd1' }, 'd1'), null);
+  assert.strictEqual(importAccess({ role: 'DEAN', userId: 'd1' }, 'd1'), 'self');
+  assert.strictEqual(importAccess({ role: 'DEAN', userId: 'd1' }, 'f1'), null);
   assert.strictEqual(importAccess({ role: 'STUDENT', userId: 's1' }, 's1'), null);
   assert.strictEqual(importAccess(null, 'f1'), null);
   assert.strictEqual(importAccess({ role: 'ADMIN' }, ''), null);

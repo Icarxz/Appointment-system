@@ -8,7 +8,7 @@ const Hour = { _id: false, dayOfWeek: Number, startTime: String, endTime: String
 const ScheduleImportSchema = new mongoose.Schema({
   facultyId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  uploaderRole: { type: String, enum: ['FACULTY', 'ADMIN'], required: true },
+  uploaderRole: { type: String, enum: ['FACULTY', 'DEAN', 'ADMIN'], required: true },
   fileHash: { type: String, default: '' },
   parserVersion: { type: String, default: '' },
   term: { type: String, default: '' },
