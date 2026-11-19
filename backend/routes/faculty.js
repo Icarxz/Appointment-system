@@ -1305,7 +1305,11 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY', 'DEAN']), asyn
     // A consultation marked as missed (by the faculty member, the student or the system) can still be signed off as
     // completed if it did take place, but only for CORRECTION_HOURS after the miss was marked.
     const wasMissed = apt.status === 'MISSED (STUDENT)' || apt.status === 'MISSED (FACULTY)';
-    if (apt.status !== 'APPROVED' && !wasMissed) {
+    // A consultation marked missed (by the student, the faculty member or the system) cannot be saved to the log.
+    if (wasMissed) {
+      return res.status(400).json({ error: 'A consultation marked as missed cannot be saved to the Consultation Log.' });
+    }
+    if (apt.status !== 'APPROVED') {
       return res.status(400).json({ error: 'Only approved consultations can be completed.' });
     }
     if (wasMissed && !canCorrectMiss(apt)) {
@@ -1484,7 +1488,7 @@ router.patch('/appointment/:id/faculty-missed', requireAuth(['STUDENT']), async 
     await notify(apt.facultyId, {
       type: 'APPOINTMENT_UPDATE',
       title: 'Consultation marked Missed by Faculty',
-      message: `${apt.studentName} reported that the consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)} did not take place. Reason from the student: ${d.reason} If it did take place, you can correct it in your Consultation Log within ${CORRECTION_HOURS} hours.`,
+      message: `${apt.studentName} reported that the consultation on ${fmtDate(apt.date)} at ${fmtTime(apt.time)} did not take place. Reason from the student: ${d.reason}`,
       appointmentId: apt._id,
     });
     res.json({ message: 'Reported as Missed by Faculty.', appointment: marked });
