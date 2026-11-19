@@ -19,6 +19,9 @@ const inReminderWindow = (apt, nowMs = Date.now(), minutes = REMINDER_MINUTES) =
   return m > 0 && m <= minutes;
 };
 
+// A consultation can be signed off (completed) only once its start time has arrived.
+const hasStarted = (apt, nowMs = Date.now()) => minutesUntil(apt.date, apt.time, nowMs) <= 0;
+
 // A miss (Missed by Student or Missed by Faculty) may be marked once the grace period after the start has passed.
 const canMarkMissed = (apt, nowMs = Date.now()) => minutesUntil(apt.date, apt.time, nowMs) <= -MISS_GRACE_MINUTES;
 // A marked miss (MISSED (STUDENT) or MISSED (FACULTY)) can be corrected by signing off the consultation, for 24 hours after it
@@ -56,4 +59,4 @@ function expiryReason(apt, approvedSameDay = []) {
   return taken ? EXPIRY_REASON_TAKEN : EXPIRY_REASON_NO_RESPONSE;
 }
 
-module.exports = { EXPIRY_REASON_TAKEN, EXPIRY_REASON_NO_RESPONSE, expiryReason, BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS, REMINDER_MINUTES, MISS_GRACE_MINUTES, CORRECTION_HOURS, OUTCOME_PROMPT_HOURS, endMoment, isOutcomePromptDue, isMissed, canCorrectMiss, canMarkMissed, missOpensAt, startMoment, minutesUntil, isPendingExpired, inReminderWindow, canCancel };
+module.exports = { EXPIRY_REASON_TAKEN, EXPIRY_REASON_NO_RESPONSE, expiryReason, BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS, REMINDER_MINUTES, MISS_GRACE_MINUTES, CORRECTION_HOURS, OUTCOME_PROMPT_HOURS, endMoment, isOutcomePromptDue, isMissed, canCorrectMiss, canMarkMissed, missOpensAt, startMoment, minutesUntil, isPendingExpired, inReminderWindow, canCancel, hasStarted };

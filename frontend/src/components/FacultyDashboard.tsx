@@ -12,7 +12,7 @@ import {
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import ProfileGate from './ProfileGate';
-import { hasStarted, canCorrectMissNow } from './appointmentStatus';
+import { hasStarted } from './appointmentStatus';
 import type { AvailableWindow, RequestRow } from './appointmentStatus';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import { useDeepLink } from '../utils/useDeepLink';
@@ -423,7 +423,7 @@ const saveConsultationHours = async () => {
   // Pending consultations are grouped by the day the student REQUESTED; saved consultations by the day they were SAVED.
   const requestedDayOf = (a: any) => manilaDay(a.createdAt);
   const savedDayOf = (a: any) => manilaDay(a.completedAt);
-  const signOffAll = myAppointments.filter(a => a.status === 'APPROVED' || canCorrectMissNow(a)); // approved, or marked missed within the last 24 hours
+  const signOffAll = myAppointments.filter(a => a.status === 'APPROVED'); // only approved consultations can be signed off; missed ones cannot
   const pendingSignOff = signOffAll.filter(a => matchesLogFilters(a) && (!logDay || requestedDayOf(a) === logDay));
   const savedLog = consultLog.filter(a => matchesLogFilters(a) && (!logDay || savedDayOf(a) === logDay));
   const signOffGroups = groupByDay(pendingSignOff, requestedDayOf, a => a.createdAt || '', logSort);
@@ -1557,11 +1557,14 @@ const saveConsultationHours = async () => {
                         <Tr key={apt._id}>
                           <Td minW="190px" color={textColor}>
                             <PersonCell name={apt.studentName} />
-                            {apt.status.startsWith('MISSED') && <Badge mt={1} colorScheme="orange">Marked missed: complete it to correct it</Badge>}
                           </Td>
                           <Td minW="95px"><GenderBadge gender={apt.studentId?.gender} /></Td>
                           <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>
-                          <Td color={textColor} minW="110px">{formatDate(apt.date)}</Td>
+                          <Td color={textColor} minW="110px">
+                            {formatDate(apt.date)}
+                            <Text fontSize="xs" color={mutedText}>{formatTime(apt.time)}</Text>
+                            {!hasStarted(apt.date, apt.time) && <Badge mt={1} colorScheme="blue">Upcoming</Badge>}
+                          </Td>
                           <Td minW="210px">
                             {/* Read-only: it is the student's Purpose of Meeting, so choosing an intervention never touches it. */}
                             <Text fontSize="sm" color={textColor} whiteSpace="pre-wrap" overflowWrap="anywhere">{apt.reason || '—'}</Text>
@@ -1593,7 +1596,7 @@ const saveConsultationHours = async () => {
                             )}
                           </Td>
                           <Td minW="125px">
-                            <ChakraButton size="sm" colorScheme="green" onClick={() => {
+                            <ChakraButton size="sm" colorScheme="green" isDisabled={!hasStarted(apt.date, apt.time)} title={hasStarted(apt.date, apt.time) ? undefined : `Available from ${formatTime(apt.time)} on ${formatDate(apt.date)}`} onClick={() => {
                               // Ask only when the entry is complete; otherwise submitLogEntry shows what is missing.
                               const chosen = (logForm[apt._id]?.interventionTaken || '').trim();
                               if (!chosen || chosen === 'Others') { submitLogEntry(apt._id); return; }
