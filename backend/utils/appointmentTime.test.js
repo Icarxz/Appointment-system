@@ -107,3 +107,12 @@ test('the outcome reminder uses the booked length, 60 minutes when none is saved
   assert.strictEqual(t.isOutcomePromptDue(noLength, at('12:00')), true);
   assert.strictEqual(t.isOutcomePromptDue(noLength, at('11:59')), false);
 });
+
+test('hasStarted: a consultation can be signed off only from its start time', () => {
+  const { hasStarted } = require('./appointmentTime');
+  const apt = { date: '2026-11-19', time: '10:00' };
+  const start = new Date('2026-11-19T10:00:00+08:00').getTime();
+  assert.strictEqual(hasStarted(apt, start - 60000), false);
+  assert.strictEqual(hasStarted(apt, start), true);
+  assert.strictEqual(hasStarted(apt, start + 3600000), true);
+});

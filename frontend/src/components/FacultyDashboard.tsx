@@ -1561,7 +1561,11 @@ const saveConsultationHours = async () => {
                           </Td>
                           <Td minW="95px"><GenderBadge gender={apt.studentId?.gender} /></Td>
                           <Td color={textColor} minW="130px">{apt.studentSection || '—'}</Td>
-                          <Td color={textColor} minW="110px">{formatDate(apt.date)}</Td>
+                          <Td color={textColor} minW="110px">
+                            {formatDate(apt.date)}
+                            <Text fontSize="xs" color={mutedText}>{formatTime(apt.time)}</Text>
+                            {!hasStarted(apt.date, apt.time) && <Badge mt={1} colorScheme="blue">Upcoming</Badge>}
+                          </Td>
                           <Td minW="210px">
                             {/* Read-only: it is the student's Purpose of Meeting, so choosing an intervention never touches it. */}
                             <Text fontSize="sm" color={textColor} whiteSpace="pre-wrap" overflowWrap="anywhere">{apt.reason || '—'}</Text>
@@ -1593,7 +1597,7 @@ const saveConsultationHours = async () => {
                             )}
                           </Td>
                           <Td minW="125px">
-                            <ChakraButton size="sm" colorScheme="green" onClick={() => {
+                            <ChakraButton size="sm" colorScheme="green" isDisabled={!hasStarted(apt.date, apt.time)} title={hasStarted(apt.date, apt.time) ? undefined : `Available from ${formatTime(apt.time)} on ${formatDate(apt.date)}`} onClick={() => {
                               // Ask only when the entry is complete; otherwise submitLogEntry shows what is missing.
                               const chosen = (logForm[apt._id]?.interventionTaken || '').trim();
                               if (!chosen || chosen === 'Others') { submitLogEntry(apt._id); return; }

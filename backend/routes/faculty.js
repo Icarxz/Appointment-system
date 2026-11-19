@@ -57,7 +57,7 @@ const { isProgram, programOfPosition, effectiveProgram } = require('../utils/pro
 const { isEmploymentType } = require('../utils/employment');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { transition, CHANGED_MESSAGE } = require('../utils/statusTransition');
-const { canMarkMissed, missOpensAt, canCorrectMiss, CORRECTION_HOURS, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
+const { canMarkMissed, missOpensAt, canCorrectMiss, hasStarted, CORRECTION_HOURS, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
 const { cleanReason } = require('../utils/missReason');
 const { reportDecision } = require('../utils/reportFacultyMissed');
 const { canViewAppointment } = require('../utils/appointmentAccess');
@@ -1313,6 +1313,10 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY', 'DEAN']), asyn
     }
     if (apt.completedAt) {
       return res.status(400).json({ error: 'This consultation has already been signed off and cannot be edited.' });
+    }
+    // An upcoming consultation cannot be saved to the log before it starts.
+    if (!hasStarted(apt)) {
+      return res.status(400).json({ error: 'This consultation has not started yet. You can save it once its scheduled time has arrived.' });
     }
 
     const done = await transition(Appointment, apt._id, ['APPROVED', 'MISSED (STUDENT)', 'MISSED (FACULTY)'], {
