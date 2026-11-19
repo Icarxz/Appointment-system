@@ -42,7 +42,7 @@ import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, Fi
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours" | "editSchedule";
+type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours";
 type ViewMode  = "week" | "day";
 type EventType = "teaching" | "appointment" | "consultation" | "note";
 
@@ -195,6 +195,7 @@ export default function FacultyDashboard({ embeddedPage, role = 'FACULTY', canIm
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
   const { aptId, closeApt } = useDeepLink<Page>(embedded ? [] : ["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage); // embedded: the Dean dashboard handles links itself
   const [weekOffset, setWeekOffset] = useState(0);
+  const [scheduleTab, setScheduleTab] = useState<'view' | 'edit'>('view'); // Master Schedule: weekly view or Edit Schedule
   const [importOpen, setImportOpen] = useState(false); // Master Schedule: import my schedule from a scanned PDF
   const [showWeekend, setShowWeekend] = useState(false); // display preference: reveal empty Saturday / Sunday columns
   // Phones open on one day at a time; the 7-column week grid needs a wider screen.
@@ -939,6 +940,16 @@ const saveConsultationHours = async () => {
     );
   };
 
+  // Master Schedule has two tabs: the weekly view and Edit Schedule (class grid + Import Schedule PDF). Not for the Dean.
+  const scheduleTabBar = canImportSchedule ? (
+    <HStack spacing={2} px={{ base: 3, md: 6 }} pt={3} pb={2} borderBottom={`1px solid ${C.border}`} background={C.surface} flexShrink={0} className="no-print">
+      {([['view', 'Weekly view'], ['edit', 'Edit Schedule']] as const).map(([key, label]) => (
+        <ChakraButton key={key} size="sm" borderRadius="full" variant={scheduleTab === key ? 'solid' : 'ghost'} colorScheme="blue"
+          onClick={() => { setScheduleTab(key); if (key === 'view') fetchData(); }}>{label}</ChakraButton>
+      ))}
+    </HStack>
+  ) : null;
+
   return (
     <>
     <Frame
@@ -947,7 +958,6 @@ const saveConsultationHours = async () => {
       extras={<ProfileGate role="FACULTY" />}
       nav={([
         { page: "schedule",  section: "Consultations", icon: "calendar",  label: "Master Schedule" },
-        ...(canImportSchedule ? [{ page: "editSchedule" as Page, section: "Consultations", icon: "calendar" as IconName, label: "Edit Schedule" }] : []),
         { page: "requests",  section: "Consultations", icon: "inbox",     label: "Requests", badge: myAppointments.filter(a => a.status === 'PENDING').length },
         { page: "log",       section: "Consultations", icon: "clipboard", label: "Consultation Log" },
         { page: "status",    section: "Availability",  icon: "activity",  label: "Status & Notices" },
@@ -964,8 +974,9 @@ const saveConsultationHours = async () => {
         {/* ───────────────────────────────────────────────────────────────
             PAGE: MASTER SCHEDULE
         ─────────────────────────────────────────────────────────────── */}
-        {activePage === "schedule" && (
+        {activePage === "schedule" && scheduleTab === 'view' && (
           <Box display="flex" flexDirection="column" h="100%" overflowY="auto">
+            {scheduleTabBar}
             {/* Toolbar */}
             <div style={{ padding: "12px clamp(12px, 3vw, 24px)", borderBottom: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, flexWrap: "wrap", gap: "12px" }}>
               <div>
@@ -1251,23 +1262,26 @@ const saveConsultationHours = async () => {
           </Box>
         )}
 
-        {/* ───────────────────────────────────────────────────────────────
-            PAGE: MY STATUS (Chakra UI Form)
-        ─────────────────────────────────────────────────────────────── */}
-        {activePage === "editSchedule" && canImportSchedule && userId && (
-          <Box p={{ base: 4, md: 6 }}>
-            <Flex justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={3} mb={4}>
-              <Box>
-                <Heading size="md" color={textColor}>Edit Schedule</Heading>
-                <Text fontSize="sm" color={mutedText}>Add, change or delete your classes, or import them from your scanned Faculty Load PDF. Your Master Schedule updates after you save.</Text>
-              </Box>
-              <ChakraButton size="sm" variant="outline" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule.">Import Schedule PDF</ChakraButton>
-            </Flex>
-            <ClassGridEditor facultyId={userId} facultyName={userName || ''} />
-            <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} onApplied={fetchData} />
+        {activePage === "schedule" && scheduleTab === 'edit' && canImportSchedule && userId && (
+          <Box display="flex" flexDirection="column" h="100%" overflowY="auto">
+            {scheduleTabBar}
+            <Box p={{ base: 4, md: 6 }}>
+              <Flex justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={3} mb={4}>
+                <Box>
+                  <Heading size="md" color={textColor}>Edit Schedule</Heading>
+                  <Text fontSize="sm" color={mutedText}>Add, change or delete your classes, or import them from your scanned Faculty Load PDF. Your weekly view updates after you save.</Text>
+                </Box>
+                <ChakraButton size="sm" variant="outline" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule.">Import Schedule PDF</ChakraButton>
+              </Flex>
+              <ClassGridEditor facultyId={userId} facultyName={userName || ''} />
+              <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} onApplied={fetchData} />
+            </Box>
           </Box>
         )}
 
+        {/* ───────────────────────────────────────────────────────────────
+            PAGE: MY STATUS (Chakra UI Form)
+        ─────────────────────────────────────────────────────────────── */}
         {activePage === "status" && (
           <div style={{ padding: "clamp(16px, 4vw, 32px)", overflowY: "auto" }}>
             <PageTitle>Status & Notices</PageTitle>
