@@ -369,9 +369,14 @@ const hasSignedIn = (u) => Boolean(u && (u.googleSub || u.privacyAcceptedAt));
 const classLine = (b) => `${b.subject} in ${b.room}, ${DAY_LABELS[b.dayOfWeek]} ${fmtTime(b.startTime)} - ${fmtTime(b.endTime)}`;
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-router.post('/schedule/add', requireAuth(STAFF), async (req, res) => {
+// Class schedule edits: Admin and Dean may edit anyone's; a Faculty member may edit only their own.
+const SCHEDULE_EDITORS = [...STAFF, 'FACULTY'];
+const ownScheduleOnly = (req, facultyId) => req.user.role !== 'FACULTY' || String(facultyId) === String(req.user.userId);
+const actorIsOwner = (req, facultyId) => req.user.role === 'FACULTY' && String(facultyId) === String(req.user.userId);
+
+router.post('/schedule/add', requireAuth(SCHEDULE_EDITORS), async (req, res) => {
   try {
-    const { facultyId } = req.body;
+    const facultyId = req.user.role === 'FACULTY' ? req.user.userId : req.body.facultyId;
     if (!mongoose.isValidObjectId(facultyId)) return res.status(400).json({ error: 'Choose an instructor.' });
     const faculty = await User.findOne({ _id: facultyId, role: 'FACULTY' }).select('googleSub privacyAcceptedAt');
     if (!faculty) return res.status(404).json({ error: 'Faculty member not found.' });
@@ -380,7 +385,7 @@ router.post('/schedule/add', requireAuth(STAFF), async (req, res) => {
     if (!check.ok) return res.status(400).json({ error: check.error });
 
     const created = await Schedule.create({ facultyId: faculty._id, ...check.value });
-    if (hasSignedIn(faculty)) {
+    if (hasSignedIn(faculty) && !actorIsOwner(req, faculty._id)) {
       await notify(faculty._id, { type: 'SCHEDULE_ASSIGNED', title: 'New class added to your schedule', message: `${classLine(check.value)}.`, page: 'schedule' });
     }
     res.json({ message: 'Schedule assigned successfully!', schedule: created });
@@ -389,11 +394,12 @@ router.post('/schedule/add', requireAuth(STAFF), async (req, res) => {
   }
 });
 
-router.put('/schedule/:id', requireAuth(STAFF), async (req, res) => {
+router.put('/schedule/:id', requireAuth(SCHEDULE_EDITORS), async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Class not found.' });
     const block = await Schedule.findById(req.params.id);
     if (!block) return res.status(404).json({ error: 'Class not found.' });
+    if (!ownScheduleOnly(req, block.facultyId)) return res.status(403).json({ error: 'You can only change your own class schedule.' });
 
     const check = await classBlockCheck(block.facultyId, req.body, block._id);
     if (!check.ok) return res.status(400).json({ error: check.error });
@@ -402,7 +408,7 @@ router.put('/schedule/:id', requireAuth(STAFF), async (req, res) => {
     Object.assign(block, check.value); // the instructor never changes here
     await block.save();
     const faculty = await User.findById(block.facultyId).select('googleSub privacyAcceptedAt');
-    if (hasSignedIn(faculty)) {
+    if (hasSignedIn(faculty) && !actorIsOwner(req, block.facultyId)) {
       await notify(block.facultyId, { type: 'SCHEDULE_CHANGED', title: 'A class in your schedule was changed', message: `${before} is now ${classLine(check.value)}.`, page: 'schedule' });
     }
     res.json({ message: 'Class updated.', schedule: block });
@@ -411,13 +417,16 @@ router.put('/schedule/:id', requireAuth(STAFF), async (req, res) => {
   }
 });
 
-router.delete('/schedule/:id', requireAuth(STAFF), async (req, res) => {
+router.delete('/schedule/:id', requireAuth(SCHEDULE_EDITORS), async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Class not found.' });
+    const existing = await Schedule.findById(req.params.id).select('facultyId');
+    if (!existing) return res.status(404).json({ error: 'Class not found.' });
+    if (!ownScheduleOnly(req, existing.facultyId)) return res.status(403).json({ error: 'You can only change your own class schedule.' });
     const block = await Schedule.findByIdAndDelete(req.params.id);
     if (!block) return res.status(404).json({ error: 'Class not found.' });
     const faculty = await User.findById(block.facultyId).select('googleSub privacyAcceptedAt');
-    if (hasSignedIn(faculty)) {
+    if (hasSignedIn(faculty) && !actorIsOwner(req, block.facultyId)) {
       await notify(block.facultyId, { type: 'SCHEDULE_CHANGED', title: 'A class was removed from your schedule', message: `${classLine(block)} was removed.`, page: 'schedule' });
     }
     res.json({ message: 'Class removed.' });

@@ -33,6 +33,7 @@ import { visibleDays } from '../utils/daySettings';
 import ExportBar from './ExportBar';
 import SearchableSelect from './SearchableSelect';
 import SchedulePdfImporter from './SchedulePdfImporter';
+import ClassGridEditor from './ClassGridEditor';
 import { cohortConfig } from '../data/cohortConfig';
 import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
 import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
@@ -41,7 +42,7 @@ import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, Fi
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours";
+type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours" | "editSchedule";
 type ViewMode  = "week" | "day";
 type EventType = "teaching" | "appointment" | "consultation" | "note";
 
@@ -946,6 +947,7 @@ const saveConsultationHours = async () => {
       extras={<ProfileGate role="FACULTY" />}
       nav={([
         { page: "schedule",  section: "Consultations", icon: "calendar",  label: "Master Schedule" },
+        ...(canImportSchedule ? [{ page: "editSchedule" as Page, section: "Consultations", icon: "calendar" as IconName, label: "Edit Schedule" }] : []),
         { page: "requests",  section: "Consultations", icon: "inbox",     label: "Requests", badge: myAppointments.filter(a => a.status === 'PENDING').length },
         { page: "log",       section: "Consultations", icon: "clipboard", label: "Consultation Log" },
         { page: "status",    section: "Availability",  icon: "activity",  label: "Status & Notices" },
@@ -953,7 +955,7 @@ const saveConsultationHours = async () => {
         { page: "analytics", section: "Insights",      icon: "chart",     label: "My Analytics" },
         { page: "profile",   section: "Account",       icon: "user",      label: "My Profile" },
       ] as { page: Page; section: string; icon: IconName; label: string; badge?: number }[]).map(({ page, ...item }) => ({
-        key: page, ...item, active: activePage === page, onClick: () => setActivePage(page),
+        key: page, ...item, active: activePage === page, onClick: () => { setActivePage(page); if (page === 'schedule') fetchData(); }, // reload so edits and imports show on the Master Schedule
       }))}
     >
         {!embedded && <WelcomeHeader name={userName || ''} actions={activePage === 'analytics' ? <ExportBar solid csvPath="/api/analytics/me.csv" fileBase="my-analytics" /> : undefined} />}
@@ -1131,12 +1133,6 @@ const saveConsultationHours = async () => {
 
               </Flex>
 
-              {userId && (
-                <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "flex-end" }}>
-                  {canImportSchedule && <button className="touch-target" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule." style={{ ...btnBase, padding: "8px 14px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surface, color: C.textMid, fontSize: "12px" }}>Import Schedule PDF</button>}
-                  <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} onApplied={fetchData} />
-                </div>
-              )}
 
             </div>
           </Box>
@@ -1258,6 +1254,20 @@ const saveConsultationHours = async () => {
         {/* ───────────────────────────────────────────────────────────────
             PAGE: MY STATUS (Chakra UI Form)
         ─────────────────────────────────────────────────────────────── */}
+        {activePage === "editSchedule" && canImportSchedule && userId && (
+          <Box p={{ base: 4, md: 6 }}>
+            <Flex justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={3} mb={4}>
+              <Box>
+                <Heading size="md" color={textColor}>Edit Schedule</Heading>
+                <Text fontSize="sm" color={mutedText}>Add, change or delete your classes, or import them from your scanned Faculty Load PDF. Your Master Schedule updates after you save.</Text>
+              </Box>
+              <ChakraButton size="sm" variant="outline" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule.">Import Schedule PDF</ChakraButton>
+            </Flex>
+            <ClassGridEditor facultyId={userId} facultyName={userName || ''} />
+            <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} onApplied={fetchData} />
+          </Box>
+        )}
+
         {activePage === "status" && (
           <div style={{ padding: "clamp(16px, 4vw, 32px)", overflowY: "auto" }}>
             <PageTitle>Status & Notices</PageTitle>
