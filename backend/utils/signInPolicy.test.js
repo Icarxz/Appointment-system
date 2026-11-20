@@ -29,6 +29,13 @@ test('existing active user logs in', () => {
 test('archived user denied', () => {
   assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus: 'ARCHIVED' } }).action, 'DENY');
 });
+test('restricted and pending-approval users denied, a new student is still created', () => {
+  for (const accountStatus of ['RESTRICTED', 'PENDING_APPROVAL']) {
+    assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus } }).action, 'DENY');
+  }
+  const created = decideSignIn({ ...base, payload: ok('new@school.edu.ph'), existingUser: null, rosterRole: null });
+  assert.deepStrictEqual([created.action, created.role], ['CREATE', 'STUDENT']);
+});
 test('no domain configured denies everyone', () => {
   assert.strictEqual(decideSignIn({ ...base, allowedDomains: [], payload: ok('a@school.edu.ph') }).action, 'DENY');
 });

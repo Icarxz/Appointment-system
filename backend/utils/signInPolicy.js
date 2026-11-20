@@ -15,7 +15,7 @@ function decideSignIn({ payload, allowedDomains, adminEmails, existingUser, rost
     return { action: 'DENY', error: 'Please sign in with your school Google account.' };
   }
   if (existingUser) {
-    if (existingUser.accountStatus === 'ARCHIVED' || existingUser.accountStatus === 'RESTRICTED') {
+    if (['ARCHIVED', 'RESTRICTED', 'PENDING_APPROVAL'].includes(existingUser.accountStatus)) {
       return { action: 'DENY', error: 'This account is not active. Please contact the administrator.' };
     }
     // An address listed in ADMIN_EMAILS is always an Admin, even if the account was created earlier as something else.
