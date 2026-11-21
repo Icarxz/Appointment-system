@@ -147,6 +147,8 @@ export default function LandingPage() {
   const footerBg = useColorModeValue('#d9e9f3', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const modalBg = useColorModeValue('white', 'gray.800');
+  const tabDivider = useColorModeValue('#dbeaf3', 'whiteAlpha.300');
+  const tabInactiveBg = useColorModeValue('#f7fbfd', 'whiteAlpha.50');
   const heroGradient = useColorModeValue('linear(to-b, #f3fafd, #e3f2f9)', 'linear(to-b, #0b1220, #0f1d33)');
   const faqHoverBg = useColorModeValue('#f3fafd', 'gray.700');
   const outlineBorder = useColorModeValue(NAVY, 'whiteAlpha.700');
@@ -253,7 +255,6 @@ export default function LandingPage() {
         <GoogleSignInButton onCredential={(c) => handleGoogleCredential(c, 'LOGIN')} />
         <Text fontSize="xs" color={bodyColor}>Use your @antiquespride.edu.ph account</Text>
       </VStack>
-      <Text fontSize="xs" color={bodyColor}>New student? Close this and choose Sign up.</Text>
     </VStack>
   ) : authStep === 'role' ? (
     <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
@@ -524,11 +525,31 @@ export default function LandingPage() {
       <Modal isOpen={isOpen} onClose={onClose} size="lg" isCentered scrollBehavior="inside">
         <ModalOverlay backdropFilter="blur(4px)" />
         <ModalContent borderRadius="2xl" overflow="hidden" bg={modalBg}>
+          {/* Sign Up | Log In tabs. Sign Up covers the role choice and both sign-up screens; Log In is the Google-only screen. */}
+          <Flex role="tablist" aria-label="Account" borderBottomWidth="1px" borderColor={tabDivider}>
+            {([['role', 'Sign Up'], ['login', 'Log In']] as const).map(([step, label]) => {
+              const active = step === 'login' ? authStep === 'login' : authStep !== 'login';
+              return (
+                <Box
+                  key={step} as="button" type="button" role="tab" aria-selected={active} flex="1" py={4}
+                  fontWeight="700" textAlign="center" color={active ? TEAL : bodyColor}
+                  bg={active ? 'transparent' : tabInactiveBg}
+                  borderBottomWidth="3px" borderBottomColor={active ? TEAL : 'transparent'} mb="-1px"
+                  _hover={{ color: TEAL }} _focusVisible={{ boxShadow: `inset 0 0 0 3px ${TEAL}` }}
+                  onClick={() => { if (!active) setAuthStep(step); }}
+                >
+                  {label}
+                </Box>
+              );
+            })}
+            {/* room for the close button, which sits over the right end of the tab row */}
+            <Box w={12} flexShrink={0} />
+          </Flex>
           <ModalHeader display="flex" alignItems="center" gap={3} pr={12} color={headingColor}>
             <LogoMark size={28} color={NAVY} />
             <Text fontWeight="800" letterSpacing="0.04em">{authStep === 'login' ? 'Welcome back to CCIS Sync' : authStep === 'role' ? 'Create your CCIS Sync account' : authStep === 'student' ? 'CCIS Sync: Student' : 'CCIS Sync: Faculty'}</Text>
           </ModalHeader>
-          <ModalCloseButton />
+          <ModalCloseButton top={3} />
           <ModalBody p={0}>
             {authTabs}
           </ModalBody>
