@@ -196,12 +196,17 @@ export default function AdminDashboard() {
     [filteredRecords, recordsSort],
   );
 
-  const filteredFacultyList = React.useMemo(() => facultyList.filter(f =>
+  // The Faculty list also shows every Dean account (even one who has not turned consultations on), so an account switched to Dean can still be edited.
+  const facultyRows = React.useMemo(
+    () => [...facultyList, ...allUsers.filter(u => u.role === 'DEAN' && !facultyList.some(f => f._id === u._id))],
+    [facultyList, allUsers],
+  );
+  const filteredFacultyList = React.useMemo(() => facultyRows.filter(f =>
     (!facultyPositionFilter || f.programPosition === facultyPositionFilter) &&
     (!facultyProgramFilter || facultyProgram(f) === facultyProgramFilter) &&
     (!facultyStatusFilter || facultyStatusOf(f) === facultyStatusFilter) &&
     matchesGender(f.gender, facultyGender)
-  ), [facultyList, facultyPositionFilter, facultyProgramFilter, facultyStatusFilter, facultyGender]);
+  ), [facultyRows, facultyPositionFilter, facultyProgramFilter, facultyStatusFilter, facultyGender]);
 
   // Admin: set (or clear, with '') the program of a faculty member. A Program Head's program also comes from the position, so clearing it falls back to that.
   const saveProgram = async (id: string, program: string) => {
@@ -538,13 +543,15 @@ export default function AdminDashboard() {
                       {facultyStatusUntil(prof) && <Text fontSize="xs" color={mutedText}>{facultyStatusUntil(prof)}</Text>}
                     </Td>
                     <Td>
-                      {userById[prof._id]?.role === 'FACULTY' && (
+                      {(userById[prof._id]?.role === 'FACULTY' || userById[prof._id]?.role === 'DEAN') && (
                         <HStack spacing={2}>
-                          <ChakraButton size="xs" variant="outline" onClick={() => setScheduleOf(prof)}>Schedule</ChakraButton>
+                          {userById[prof._id]?.role === 'FACULTY' && <ChakraButton size="xs" variant="outline" onClick={() => setScheduleOf(prof)}>Schedule</ChakraButton>}
                           <ChakraButton size="xs" variant="outline" onClick={() => userById[prof._id] && setAccountEdit(userById[prof._id])}>Edit</ChakraButton>
-                          <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(userById[prof._id]) ? 'green' : 'red'} onClick={() => setStatusTarget(userById[prof._id])}>
-                            {isAccountDisabled(userById[prof._id]) ? 'Enable' : 'Disable'}
-                          </ChakraButton>
+                          {userById[prof._id]?.role === 'FACULTY' && (
+                            <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(userById[prof._id]) ? 'green' : 'red'} onClick={() => setStatusTarget(userById[prof._id])}>
+                              {isAccountDisabled(userById[prof._id]) ? 'Enable' : 'Disable'}
+                            </ChakraButton>
+                          )}
                         </HStack>
                       )}
                     </Td>

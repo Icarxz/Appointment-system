@@ -19,8 +19,12 @@ function requireAuth(allowedRoles) {
     if (!allowedRoles.includes(decoded.role)) return res.status(403).json({ error: 'Forbidden' });
 
     try {
-      const account = await User.findById(decoded.userId).select('accountStatus').lean();
+      const account = await User.findById(decoded.userId).select('accountStatus role').lean();
       if (!account) return res.status(401).json({ error: 'Account not found' });
+      // The Admin changed this person's role after they signed in: the old sign-in no longer counts, they sign in again.
+      if (account.role && account.role !== decoded.role) {
+        return res.status(401).json({ error: 'Your role was changed. Please sign in again.', code: 'ROLE_CHANGED' });
+      }
       if (BLOCKED_STATUSES.includes(account.accountStatus)) {
         return res.status(401).json({ error: 'Your account has been disabled. Please contact the administrator.', code: 'ACCOUNT_DISABLED' });
       }
