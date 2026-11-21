@@ -17,6 +17,15 @@ test('rejects lookalike domain', () => {
 test('unknown school email becomes STUDENT', () => {
   assert.deepStrictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph') }), { action: 'CREATE', role: 'STUDENT' });
 });
+test('provisioning flag denies unknown users and does not create a student', () => {
+  const denied = decideSignIn({ ...base, payload: ok('unknown@school.edu.ph'), requireProvisionedAccounts: true });
+  assert.strictEqual(denied.action, 'DENY');
+  assert.match(denied.error, /No account was found/);
+});
+test('provisioning flag still allows Admin and roster exceptions', () => {
+  assert.strictEqual(decideSignIn({ ...base, payload: ok('Boss@school.edu.ph'), requireProvisionedAccounts: true }).role, 'ADMIN');
+  assert.strictEqual(decideSignIn({ ...base, payload: ok('f@school.edu.ph'), rosterRole: 'FACULTY', requireProvisionedAccounts: true }).role, 'FACULTY');
+});
 test('roster gives faculty role', () => {
   assert.strictEqual(decideSignIn({ ...base, payload: ok('f@school.edu.ph'), rosterRole: 'FACULTY' }).role, 'FACULTY');
 });

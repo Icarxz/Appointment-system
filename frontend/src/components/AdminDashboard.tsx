@@ -77,6 +77,12 @@ export default function AdminDashboard() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [programPosition, setProgramPosition] = useState('');
+  const [schoolId, setSchoolId] = useState('');
+  const [facultyId, setFacultyId] = useState('');
+  const [studentProgram, setStudentProgram] = useState('');
+  const [studentYear, setStudentYear] = useState('');
+  const [studentSection, setStudentSection] = useState('');
+  const [gender, setGender] = useState('');
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
@@ -227,7 +233,15 @@ export default function AdminDashboard() {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/add`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, programPosition, role, program: role === 'FACULTY' ? newProgram : '' })
+        body: JSON.stringify({
+          name, email, role, gender: gender || undefined,
+          schoolId: role === 'STUDENT' ? schoolId : undefined,
+          facultyId: role !== 'STUDENT' ? facultyId : undefined,
+          program: role === 'STUDENT' ? studentProgram : (role === 'FACULTY' ? newProgram : ''),
+          year: role === 'STUDENT' ? studentYear : undefined,
+          section: role === 'STUDENT' ? studentSection : undefined,
+          programPosition: role !== 'STUDENT' ? programPosition : undefined,
+        })
       });
       const data = await response.json();
       if (response.ok) {
@@ -235,6 +249,7 @@ export default function AdminDashboard() {
         setNewFacultyName(data.facultyName);
         setNewAccount({ id: data.userId, role: data.role });
         setName(''); setEmail(''); setProgramPosition(''); setNewProgram('');
+        setSchoolId(''); setFacultyId(''); setStudentProgram(''); setStudentYear(''); setStudentSection(''); setGender('');
         fetchAllData();
       } else { toast({ title: data.error, status: 'error' }); }
     } catch (error) { }
@@ -439,24 +454,67 @@ export default function AdminDashboard() {
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Access Level</FormLabel>
                         <Select value={role} onChange={(e) => setRole(e.target.value)} color={textColor} borderColor={borderColor}>
+                          <option value="STUDENT">Student</option>
                           <option value="FACULTY">Faculty Member</option>
                           <option value="DEAN">College Dean</option>
-                          <option value="ADMIN">System Admin</option>
                         </Select>
-                      </FormControl>
-
-                      <FormControl isRequired>
-                        <FormLabel color={textColor}>Program & Position</FormLabel>
-                        <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
-                          options={FACULTY_POSITIONS.map(position => ({ value: position, label: position }))} />
                       </FormControl>
                     </SimpleGrid>
 
-                    {role === 'FACULTY' && (
-                      <FormControl>
-                        <FormLabel color={textColor}>Faculty Program (optional)</FormLabel>
-                        <SearchableSelect placeholder="Not set" value={newProgram} onChange={setNewProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
-                      </FormControl>
+                    {role === 'STUDENT' ? (
+                      <VStack spacing={4} align="stretch">
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                          <FormControl isRequired>
+                            <FormLabel color={textColor}>School ID</FormLabel>
+                            <Input value={schoolId} onChange={(e) => setSchoolId(e.target.value.toUpperCase())} placeholder="2025-S00001" />
+                          </FormControl>
+                          <FormControl isRequired>
+                            <FormLabel color={textColor}>Program</FormLabel>
+                            <SearchableSelect placeholder="Select program..." value={studentProgram} onChange={(v) => { setStudentProgram(v); setStudentYear(''); setStudentSection(''); }} searchable={false}
+                              options={Object.keys(cohortConfig).map(p => ({ value: p, label: p }))} />
+                          </FormControl>
+                        </SimpleGrid>
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                          <FormControl isRequired>
+                            <FormLabel color={textColor}>Year</FormLabel>
+                            <SearchableSelect placeholder="Select year..." value={studentYear} onChange={(v) => { setStudentYear(v); setStudentSection(''); }} searchable={false} isDisabled={!studentProgram}
+                              options={studentProgram ? Object.keys(cohortConfig[studentProgram]).map(y => ({ value: y, label: y })) : []} />
+                          </FormControl>
+                          <FormControl isRequired>
+                            <FormLabel color={textColor}>Section</FormLabel>
+                            <SearchableSelect placeholder="Select section..." value={studentSection} onChange={setStudentSection} searchable={false} isDisabled={!studentYear}
+                              options={studentProgram && studentYear ? cohortConfig[studentProgram][studentYear].map(s => ({ value: s, label: s })) : []} />
+                          </FormControl>
+                        </SimpleGrid>
+                        <FormControl>
+                          <FormLabel color={textColor}>Gender (optional)</FormLabel>
+                          <SearchableSelect placeholder="Not specified" value={gender} onChange={setGender} searchable={false} options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
+                        </FormControl>
+                      </VStack>
+                    ) : (
+                      <VStack spacing={4} align="stretch">
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                          <FormControl isRequired>
+                            <FormLabel color={textColor}>Employee ID</FormLabel>
+                            <Input value={facultyId} onChange={(e) => setFacultyId(e.target.value.toUpperCase())} placeholder="2025S-00001" />
+                          </FormControl>
+                          <FormControl isRequired>
+                            <FormLabel color={textColor}>Position</FormLabel>
+                            <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
+                              options={FACULTY_POSITIONS.map(position => ({ value: position, label: position }))} />
+                          </FormControl>
+                        </SimpleGrid>
+                        {role === 'FACULTY' && (
+                          <FormControl>
+                            <FormLabel color={textColor}>Faculty Program (optional)</FormLabel>
+                            <SearchableSelect placeholder="Not set" value={newProgram} onChange={setNewProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
+                          </FormControl>
+                        )}
+                        <FormControl>
+                          <FormLabel color={textColor}>Gender (optional)</FormLabel>
+                          <SearchableSelect placeholder="Not specified" value={gender} onChange={setGender} searchable={false} options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
+                        </FormControl>
+                      </VStack>
                     )}
 
                     <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={loading}>Generate Account</ChakraButton>

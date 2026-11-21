@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, VStack, FormControl, FormLabel,
   FormHelperText, Input, Checkbox, Button, HStack, Text, Link as ChakraLink,
@@ -35,13 +35,28 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
   const [privacy, setPrivacy] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [detailsAlreadyProvisioned, setDetailsAlreadyProvisioned] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !token) return;
+    fetch(`${import.meta.env.VITE_API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(r => r.ok ? r.json() : null).then(profile => {
+      if (!profile) return;
+      const provisioned = !!profile.programPosition &&
+        (profile.role === 'STUDENT' ? !!profile.schoolId : (profile.role === 'FACULTY' || profile.role === 'DEAN' ? !!profile.facultyId : profile.role === 'ADMIN'));
+      setDetailsAlreadyProvisioned(provisioned);
+    }).catch(() => {});
+  }, [isOpen, token]);
 
   const submit = async () => {
     setError('');
-    if (isStudent && !(program && year && section)) return setError('Please select your program, year and section.');
-    if (!isStudent && !position) return setError('Please select your position.');
-    if (role === 'FACULTY' && !facultyProgramValue) return setError('Please select your program.');
-    if (needsId && !isValidId(idValue, idKind)) return setError(`Enter a valid ${isStudent ? 'Student' : 'Employee'} ID (${idHint(idKind)}).`);
+    if (!detailsAlreadyProvisioned) {
+      if (isStudent && !(program && year && section)) return setError('Please select your program, year and section.');
+      if (!isStudent && !position) return setError('Please select your position.');
+      if (role === 'FACULTY' && !facultyProgramValue) return setError('Please select your program.');
+      if (needsId && !isValidId(idValue, idKind)) return setError(`Enter a valid ${isStudent ? 'Student' : 'Employee'} ID (${idHint(idKind)}).`);
+    }
     if (!privacy) return setError('Please accept the Privacy Policy.');
 
     setSaving(true);
@@ -51,9 +66,9 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           gender,
-          programPosition: isStudent ? `${program} ${year}${section}` : position,
-          program: role === 'FACULTY' ? facultyProgramValue : undefined,
-          idValue: needsId ? idValue : undefined,
+          programPosition: detailsAlreadyProvisioned ? undefined : (isStudent ? `${program} ${year}${section}` : position),
+          program: detailsAlreadyProvisioned ? undefined : (role === 'FACULTY' ? facultyProgramValue : undefined),
+          idValue: detailsAlreadyProvisioned ? undefined : (needsId ? idValue : undefined),
           privacyAccepted: true,
         }),
       });
@@ -81,7 +96,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
               <SearchableSelect portal searchable={false} ariaLabel="Gender" placeholder="Prefer not to answer" value={gender} onChange={setGender}
                 options={['Male', 'Female'].map(g => ({ value: g, label: g }))} />
             </FormControl>
-            {isStudent ? (
+            {!detailsAlreadyProvisioned && (isStudent ? (
               <HStack align="start">
                 <FormControl isRequired>
                   <FormLabel>Program</FormLabel>
@@ -117,8 +132,8 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
                   </FormControl>
                 )}
               </>
-            )}
-            {needsId && (
+            ))}
+            {!detailsAlreadyProvisioned && needsId && (
               <FormControl isRequired isInvalid={idValue !== '' && !isValidId(idValue, idKind)}>
                 <FormLabel>{isStudent ? 'School ID' : 'Employee ID'}</FormLabel>
                 <Input

@@ -57,7 +57,8 @@ router.post('/google', googleLimiter, async (req, res) => {
       allowedDomains: parseList(process.env.ALLOWED_EMAIL_DOMAIN),
       adminEmails: parseList(process.env.ADMIN_EMAILS),
       existingUser,
-      rosterRole: rosterEntry?.role || null
+      rosterRole: rosterEntry?.role || null,
+      requireProvisionedAccounts: String(process.env.REQUIRE_PROVISIONED_ACCOUNTS || '').trim().toLowerCase() === 'true'
     });
     if (decision.action === 'DENY') return res.status(403).json({ error: decision.error });
     // Wrong tab? Stop before any account is created or changed.
@@ -125,6 +126,21 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
     // Gender is optional (analytics shows a blank as "Not provided"). When given it must be Male or Female ('Prefer not to say' was retired; old accounts keep it).
     const genderGiven = gender !== undefined && gender !== null && String(gender).trim() !== '';
     if (genderGiven && !['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female, or leave gender blank.' });
+
+    // Admin-provisioned accounts already contain their identity and academic/employment details.
+    // Privacy acceptance and optional gender are the only onboarding values these accounts need.
+    const provisionedDetailsComplete =
+      !!user.programPosition &&
+      (user.role === 'STUDENT' ? !!user.schoolId : (['FACULTY', 'DEAN'].includes(user.role) ? !!user.facultyId : user.role === 'ADMIN'));
+    if (provisionedDetailsComplete) {
+      if (genderGiven) user.gender = gender;
+      user.privacyAcceptedAt = new Date();
+      user.noIdYet = false;
+      user.onboardingComplete = true;
+      await user.save();
+      return res.json(sessionPayload(user));
+    }
+
     if (!programPosition || !String(programPosition).trim()) {
       return res.status(400).json({ error: user.role === 'STUDENT' ? 'Program, year and section are required.' : 'Position is required.' });
     }

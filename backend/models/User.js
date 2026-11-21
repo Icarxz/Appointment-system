@@ -62,7 +62,7 @@ facultyId: {
   validate: {
     validator: function(v) {
       if (!v) return true; // no ID yet — allowed, will be flagged instead
-      if (this.role !== 'FACULTY') return true;
+      if (this.role !== 'FACULTY' && this.role !== 'DEAN') return true;
       return EMPLOYEE_ID_REGEX.test(v);
     },
     message: props => `${props.value} is not a valid Faculty ID format. Use 2025S-00001.`

@@ -5,7 +5,7 @@ const parseList = (v) => (v || '').split(',').map(s => s.replace(/[<>"']/g, '').
 
 // Google's verified ID-token payload + config + what we already know -> what to do.
 // payload: { email, email_verified, hd }   existingUser: User doc or null   rosterRole: string|null
-function decideSignIn({ payload, allowedDomains, adminEmails, existingUser, rosterRole }) {
+function decideSignIn({ payload, allowedDomains, adminEmails, existingUser, rosterRole, requireProvisionedAccounts = false }) {
   const email = (payload?.email || '').toLowerCase();
   if (!email || payload.email_verified !== true) {
     return { action: 'DENY', error: 'Your Google email is not verified.' };
@@ -22,8 +22,13 @@ function decideSignIn({ payload, allowedDomains, adminEmails, existingUser, rost
     if (adminEmails.includes(email) && existingUser.role !== 'ADMIN') return { action: 'LOGIN', promoteTo: 'ADMIN' };
     return { action: 'LOGIN' };
   }
-  const role = adminEmails.includes(email) ? 'ADMIN' : (rosterRole || 'STUDENT');
-  return { action: 'CREATE', role };
+  const role = adminEmails.includes(email) ? 'ADMIN' : (rosterRole || null);
+  if (requireProvisionedAccounts) {
+    if (!role) {
+      return { action: 'DENY', error: 'No account was found for this email. Please contact the System Administrator to create your account.' };
+    }
+  }
+  return { action: 'CREATE', role: role || 'STUDENT' };
 }
 
 // A profile is complete once onboarding is done AND a student has an ID on file.
@@ -36,7 +41,7 @@ function isProfileComplete(user) {
 
 // The sign-in screens say which door the person used. The server still decides the role (from the roster / ADMIN_EMAILS /
 // the stored account); the audience only stops someone using the wrong door.
-//   'STUDENT' : Sign up > Student.   'STAFF' : Sign up > Faculty (also Dean and Admin).
+//   'STUDENT' : older Student sign-up client.   'STAFF' : older Faculty/Dean sign-in client.
 //   'LOGIN'   : Log in: existing accounts only, nobody is created here (see loginNeedsAccount).
 //   undefined : older clients, no check.
 // Returns an error text or null.

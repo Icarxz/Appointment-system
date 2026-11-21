@@ -58,6 +58,7 @@ const { isEmploymentType } = require('../utils/employment');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { transition, CHANGED_MESSAGE } = require('../utils/statusTransition');
 const { canMarkMissed, missOpensAt, canCorrectMiss, hasStarted, CORRECTION_HOURS, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
+const { validateId } = require('../utils/idValidator');
 const { cleanReason } = require('../utils/missReason');
 const { reportDecision } = require('../utils/reportFacultyMissed');
 const { canViewAppointment } = require('../utils/appointmentAccess');
@@ -436,39 +437,64 @@ router.delete('/schedule/:id', requireAuth(SCHEDULE_EDITORS), async (req, res) =
 });
 
 // 5. POST ROUTE: Admin adds a new faculty member (QR Generation)
-router.post('/add', requireAuth(STAFF), async (req, res) => {
-  const { name, programPosition, room, role, schoolId, facultyId, program } = req.body;
-  const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+router.post('/add', requireAuth(['ADMIN']), async (req, res) => {
   try {
-    if (!EMAIL_REGEX.test(email)) {
-      return res.status(400).json({ error: 'Please enter a valid email address (a single "@", e.g. name@gmail.com).' });
-    }
-    if (!isApprovedFacultyPosition(programPosition)) {
-      return res.status(400).json({ error: 'Please select one of the approved positions: Faculty, Librarian, Program Head (BS INFO), Program Head (BS COMSCI), Program Head (BLIS), or Dean.' });
-    }
-    // The program is optional and only kept for faculty accounts (a Program Head's is implied by the position anyway)
-    const hasProgram = program !== undefined && program !== null && program !== '';
-    if (hasProgram && !isProgram(program)) return res.status(400).json({ error: 'Program must be BS INFO, BS COMSCI or BLIS.' });
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already exists' });
-    }
+    const { name, email: rawEmail, role: rawRole, gender, program, year, section, schoolId, facultyId, programPosition, employmentType } = req.body || {};
+    const cleanName = typeof name === 'string' ? name.replace(/\s+/g, ' ').trim() : '';
+    const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+    const role = typeof rawRole === 'string' ? rawRole.trim().toUpperCase() : '';
 
-    const newUser = new User({
-      name,
+    if (cleanName.length < 2 || cleanName.length > 100) return res.status(400).json({ error: 'Full name must be 2 to 100 characters.' });
+    if (!EMAIL_REGEX.test(email)) return res.status(400).json({ error: 'Please enter a valid school email address.' });
+    const allowedDomains = parseList(process.env.ALLOWED_EMAIL_DOMAIN);
+    const domain = email.split('@')[1];
+    if (!allowedDomains.length || !allowedDomains.includes(domain)) return res.status(400).json({ error: 'Please use a valid school email address.' });
+    if (!['STUDENT', 'FACULTY', 'DEAN'].includes(role)) return res.status(400).json({ error: 'Choose Student, Faculty or Dean.' });
+    if (gender && !['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female, or leave gender blank.' });
+    if (await User.findOne({ email }).select('_id')) return res.status(409).json({ error: 'An account already uses this email.' });
+
+    const account = {
+      name: cleanName,
       email,
-      programPosition,
-      room,
-      ...((role || 'FACULTY') === 'FACULTY' && (programOfPosition(programPosition) || hasProgram) ? { program: programOfPosition(programPosition) || program.trim() } : {}), // a head's program is the one in the position
-      role: role || 'FACULTY',
-      schoolId,
-      facultyId,
+      role,
+      accountStatus: 'ACTIVE',
+      isVerified: false,
+      onboardingComplete: false,
       currentStatus: 'OUT_OF_OFFICE',
-    });
+    };
+    if (gender) account.gender = gender;
 
-    await newUser.save();
-    res.json({ message: 'Account provisioned successfully', facultyName: name, userId: newUser._id, role: newUser.role });
+    if (role === 'STUDENT') {
+      if (!isValidCohort(program, year, section)) return res.status(400).json({ error: 'Choose a valid program, year and section.' });
+      const idCheck = validateId(schoolId, 'STUDENT');
+      if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
+      if (await User.findOne({ schoolId: idCheck.id }).select('_id')) return res.status(409).json({ error: 'That School ID is already registered to another account.' });
+      account.schoolId = idCheck.id;
+      account.noIdYet = false;
+      account.programPosition = cohortLabel(program, year, section);
+    } else {
+      if (!isApprovedFacultyPosition(programPosition)) return res.status(400).json({ error: 'Please select an approved faculty or Dean position.' });
+      const idCheck = validateId(facultyId, 'EMPLOYEE');
+      if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
+      if (await User.findOne({ facultyId: idCheck.id }).select('_id')) return res.status(409).json({ error: 'That Employee ID is already registered to another account.' });
+      account.facultyId = idCheck.id;
+      account.noIdYet = false;
+      account.programPosition = String(programPosition).trim();
+      const headProgram = programOfPosition(account.programPosition);
+      if (employmentType && !isEmploymentType(employmentType)) return res.status(400).json({ error: 'Choose Full-time or Part-time.' });
+      if (employmentType) account.employmentType = employmentType;
+      if (headProgram) account.program = headProgram;
+      else if (program) {
+        if (!isProgram(program)) return res.status(400).json({ error: 'Program must be BS INFO, BS COMSCI or BLIS.' });
+        account.program = program.trim();
+      }
+    }
+
+    const newUser = await User.create(account);
+    res.json({ message: 'Account provisioned successfully', facultyName: newUser.name, userId: newUser._id, role: newUser.role });
   } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ error: 'An account with that email or ID already exists.' });
+    console.error('Provisioning error:', error.message);
     res.status(500).json({ error: 'Error provisioning account' });
   }
 });
