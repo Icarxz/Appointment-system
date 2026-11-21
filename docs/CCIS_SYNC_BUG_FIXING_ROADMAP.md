@@ -4,7 +4,7 @@
 **Current scope:** Stabilize the single-department (CCIS) system before considering multi-department expansion.  
 **Purpose:** Shared repair order, severity definitions, dependencies, and test gates for development sessions.  
 **Priority principle:** Fix risk and dependencies first—not simply the hardest or easiest issues.  
-**Last updated:** Sat Nov 21, 2026 11:58 (by the session that built the Nov 14-21 fixes). `main` was at `9d8efe7` (PR #103). Every session must update sections 13 and 15 before it finishes (see `CCIS_SYNC_AI_SESSION_DEVELOPMENT_RULES.md`, section 11).
+**Last updated:** Sat Nov 21, 2026 13:05 (`main` at `833fda8`) (by the session that built the Nov 14-21 fixes). `main` was at `9d8efe7` (PR #103). Every session must update sections 13 and 15 before it finishes (see `CCIS_SYNC_AI_SESSION_DEVELOPMENT_RULES.md`, section 11).
 
 ## 1. Overall strategy
 
@@ -59,19 +59,19 @@ Severity is based on impact, not difficulty.
 
 **Done on `main` by other sessions (not re-verified by this session):** PR #96 (choose Student or Faculty first, then Google) and PR #99 (Log in goes straight to Google; role choice only on Sign up). On `main` the Faculty screen under Sign up shows only the administrator message and has no Google button.
 
-**Done on branch `auth-role-choice` (pushed Nov 21, NOT merged, NOT browser-tested; replaces the earlier `auth-direct-google` idea after the owner chose role choice):**
+**Done on branch `auth-role-choice` (PR #104, merged Nov 21, NOT browser-tested; replaces the earlier `auth-direct-google` idea after the owner chose role choice):**
 - Sign up > Faculty now has a "Continue with Google" button (staff audience) above the "Faculty Account Assistance" message. The server rejects an email that is not registered as faculty/staff **before any account is created**, and rejects a student account on the Faculty door (and a faculty account on the Student door).
 - Log in (audience `LOGIN`) signs in existing accounts only: it no longer creates a student account. A first sign-in is still allowed when the roster / `ADMIN_EMAILS` already names the person as faculty, Dean or Admin.
 - `PENDING_APPROVAL` accounts are denied at Google sign-in.
 - Error messages no longer mention "tabs". New unit tests; 342 backend tests pass (only the known `notificationModel` failure). Files: `backend/utils/signInPolicy.js`, `backend/routes/auth.js`, `frontend/src/components/LandingPage.tsx`, `backend/utils/signInPolicy.test.js`.
-- **Admin role/position editing (branch `admin-edit-role-position`, pushed, NOT merged, NOT browser-tested):** Admin > Edit account can now change a person's Role (Student / Faculty / Dean) and Academic position (the six approved positions), added so the login flows can be tested with one account. Dean accounts now appear in the Admin Faculty list with an Edit button. Server rules in `PATCH /api/faculty/users/:id/profile`: Admin only; role must be Student, Faculty or Dean (never Admin); to Student needs a valid program / year / section and a School ID; from Student to Faculty or Dean needs an approved position; a Program Head position sets the program; position and role are edited independently (like Provision Account). **Security change in `backend/middleware/auth.js`:** `requireAuth` now compares the stored role with the role in the token and answers 401 `ROLE_CHANGED` if they differ, so an old sign-in stops working at once after a role change (before, the token's role was trusted for 8 hours). The frontend's `authFetch` already sends a 401 back to the login page. This middleware change affects every protected route and needs the browser test below.
+- **Admin role/position editing (PR #105, merged Nov 21, NOT browser-tested):** Admin > Edit account can now change a person's Role (Student / Faculty / Dean) and Academic position (the six approved positions), added so the login flows can be tested with one account. Dean accounts now appear in the Admin Faculty list with an Edit button. Server rules in `PATCH /api/faculty/users/:id/profile`: Admin only; role must be Student, Faculty or Dean (never Admin); to Student needs a valid program / year / section and a School ID; from Student to Faculty or Dean needs an approved position; a Program Head position sets the program; position and role are edited independently (like Provision Account). **Security change in `backend/middleware/auth.js`:** `requireAuth` now compares the stored role with the role in the token and answers 401 `ROLE_CHANGED` if they differ, so an old sign-in stops working at once after a role change (before, the token's role was trusted for 8 hours). The frontend's `authFetch` already sends a 401 back to the login page. This middleware change affects every protected route and needs the browser test below.
 - **Combined test branch `test-auth-and-role-edit`** (= `admin-edit-role-position` + `auth-role-choice`, commit `4bda5f2`): for testing only; merge the two real branches, not this one.
 - The old branch `auth-direct-google` (Log in and Sign up both direct, no role choice) is superseded; do not merge it.
 
 **Not done / still open:**
 - [ ] Browser test of login and logout for all four roles, including a real Google sign-in.
 - [ ] Review of session/token handling and logout behavior.
-- [ ] Merge `auth-role-choice` and `admin-edit-role-position` (separate PRs, either order) after the browser test and tag the result.
+- [x] Merged #104 and #105 into `main` on Nov 21. **Still to do:** the browser tests below on the deployed link (Vercel and Render redeploy from `main`), then tag the tested commit.
 - [ ] Browser-test the role change: switch a test account Faculty -> Dean -> Student -> Faculty in Admin; confirm that person is signed out on their next click, can sign in with the new role, and that Admin, Dean, Faculty and Student pages all still load for their own accounts (the `ROLE_CHANGED` check runs on every request).
 - [ ] Browser-test these cases: Log in with an existing account of each role; Log in with a new school email (expect "No account found"); Sign up > Student with a new email (account created, onboarding); Sign up > Faculty with a provisioned faculty / Dean / Admin account (signs in); Sign up > Faculty with an unregistered school email (rejected, nothing created); Sign up > Faculty with a student account (rejected); Sign up > Student with a faculty account (rejected).
 - [ ] "Automatic role detection from the database" is described by the owner as coming later; the current detection (roster / existing record / ADMIN_EMAILS) is what exists today.
@@ -367,7 +367,7 @@ Update this section as work is completed. Only mark tasks complete after verific
 
 | Phase | Status | Notes / branch / verification |
 |---|---|---|
-| Phase 0 — Authentication and User Management | **In progress, NOT complete** (Nov 21) | Backend role-from-database logic already existed. Branches (pushed, unmerged): `auth-role-choice` (Faculty Google button + staff audience, Log in = existing accounts only, PENDING_APPROVAL block) and `admin-edit-role-position` (Admin can edit role and position; role change signs the person out). Combined test branch: `test-auth-and-role-edit`. Open: four-role browser test, token/logout review, merges. See the Phase 0 status note. |
+| Phase 0 — Authentication and User Management | **In progress, NOT complete** (Nov 21) | Backend role-from-database logic already existed. Merged to `main` Nov 21 (#104, #105): `auth-role-choice` (Faculty Google button + staff audience, Log in = existing accounts only, PENDING_APPROVAL block) and `admin-edit-role-position` (Admin can edit role and position; role change signs the person out). Combined test branch: `test-auth-and-role-edit`. Open: four-role browser test, token/logout review, merges. See the Phase 0 status note. |
 | Phase 1 — Authorization and Data Isolation | In progress, early (Nov 21) | Faculty-own-schedule rule added in PR #103, not tested by direct API request. Role-vs-token check in `requireAuth` on branch `admin-edit-role-position`. Full route audit not started. |
 | Phase 2 — Appointments and Consultation | Partly implemented, unverified | PRs #101, #102 merged. Needs the booking-to-log walkthrough and the stale "correct a missed one" wording check. |
 | Phase 3 — Schedules, Import and Status | Largely implemented, unverified | Status rebuild (#81-#89), schedule tabs (#103), importers (#60-#65, #68, #70, #80, #88). Needs the demo-machine test. |
@@ -428,8 +428,8 @@ Evidence level: **Vercel** = the Vercel preview build of the PR passed; **tests*
 | #94 | Faculty | Consultation Log tabs: Pending consultations / Saved consultations; wording "Late" | Vercel |
 | #95 | Student | Faculty Status and Consultation start on the student's own Program (typing a name searches all programs) | Vercel |
 | #102 | Faculty | Consultation Log: time shown, Upcoming badge, no save before start (also enforced on the server), missed consultations cannot be saved | tests (new `hasStarted` test), Vercel |
-| branch `auth-role-choice` | Sign-in | Faculty Google button (staff audience), Log in = existing accounts only, pending accounts blocked, clearer errors | tests (342); not merged, not browser-tested |
-| branch `admin-edit-role-position` | Admin / security | Edit role (Student/Faculty/Dean) and position; Dean rows in Faculty list; `requireAuth` rejects a token whose role no longer matches | `node --check`, tests (340); not merged, not browser-tested |
+| #104 | Sign-in | Faculty Google button (staff audience), Log in = existing accounts only, pending accounts blocked, clearer errors | tests (342), Vercel; merged Nov 21, not browser-tested |
+| #105 | Admin / security | Edit role (Student/Faculty/Dean) and position; Dean rows in Faculty list; `requireAuth` rejects a token whose role no longer matches | `node --check`, tests (340), Vercel; merged Nov 21, not browser-tested |
 | #103 | Faculty | Master Schedule tabs Weekly view / Edit Schedule; Import Schedule PDF moved there; FACULTY may edit only their own classes (server-enforced) | tests, Vercel; **not tested with a database** |
 | #81, #83-#87, #89 | Status *(other session)* | Computed Faculty Status, Program and Employment type on profile, My Status card, Post a Notice, status views for Student / Dean / Admin, status cleanup | merged |
 | #90-#92 | Dean *(other session)* | Dean consultations: reasons to students, consultable Dean, hours rule, settings | merged |
@@ -437,6 +437,6 @@ Evidence level: **Vercel** = the Vercel preview build of the PR passed; **tests*
 | #97, #98, #100 | Wording *(other session)* | "appointment" / "Consultation" wording; Missed by Student / Missed by Faculty | merged |
 | #101 | Appointments *(other session)* | Missed grace period and reasons, Missed by Faculty report, atomic status changes, outcome reminder | merged |
 
-**Not merged (all pushed):** `auth-role-choice` and `admin-edit-role-position` (see Phase 0); `test-auth-and-role-edit` (test combination only); `docs-roadmap-rules` (these documents). Superseded, do not merge: `auth-direct-google`. Branches without a PR are not on `main`; list them in the project state file.
+**Merged Nov 21:** #104 `auth-role-choice` and #105 `admin-edit-role-position` (`main` = `833fda8`; fallback = revert those two merge commits). **Not merged (pushed):** `docs-roadmap-rules` (these documents); `test-auth-and-role-edit` (old test combination, now redundant). Superseded, do not merge: `auth-direct-google`. Branches without a PR are not on `main`; list them in the project state file.
 
 **Known problems still open:** hosted OCR unavailable by design; Vercel `VITE_API_URL` and a live Render email test were never re-verified by a session; `docs/importer-status.md` (second OCR template) and `docs/DEPLOYMENT.md` (Brevo live, `VITE_API_URL`) are not updated; faculty "1 to 3 programs" is planned but not approved or built (`User.program` is one string).
