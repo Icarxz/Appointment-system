@@ -59,16 +59,21 @@ Severity is based on impact, not difficulty.
 
 **Done on `main` by other sessions (not re-verified by this session):** PR #96 (choose Student or Faculty first, then Google) and PR #99 (Log in goes straight to Google; role choice only on Sign up). On `main` the Faculty screen under Sign up shows only the administrator message and has no Google button.
 
-**Done on branch `auth-direct-google` (pushed, NOT merged, NOT browser-tested):** Log in and Sign up both go straight to Google with no role choice (owner decision, Nov 20), the "Faculty Account Assistance" message shows on both, and `PENDING_APPROVAL` accounts are now denied at Google sign-in (new unit test; 341 backend tests pass, only the known `notificationModel` failure). This replaces the #96/#99 role-selection screens, so it needs the owner's merge decision.
+**Done on branch `auth-role-choice` (pushed Nov 21, NOT merged, NOT browser-tested; replaces the earlier `auth-direct-google` idea after the owner chose role choice):**
+- Sign up > Faculty now has a "Continue with Google" button (staff audience) above the "Faculty Account Assistance" message. The server rejects an email that is not registered as faculty/staff **before any account is created**, and rejects a student account on the Faculty door (and a faculty account on the Student door).
+- Log in (audience `LOGIN`) signs in existing accounts only: it no longer creates a student account. A first sign-in is still allowed when the roster / `ADMIN_EMAILS` already names the person as faculty, Dean or Admin.
+- `PENDING_APPROVAL` accounts are denied at Google sign-in.
+- Error messages no longer mention "tabs". New unit tests; 342 backend tests pass (only the known `notificationModel` failure). Files: `backend/utils/signInPolicy.js`, `backend/routes/auth.js`, `frontend/src/components/LandingPage.tsx`, `backend/utils/signInPolicy.test.js`.
+- The old branch `auth-direct-google` (Log in and Sign up both direct, no role choice) is superseded; do not merge it.
 
 **Not done / still open:**
 - [ ] Browser test of login and logout for all four roles, including a real Google sign-in.
 - [ ] Review of session/token handling and logout behavior.
-- [ ] Decision: with no role choice, an unprovisioned faculty member who signs in with a school Google account silently becomes a Student account. Options: accept it (the assistance message is the only guard), or add an Admin-visible "unprovisioned staff" list.
-- [ ] Merge `auth-direct-google` (or drop it) and tag the result once tested.
+- [ ] Merge `auth-role-choice` after the browser test and tag the result.
+- [ ] Browser-test these cases: Log in with an existing account of each role; Log in with a new school email (expect "No account found"); Sign up > Student with a new email (account created, onboarding); Sign up > Faculty with a provisioned faculty / Dean / Admin account (signs in); Sign up > Faculty with an unregistered school email (rejected, nothing created); Sign up > Faculty with a student account (rejected); Sign up > Student with a faculty account (rejected).
 - [ ] "Automatic role detection from the database" is described by the owner as coming later; the current detection (roster / existing record / ADMIN_EMAILS) is what exists today.
 
-Do not mark the Phase 0 gate complete until the browser test and the merge decision are done.
+Do not mark the Phase 0 gate complete until the browser test and the merge are done.
 
 ### Gate
 - [ ] Authentication tests pass
@@ -358,7 +363,7 @@ Update this section as work is completed. Only mark tasks complete after verific
 
 | Phase | Status | Notes / branch / verification |
 |---|---|---|
-| Phase 0 — Authentication and User Management | **In progress, NOT complete** (Nov 21) | Backend role-from-database logic already existed. Branch `auth-direct-google` (pushed, unmerged) = direct Google for both buttons + PENDING_APPROVAL block. Open: four-role browser test, token/logout review, unprovisioned-faculty decision, merge decision. See the Phase 0 status note. |
+| Phase 0 — Authentication and User Management | **In progress, NOT complete** (Nov 21) | Backend role-from-database logic already existed. Branch `auth-role-choice` (pushed, unmerged): Faculty Google button + staff audience, Log in = existing accounts only, PENDING_APPROVAL block. Open: four-role browser test, token/logout review, merge. See the Phase 0 status note. |
 | Phase 1 — Authorization and Data Isolation | In progress, early (Nov 21) | Faculty-own-schedule rule added in PR #103, not tested by direct API request. Full route audit not started. |
 | Phase 2 — Appointments and Consultation | Partly implemented, unverified | PRs #101, #102 merged. Needs the booking-to-log walkthrough and the stale "correct a missed one" wording check. |
 | Phase 3 — Schedules, Import and Status | Largely implemented, unverified | Status rebuild (#81-#89), schedule tabs (#103), importers (#60-#65, #68, #70, #80, #88). Needs the demo-machine test. |
@@ -426,6 +431,6 @@ Evidence level: **Vercel** = the Vercel preview build of the PR passed; **tests*
 | #97, #98, #100 | Wording *(other session)* | "appointment" / "Consultation" wording; Missed by Student / Missed by Faculty | merged |
 | #101 | Appointments *(other session)* | Missed grace period and reasons, Missed by Faculty report, atomic status changes, outcome reminder | merged |
 
-**Not merged:** branch `auth-direct-google` (see Phase 0). Branches without a PR are not on `main`; list them in the project state file.
+**Not merged:** branch `auth-role-choice` (see Phase 0); `docs-roadmap-rules` (these documents). Branches without a PR are not on `main`; list them in the project state file.
 
 **Known problems still open:** hosted OCR unavailable by design; Vercel `VITE_API_URL` and a live Render email test were never re-verified by a session; `docs/importer-status.md` (second OCR template) and `docs/DEPLOYMENT.md` (Brevo live, `VITE_API_URL`) are not updated; faculty "1 to 3 programs" is planned but not approved or built (`User.program` is one string).
