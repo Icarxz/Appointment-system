@@ -71,6 +71,7 @@ Severity is based on impact, not difficulty.
 **Not done / still open:**
 - [ ] Browser test of login and logout for all four roles, including a real Google sign-in.
 - [ ] Review of session/token handling and logout behavior.
+- [x] Nov 21, deployed link (main `833fda8`): a tester reported that Log in and Sign up both work. The report did not list which cases (new email, wrong door, role change) were tried, so the cases below are still unverified individually.
 - [x] Merged #104 and #105 into `main` on Nov 21. **Still to do:** the browser tests below on the deployed link (Vercel and Render redeploy from `main`), then tag the tested commit.
 - [ ] Browser-test the role change: switch a test account Faculty -> Dean -> Student -> Faculty in Admin; confirm that person is signed out on their next click, can sign in with the new role, and that Admin, Dean, Faculty and Student pages all still load for their own accounts (the `ROLE_CHANGED` check runs on every request).
 - [ ] Browser-test these cases: Log in with an existing account of each role; Log in with a new school email (expect "No account found"); Sign up > Student with a new email (account created, onboarding); Sign up > Faculty with a provisioned faculty / Dean / Admin account (signs in); Sign up > Faculty with an unregistered school email (rejected, nothing created); Sign up > Faculty with a student account (rejected); Sign up > Student with a faculty account (rejected).
