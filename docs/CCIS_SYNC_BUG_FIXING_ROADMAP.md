@@ -79,6 +79,9 @@ Severity is based on impact, not difficulty.
 
 Do not mark the Phase 0 gate complete until the browser test and the merge are done.
 
+### Owner decision, Nov 22: provisioned accounts only (PLANNED, not built)
+The owner decided that every account is created by the Admin first (students included); an email with no account record is blocked, the Sign up button goes away, and Admin > Provision Account gets student provisioning, an Excel/CSV reader, a Disabled accounts tab and a required Faculty / School ID. This overrides the earlier "preserve first-time Student onboarding" assumption. Plan, stages, rollout flag (`REQUIRE_PROVISIONED_ACCOUNTS`) and open questions: `docs/CCIS_SYNC_PROVISIONING_PLAN.md`. Stage 1 = block unknown emails + provision students + IDs; Stage 2 = Disabled tab; Stage 3 = Excel reader.
+
 ### Gate
 - [ ] Authentication tests pass
 - [ ] Frontend build/preview verified where available
