@@ -858,11 +858,38 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.role !== 'STUDENT' && user.role !== 'FACULTY') {
-      return res.status(400).json({ error: 'Only student and faculty accounts can be edited here.' });
+    if (user.role !== 'STUDENT' && user.role !== 'FACULTY' && user.role !== 'DEAN') {
+      return res.status(400).json({ error: 'Only student, faculty and Dean accounts can be edited here.' });
     }
-    const isStudent = user.role === 'STUDENT';
-    const { name, gender, idValue, program, year, section, employmentType } = req.body || {};
+    const wasStudent = user.role === 'STUDENT';
+    let isStudent = wasStudent;
+    const { name, gender, idValue, program, year, section, employmentType, role: newRole, programPosition: newPosition } = req.body || {};
+
+    // Role change (Admin only, this route): Student, Faculty or Dean. The person's current sign-in stops working at once (see
+    // requireAuth) and they sign in again with the new role. Switching to Student needs a valid program / year / section and a
+    // School ID; switching from Student to Faculty or Dean needs an approved academic position.
+    if (newRole !== undefined && newRole !== user.role) {
+      if (!['STUDENT', 'FACULTY', 'DEAN'].includes(newRole)) return res.status(400).json({ error: 'Choose Student, Faculty or Dean.' });
+      if (String(user._id) === String(req.user.userId)) return res.status(400).json({ error: 'You cannot change your own role.' });
+      if (newRole === 'STUDENT') {
+        if (!isValidCohort(program, year, section)) return res.status(400).json({ error: 'Choose the program, year and section for the student.' });
+        if (!user.schoolId && !idValue) return res.status(400).json({ error: 'Enter the School ID for the student.' });
+      } else if (wasStudent && !isApprovedFacultyPosition(newPosition)) {
+        return res.status(400).json({ error: 'Choose an academic position for the new role.' });
+      }
+      console.info(`[admin] role change: ${user.role} -> ${newRole} for account ${user._id} by admin ${req.user.userId}`);
+      user.role = newRole;
+      isStudent = newRole === 'STUDENT';
+    }
+
+    // Academic position (faculty and Dean). A Program Head position also sets the program.
+    if (newPosition !== undefined && newPosition !== user.programPosition) {
+      if (isStudent) return res.status(400).json({ error: 'Students have no academic position. Their program, year and section are set instead.' });
+      if (!isApprovedFacultyPosition(newPosition)) return res.status(400).json({ error: 'Choose one of the approved positions.' });
+      user.programPosition = newPosition;
+      const headProgram = programOfPosition(newPosition);
+      if (headProgram) user.program = headProgram;
+    }
 
     if (name !== undefined) {
       const clean = String(name).replace(/\s+/g, ' ').trim();
@@ -911,7 +938,7 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     await user.save({ validateModifiedOnly: true });
     res.json({
       message: `${user.name}'s account was updated.`,
-      user: { _id: user._id, name: user.name, gender: user.gender, schoolId: user.schoolId, facultyId: user.facultyId, noIdYet: user.noIdYet, programPosition: user.programPosition,
+      user: { _id: user._id, name: user.name, role: user.role, gender: user.gender, schoolId: user.schoolId, facultyId: user.facultyId, noIdYet: user.noIdYet, programPosition: user.programPosition,
         program: isStudent ? '' : effectiveProgram(user), employmentType: user.employmentType || '' }
     });
   } catch (error) {
