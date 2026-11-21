@@ -198,26 +198,21 @@ export default function LandingPage() {
     else if (data.role === 'DEAN') navigate('/dean-dashboard');
   };
 
-  // The only way to sign in. The server verifies the token, checks the school domain and decides the role
-  // (student, faculty, dean or admin) from the roster / ADMIN_EMAILS. The Student sign-up screen sends audience STUDENT so
-  // a faculty/staff account cannot be used there; Log in sends none, like before.
-  const friendlyError = (message: string) => {
-    return (message || 'Please try again.')
-      .replace('Please use the Faculty & Staff tab.', 'Faculty, Dean and Admin accounts log in with the Log in button.')
-      .replace('Please use the Student tab.', 'Please use the Log in button.');
-  };
-  const handleGoogleCredential = async (credential: string, audience?: 'STUDENT') => {
+  // The only way to sign in. The server verifies the token, checks the school domain and decides the role (student, faculty,
+  // dean or admin) from its own records; the browser never sends a role. The audience only says which door was used:
+  // LOGIN = Log in (existing accounts only), STUDENT = Sign up > Student, STAFF = Sign up > Faculty (also Dean and Admin).
+  const handleGoogleCredential = async (credential: string, audience: 'LOGIN' | 'STUDENT' | 'STAFF') => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(audience ? { credential, audience } : { credential })
+        body: JSON.stringify({ credential, audience })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       finishLogin(data); // an incomplete profile is finished on the dashboard (ProfileGate)
     } catch (error: any) {
-      toast({ title: 'Sign-in failed', description: friendlyError(error.message), status: 'error', position: 'top' });
+      toast({ title: 'Sign-in failed', description: error.message, duration: 9000, isClosable: true, status: 'error', position: 'top' });
     }
   };
 
@@ -252,10 +247,10 @@ export default function LandingPage() {
   const authTabs = authStep === 'login' ? (
     <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
       <Text fontSize="sm" color={bodyColor}>
-        Sign in with your school Google account. Students, faculty, Dean and Admin all log in here.
+        Sign in with your school Google account. Students, faculty, Dean and Admin all log in here. This is for existing accounts.
       </Text>
       <VStack spacing={2}>
-        <GoogleSignInButton onCredential={(c) => handleGoogleCredential(c)} />
+        <GoogleSignInButton onCredential={(c) => handleGoogleCredential(c, 'LOGIN')} />
         <Text fontSize="xs" color={bodyColor}>Use your @antiquespride.edu.ph account</Text>
       </VStack>
       <Text fontSize="xs" color={bodyColor}>New student? Close this and choose Sign up.</Text>
@@ -282,6 +277,14 @@ export default function LandingPage() {
   ) : (
     <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
       {backToRoles}
+      <Box>
+        <Heading size="md" color={headingColor}>Faculty Access</Heading>
+        <Text fontWeight="700" color={headingColor} mt={1}>Welcome Back!</Text>
+        <Text fontSize="sm" color={bodyColor}>Sign in using your registered school Google account.</Text>
+      </Box>
+      <VStack spacing={2}>
+        <GoogleSignInButton onCredential={(c) => handleGoogleCredential(c, 'STAFF')} />
+      </VStack>
       <HStack align="flex-start" spacing={3} p={4} borderRadius="lg" borderWidth="1px" borderColor={assistBorder} bg={assistBg} role="note">
         <InfoOutlineIcon mt="3px" color={TEAL} flexShrink={0} />
         <Box>

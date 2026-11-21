@@ -5,7 +5,7 @@ const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const RosterEntry = require('../models/RosterEntry');
 const { requireAuth } = require('../middleware/auth');
-const { decideSignIn, parseList, isProfileComplete, audienceMismatch } = require('../utils/signInPolicy');
+const { decideSignIn, parseList, isProfileComplete, audienceMismatch, loginNeedsAccount } = require('../utils/signInPolicy');
 const { validateId } = require('../utils/idValidator');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
 const { isProgram, programOfPosition, effectiveProgram } = require('../utils/programs');
@@ -64,6 +64,8 @@ router.post('/google', googleLimiter, async (req, res) => {
     const resultingRole = decision.action === 'CREATE' ? decision.role : (decision.promoteTo || existingUser.role);
     const wrongTab = audienceMismatch(audience, resultingRole, decision.action === 'CREATE');
     if (wrongTab) return res.status(403).json({ error: wrongTab });
+    const noAccount = loginNeedsAccount(audience, decision.action, resultingRole);
+    if (noAccount) return res.status(403).json({ error: noAccount });
 
     let user = existingUser;
     if (decision.action === 'CREATE') {

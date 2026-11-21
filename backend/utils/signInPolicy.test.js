@@ -29,6 +29,13 @@ test('existing active user logs in', () => {
 test('archived user denied', () => {
   assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus: 'ARCHIVED' } }).action, 'DENY');
 });
+test('restricted and pending-approval users denied, a new student is still created', () => {
+  for (const accountStatus of ['RESTRICTED', 'PENDING_APPROVAL']) {
+    assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus } }).action, 'DENY');
+  }
+  const created = decideSignIn({ ...base, payload: ok('new@school.edu.ph'), existingUser: null, rosterRole: null });
+  assert.deepStrictEqual([created.action, created.role], ['CREATE', 'STUDENT']);
+});
 test('no domain configured denies everyone', () => {
   assert.strictEqual(decideSignIn({ ...base, allowedDomains: [], payload: ok('a@school.edu.ph') }).action, 'DENY');
 });
@@ -54,8 +61,20 @@ test('wrong-tab check: student vs faculty & staff', () => {
   assert.strictEqual(audienceMismatch('STAFF', 'FACULTY'), null);
   assert.strictEqual(audienceMismatch('STAFF', 'DEAN'), null);
   assert.strictEqual(audienceMismatch('STAFF', 'ADMIN'), null);
-  assert.match(audienceMismatch('STUDENT', 'FACULTY'), /Faculty & Staff tab/);
-  assert.match(audienceMismatch('STAFF', 'STUDENT'), /Student tab/);
+  assert.match(audienceMismatch('STUDENT', 'FACULTY'), /choose Faculty/);
+  assert.match(audienceMismatch('STAFF', 'STUDENT'), /choose Student/);
+  assert.match(audienceMismatch('STAFF', 'STUDENT', true), /System Administrator/);
+  assert.strictEqual(audienceMismatch('LOGIN', 'STUDENT'), null); // Log in: handled by loginNeedsAccount
   assert.match(audienceMismatch('STAFF', 'STUDENT', true), /not registered as faculty/);
   assert.strictEqual(audienceMismatch(undefined, 'STUDENT'), null); // older clients: no check
+});
+
+test('Log in never creates a student, but a roster-listed staff first sign-in still works', () => {
+  const { loginNeedsAccount } = require('./signInPolicy');
+  assert.match(loginNeedsAccount('LOGIN', 'CREATE', 'STUDENT'), /Sign up/);
+  assert.strictEqual(loginNeedsAccount('LOGIN', 'CREATE', 'FACULTY'), null); // administrator already listed them
+  assert.strictEqual(loginNeedsAccount('LOGIN', 'CREATE', 'ADMIN'), null);   // ADMIN_EMAILS
+  assert.strictEqual(loginNeedsAccount('LOGIN', 'LOGIN', 'STUDENT'), null);  // existing account
+  assert.strictEqual(loginNeedsAccount('STUDENT', 'CREATE', 'STUDENT'), null); // Sign up > Student creates the account
+  assert.strictEqual(loginNeedsAccount(undefined, 'CREATE', 'STUDENT'), null); // older clients unchanged
 });
