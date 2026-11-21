@@ -525,9 +525,9 @@ export default function LandingPage() {
       <Modal isOpen={isOpen} onClose={onClose} size="lg" isCentered scrollBehavior="inside">
         <ModalOverlay backdropFilter="blur(4px)" />
         <ModalContent borderRadius="2xl" overflow="hidden" bg={modalBg}>
-          {/* Sign Up | Log In tabs. Sign Up covers the role choice and both sign-up screens; Log In is the Google-only screen. */}
+          {/* Log in | Sign up tabs, in the same order and wording as the nav buttons. Sign up covers the role choice and both sign-up screens; Log in is the Google-only screen. */}
           <Flex role="tablist" aria-label="Account" borderBottomWidth="1px" borderColor={tabDivider}>
-            {([['role', 'Sign Up'], ['login', 'Log In']] as const).map(([step, label]) => {
+            {([['login', 'Log in'], ['role', 'Sign up']] as const).map(([step, label]) => {
               const active = step === 'login' ? authStep === 'login' : authStep !== 'login';
               return (
                 <Box
