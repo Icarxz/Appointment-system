@@ -260,7 +260,7 @@ export default function LandingPage() {
     <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
       <Text fontSize="sm" color={bodyColor}>Choose how you will use CCIS Sync.</Text>
       {roleChoice(CapIcon, 'Student', 'Appoint consultations with your faculty.', 'student')}
-      {roleChoice(ChatBubbleIcon, 'Faculty', 'Faculty, Dean and Admin access.', 'faculty')}
+      {roleChoice(ChatBubbleIcon, 'Faculty', 'Faculty and Dean access.', 'faculty')}
     </VStack>
   ) : authStep === 'student' ? (
     <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
