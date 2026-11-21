@@ -15,7 +15,7 @@ function decideSignIn({ payload, allowedDomains, adminEmails, existingUser, rost
     return { action: 'DENY', error: 'Please sign in with your school Google account.' };
   }
   if (existingUser) {
-    if (existingUser.accountStatus === 'ARCHIVED' || existingUser.accountStatus === 'RESTRICTED') {
+    if (['ARCHIVED', 'RESTRICTED', 'PENDING_APPROVAL'].includes(existingUser.accountStatus)) {
       return { action: 'DENY', error: 'This account is not active. Please contact the administrator.' };
     }
     // An address listed in ADMIN_EMAILS is always an Admin, even if the account was created earlier as something else.
@@ -34,21 +34,34 @@ function isProfileComplete(user) {
   return true;
 }
 
-// The login box has a Student tab and a Faculty & Staff tab. The server still decides the role
-// (from the roster / ADMIN_EMAILS); this only stops someone signing in on the wrong tab.
-// audience: 'STUDENT' | 'STAFF' | undefined (older clients: no check).  Returns an error text or null.
+// The sign-in screens say which door the person used. The server still decides the role (from the roster / ADMIN_EMAILS /
+// the stored account); the audience only stops someone using the wrong door.
+//   'STUDENT' : Sign up > Student.   'STAFF' : Sign up > Faculty (also Dean and Admin).
+//   'LOGIN'   : Log in: existing accounts only, nobody is created here (see loginNeedsAccount).
+//   undefined : older clients, no check.
+// Returns an error text or null.
 function audienceMismatch(audience, role, isNewAccount = false) {
   if (audience !== 'STUDENT' && audience !== 'STAFF') return null;
   const isStaff = role === 'FACULTY' || role === 'DEAN' || role === 'ADMIN';
   if (audience === 'STUDENT' && isStaff) {
-    return 'This is a faculty/staff account. Please use the Faculty & Staff tab.';
+    return 'This is a faculty/staff account. Please go back and choose Faculty.';
   }
   if (audience === 'STAFF' && !isStaff) {
     return isNewAccount
-      ? 'This email is not registered as faculty or staff. Faculty accounts are added by the administrator. Students: please use the Student tab.'
-      : 'This is a student account. Please use the Student tab.';
+      ? 'This email is not registered as faculty or staff. Please contact the System Administrator to create your account or assist your log in credentials. Students: go back and choose Student.'
+      : 'This is a student account. Please go back and choose Student.';
   }
   return null;
 }
 
-module.exports = { decideSignIn, parseList, isProfileComplete, audienceMismatch };
+// Log in never creates an account for a student. A first sign-in is allowed only when the roster / ADMIN_EMAILS already
+// names the person as faculty, Dean or Admin (that is the administrator's way of creating their account).
+function loginNeedsAccount(audience, action, role) {
+  if (audience !== 'LOGIN') return null;
+  if (action === 'CREATE' && role === 'STUDENT') {
+    return 'No account was found for this email. New students: close this and choose Sign up. Faculty: please contact the System Administrator to create your account.';
+  }
+  return null;
+}
+
+module.exports = { decideSignIn, parseList, isProfileComplete, audienceMismatch, loginNeedsAccount };
