@@ -1,8 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { validateProvisionRow, validateImportRows } = require('./bulkProvision');
+const { validateProvisionRow, validateImportRows, importFieldForHeader } = require('./bulkProvision');
 
 const domains = ['antiquespride.edu.ph'];
+
+test('maps the prior optional-gender template header to the required gender field', () => {
+  assert.equal(importFieldForHeader('Gender (optional)'), 'gender');
+  assert.equal(importFieldForHeader('Gender'), 'gender');
+});
 
 test('accepts a valid student row', () => {
   const result = validateProvisionRow({

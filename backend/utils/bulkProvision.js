@@ -8,6 +8,33 @@ const { parseList } = require('./signInPolicy');
 
 const MAX_ROWS = 500;
 const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+const IMPORT_HEADER_FIELDS = Object.freeze({
+  fullname: 'name',
+  name: 'name',
+  schoolemail: 'email',
+  email: 'email',
+  schoolid: 'schoolId',
+  employeeid: 'employeeId',
+  program: 'program',
+  programoptional: 'program',
+  year: 'year',
+  section: 'section',
+  gender: 'gender',
+  genderoptional: 'gender',
+  position: 'position',
+  role: 'role',
+  rolefacultyordean: 'role',
+  employmenttypeoptional: 'employmentType',
+  employmenttype: 'employmentType',
+});
+
+function normalizedHeader(value) {
+  return text(value).toLowerCase().replace(/\s+/g, ' ').replace(/[()]/g, '').replace(/[^a-z0-9]/g, '');
+}
+
+function importFieldForHeader(value) {
+  return IMPORT_HEADER_FIELDS[normalizedHeader(value)] || null;
+}
 
 const text = (value) => {
   if (value === null || value === undefined) return '';
@@ -193,6 +220,7 @@ async function validateImportRows(User, rows, kind, env) {
 module.exports = {
   MAX_ROWS,
   text,
+  importFieldForHeader,
   formulaOrInjection,
   validateProvisionRow,
   validateImportRows,

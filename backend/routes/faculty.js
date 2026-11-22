@@ -71,7 +71,7 @@ const { windowFromNotice } = require('../utils/noticeWindow');
 const ExcelJS = require('exceljs');
 const multer = require('multer');
 const { Readable } = require('node:stream');
-const { MAX_ROWS, text, validateImportRows } = require('../utils/bulkProvision');
+const { MAX_ROWS, text, importFieldForHeader, validateImportRows } = require('../utils/bulkProvision');
 const { groupStatusInputs, toLegacyStatus, publicNotices } = require('../utils/facultyStatusInputs');
 const { endFromChoice } = require('../utils/statusDuration');
 
@@ -562,10 +562,6 @@ router.get('/bulk/template/:kind.csv', requireAuth(['ADMIN']), (req, res) => {
   res.send(headers.map(safeCsvCell).join(',') + '\r\n');
 });
 
-function normalizedHeader(value) {
-  return text(value).toLowerCase().replace(/\s+/g, ' ').replace(/[()]/g, '').replace(/[^a-z0-9]/g, '');
-}
-
 function workbookRows(buffer, originalName) {
   return (async () => {
     if (!buffer || buffer.length === 0) throw new Error('The selected file is empty.');
@@ -583,29 +579,10 @@ function workbookRows(buffer, originalName) {
     if (sheet.rowCount < 2) throw new Error('The spreadsheet is empty.');
 
     const headerRow = sheet.getRow(1);
-    const headerAliases = {
-      fullname: 'name',
-      name: 'name',
-      schoolemail: 'email',
-      email: 'email',
-      schoolid: 'schoolId',
-      employeeid: 'employeeId',
-      program: 'program',
-      programoptional: 'program',
-      year: 'year',
-      section: 'section',
-      gender: 'gender',
-      position: 'position',
-      role: 'role',
-      rolefacultyordean: 'role',
-      employmenttypeoptional: 'employmentType',
-      employmenttype: 'employmentType',
-    };
     const headers = {};
     headerRow.eachCell((cell, colNumber) => {
       if (cell.type === 6 || cell.formula) throw new Error('Spreadsheet headers cannot contain formulas.');
-      const normalized = normalizedHeader(cell.value);
-      const canonical = headerAliases[normalized];
+      const canonical = importFieldForHeader(cell.value);
       if (canonical) headers[canonical] = colNumber;
     });
 
