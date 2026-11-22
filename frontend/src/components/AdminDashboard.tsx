@@ -562,7 +562,7 @@ export default function AdminDashboard() {
         )}
 
         {activePage === 'provision' && (
-          <>
+          <VStack align="stretch" spacing={6}>
           <Box display="flex" gap={8} flexDir={{ base: 'column', xl: 'row' }}>
             <Box flex={{ base: 'none', xl: '0 0 520px' }}>
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
@@ -674,7 +674,7 @@ export default function AdminDashboard() {
               )}
             </Box>
           </Box>
-          <Box bg={cardBg} p={6} mt={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+          <Box order={-1} bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <Heading size="md" color={textColor} mb={1}>Bulk Account Provisioning</Heading>
             <Text fontSize="sm" color={mutedText} mb={4}>Preview is read-only. Accounts are created only after confirmation.</Text>
             <HStack flexWrap="wrap" spacing={3} mb={4}>
@@ -738,7 +738,7 @@ export default function AdminDashboard() {
               </Box>
             )}
           </Box>
-          </>
+          </VStack>
         )}
 
         {dataReady && activePage === 'users' && userTab === 'faculty' && (
