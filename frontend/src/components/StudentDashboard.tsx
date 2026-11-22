@@ -54,15 +54,17 @@ export default function StudentDashboard() {
   const toast = useToast();
   const userName = localStorage.getItem('userName') || 'Student';
   const userId = localStorage.getItem('userId') || '';
+  const credentialReviewRequired = localStorage.getItem('credentialConfirmationRequired') === 'true';
   // Read-only mode: until the profile (incl. a valid ID) is complete, students can browse but not book.
   const profileComplete = localStorage.getItem('onboardingComplete') !== 'false';
   const { isOpen: isProfileOpen, onOpen: onProfileOpen, onClose: onProfileClose } = useDisclosure();
   const { isOpen: isPrivacyOpen, onOpen: onPrivacyOpen, onClose: onPrivacyClose } = useDisclosure();
-  useEffect(() => { if (!profileComplete) onProfileOpen(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!profileComplete && !credentialReviewRequired) onProfileOpen(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [activePage, setActivePage] = useState('home');
+  const [activePage, setActivePage] = useState(credentialReviewRequired ? 'profile' : 'home');
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink(['home', 'appointments', 'requests', 'profile'] as const, setActivePage);
+  const { aptId, closeApt } = useDeepLink(credentialReviewRequired ? ['profile'] as const : ['home', 'appointments', 'requests', 'profile'] as const, setActivePage);
+  useEffect(() => { if (credentialReviewRequired) closeApt(); }, [credentialReviewRequired, closeApt]);
   const [faculty, setFaculty] = useState<any[]>([]);
   const [studentSection] = useState(localStorage.getItem('programPosition') || '');
   // The student's own program ("BS COMSCI 2A" -> "BS COMSCI"); '' when it is missing or not one of the three. It is only the starting
@@ -399,6 +401,8 @@ export default function StudentDashboard() {
     <DashboardShell
       portalLabel="Student Portal"
       userName={userName}
+      profileRequired={credentialReviewRequired}
+      showMailbox={!credentialReviewRequired}
       nav={[
         { key: 'home', section: 'Find & Book', icon: 'users', label: 'Faculty Status', active: activePage === 'home', onClick: () => setActivePage('home') },
         { key: 'appointments', section: 'Find & Book', icon: 'calendarPlus', label: 'Consultation', active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
@@ -673,6 +677,7 @@ export default function StudentDashboard() {
           localStorage.setItem('token', data.token);
           localStorage.setItem('programPosition', data.programPosition || '');
           localStorage.setItem('onboardingComplete', 'true');
+          localStorage.setItem('credentialConfirmationRequired', 'false');
           window.location.reload(); // refresh so every part of the dashboard uses the completed profile
         }}
       />
@@ -692,7 +697,7 @@ export default function StudentDashboard() {
         isSubmitting={isSubmitting}
         onSubmit={handleAppointmentSubmit}
       />
-      <AppointmentDetailsDrawer aptId={detailsId ?? aptId} onClose={() => { setDetailsId(null); closeApt(); }} />
+      <AppointmentDetailsDrawer aptId={credentialReviewRequired ? null : detailsId ?? aptId} onClose={() => { setDetailsId(null); closeApt(); }} />
       <FacultyScheduleModal faculty={masterFaculty} isOpen={isMasterOpen} onClose={onMasterClose} />
       <Modal isOpen={isSummaryOpen} onClose={onSummaryClose} isCentered>
         <ModalOverlay />

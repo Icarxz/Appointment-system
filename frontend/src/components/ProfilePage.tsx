@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Avatar, Badge, Box, Button, FormControl, FormHelperText, FormLabel, Heading, HStack, Input, Select, SimpleGrid, Spinner, Text,
+  Avatar, Badge, Box, Button, Checkbox, FormControl, FormHelperText, FormLabel, Heading, HStack, Input, Link as ChakraLink, Select, SimpleGrid, Spinner, Text,
   useColorModeValue, useDisclosure, useToast,
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
@@ -11,16 +11,17 @@ import SearchableSelect from './SearchableSelect';
 import { PROGRAM_OPTIONS, programOfPosition } from '../utils/programs';
 import { EMPLOYMENT_OPTIONS } from '../utils/employment';
 import { IdTray, isIdComplete, idRawOf } from './IdTray';
+import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
+import { parseCohort } from './PeopleUi';
 
 interface Profile {
   name: string; email: string; role: string; gender: string; programPosition: string;
   program?: string; employmentType?: string; // faculty only ('' when not set)
   schoolId: string; facultyId: string; privacyAcceptedAt: string | null; profileComplete: boolean; avatar: string;
+  credentialConfirmationRequired: boolean; credentialFieldsLocked: boolean;
 }
 
-// The logged-in person's own profile (students and faculty).
-// Editable: photo, name, gender (Male / Female), School / Employee ID; faculty also their program and employment type (Full-time / Part-time).
-// Read-only: email, role, program-year-section / academic position (a Program Head's program comes from the position).
+// The logged-in person's own profile. Newly provisioned students and staff review their account details here before first use.
 export default function ProfilePage() {
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState('');
@@ -36,7 +37,11 @@ export default function ProfilePage() {
   const [idDraft, setIdDraft] = useState('');
   const [programDraft, setProgramDraft] = useState('');
   const [employmentDraft, setEmploymentDraft] = useState('');
+  const [cohortDraft, setCohortDraft] = useState({ program: '', year: '', section: '' });
+  const [positionDraft, setPositionDraft] = useState('');
   const [avatarDraft, setAvatarDraft] = useState<string | null | undefined>(undefined); // undefined = unchanged, null = remove
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const cardBg = useColorModeValue('#ffffff', '#111d30');
   const border = useColorModeValue('#dde3ec', '#1e3048');
@@ -46,7 +51,16 @@ export default function ProfilePage() {
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_API_URL}/api/auth/me`)
       .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; })
-      .then(setP)
+      .then((data: Profile) => {
+        setP(data);
+        setPrivacyAccepted(!!data.privacyAcceptedAt);
+        if (data.credentialConfirmationRequired) {
+          localStorage.setItem('credentialConfirmationRequired', 'true');
+        } else if (localStorage.getItem('credentialConfirmationRequired') === 'true') {
+          localStorage.setItem('credentialConfirmationRequired', 'false');
+          window.location.reload();
+        }
+      })
       .catch((e: any) => setError(e.message || 'Could not load your profile.'));
   }, []);
 
@@ -54,9 +68,15 @@ export default function ProfilePage() {
   if (!p) return <Spinner />;
 
   const isStudent = p.role === 'STUDENT';
+  const isFaculty = p.role === 'FACULTY';
+  const isAdmin = p.role === 'ADMIN';
+  const credentialReviewRequired = p.credentialConfirmationRequired;
+  const credentialFieldsLocked = p.credentialFieldsLocked;
   const idKind = isStudent ? 'STUDENT' : 'FACULTY';
   const idLabel = isStudent ? 'School ID' : 'Employee ID';
   const idValue = isStudent ? p.schoolId : p.facultyId;
+  const cohortValue = parseCohort(p.programPosition);
+  const displayRole = isStudent ? 'Student' : isFaculty ? 'Faculty' : p.role === 'DEAN' ? 'Dean' : 'Admin';
   const Row = ({ label, value }: { label: string; value?: string | null }) => (
     <Box>
       <Text fontSize="xs" color={muted}>{label}</Text>
@@ -70,21 +90,31 @@ export default function ProfilePage() {
     setIdDraft(idValue || '');
     setProgramDraft(p.program || '');
     setEmploymentDraft(p.employmentType || '');
+    setCohortDraft(cohortValue);
+    setPositionDraft(p.programPosition || '');
     setAvatarDraft(undefined);
     setEditing(true);
   };
 
   const nameClean = nameDraft.replace(/\s+/g, ' ').trim();
-  const nameChanged = nameClean !== p.name;
-  const genderChanged = genderDraft !== '' && genderDraft !== p.gender;
-  const idChanged = idRawOf(idDraft) !== idRawOf(idValue);
+  const nameChanged = !credentialFieldsLocked && nameClean !== p.name;
+  const genderChanged = !credentialFieldsLocked && genderDraft !== '' && genderDraft !== p.gender;
+  const idChanged = !credentialFieldsLocked && idRawOf(idDraft) !== idRawOf(idValue);
   const avatarChanged = avatarDraft !== undefined;
-  const isHead = !!programOfPosition(p.programPosition); // a Program Head's program comes from the position
-  const programChanged = !isStudent && !isHead && programDraft !== '' && programDraft !== (p.program || '');
-  const employmentChanged = !isStudent && employmentDraft !== '' && employmentDraft !== (p.employmentType || '');
+  const nextPosition = credentialReviewRequired ? positionDraft : p.programPosition;
+  const isHead = !!programOfPosition(nextPosition); // a Program Head's program comes from the position
+  const positionChanged = !credentialFieldsLocked && credentialReviewRequired && !isStudent && positionDraft !== p.programPosition;
+  const previousPositionWasHead = !!programOfPosition(p.programPosition);
+  const programChanged = !credentialFieldsLocked && isFaculty && !isHead && programDraft !== '' &&
+    (programDraft !== (p.program || '') || (positionChanged && previousPositionWasHead));
+  const employmentChanged = !credentialFieldsLocked && isFaculty && employmentDraft !== '' && employmentDraft !== (p.employmentType || '');
+  const cohortChanged = !credentialFieldsLocked && isStudent && (
+    cohortDraft.program !== cohortValue.program || cohortDraft.year !== cohortValue.year || cohortDraft.section !== cohortValue.section
+  );
+  const credentialChanged = nameChanged || genderChanged || idChanged || programChanged || employmentChanged || cohortChanged || positionChanged;
   const nameOk = nameClean.length >= 2 && nameClean.length <= 100;
   const idOk = !idChanged || isIdComplete(idKind, idDraft);
-  const canSave = (nameChanged || genderChanged || idChanged || avatarChanged || programChanged || employmentChanged) && nameOk && idOk;
+  const canSave = (credentialChanged || avatarChanged) && (!credentialChanged || (nameOk && idOk));
 
   const save = async () => {
     const body: Record<string, any> = {};
@@ -94,6 +124,12 @@ export default function ProfilePage() {
     if (avatarChanged) body.avatar = avatarDraft;
     if (programChanged) body.program = programDraft;
     if (employmentChanged) body.employmentType = employmentDraft;
+    if (cohortChanged) {
+      body.program = cohortDraft.program;
+      body.year = cohortDraft.year;
+      body.section = cohortDraft.section;
+    }
+    if (positionChanged) body.programPosition = positionDraft;
     setSaving(true);
     try {
       const r = await authFetch(`${import.meta.env.VITE_API_URL}/api/auth/profile`, {
@@ -105,17 +141,45 @@ export default function ProfilePage() {
       if (!r.ok) throw new Error(d.error);
       const next = d.profile;
       const completeChanged = next.profileComplete !== p.profileComplete;
-      setP({ ...p, name: next.name, gender: next.gender, schoolId: next.schoolId, facultyId: next.facultyId, avatar: next.avatar, profileComplete: next.profileComplete, program: next.program, employmentType: next.employmentType });
+      setP({
+        ...p, name: next.name, gender: next.gender, schoolId: next.schoolId, facultyId: next.facultyId,
+        avatar: next.avatar, profileComplete: next.profileComplete, program: next.program,
+        programPosition: next.programPosition, employmentType: next.employmentType,
+        credentialConfirmationRequired: next.credentialConfirmationRequired,
+      });
       if (next.name !== p.name) localStorage.setItem('userName', next.name);
+      if (next.programPosition !== p.programPosition) localStorage.setItem('programPosition', next.programPosition || '');
       if (completeChanged) localStorage.setItem('onboardingComplete', String(next.profileComplete));
       toast({ title: 'Profile saved', status: 'success' });
       setEditing(false);
       // the dashboard header / booking lock read these from localStorage, so refresh when they changed
-      if (next.name !== p.name || completeChanged) window.location.reload();
+      if (next.name !== p.name || next.programPosition !== p.programPosition || completeChanged) window.location.reload();
     } catch (e: any) {
       toast({ title: 'Could not save your profile', description: e.message, status: 'error' });
     }
     setSaving(false);
+  };
+
+  const confirmCredentials = async () => {
+    setConfirming(true);
+    try {
+      const r = await authFetch(`${import.meta.env.VITE_API_URL}/api/auth/profile/confirm-credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ privacyAccepted }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      localStorage.setItem('onboardingComplete', 'true');
+      localStorage.setItem('credentialConfirmationRequired', 'false');
+      localStorage.setItem('programPosition', d.profile.programPosition || '');
+      toast({ title: 'Credentials confirmed', description: 'Your account details are now locked.', status: 'success' });
+      window.location.reload();
+    } catch (e: any) {
+      toast({ title: 'Could not confirm credentials', description: e.message, status: 'error' });
+    } finally {
+      setConfirming(false);
+    }
   };
 
   const shownAvatar = avatarDraft === undefined ? p.avatar : (avatarDraft || '');
@@ -127,13 +191,30 @@ export default function ProfilePage() {
           {!editing && <Avatar size="xl" name={p.name} src={p.avatar || undefined} />}
           <Box>
             <Heading size="md" color={text} mb={1}>{p.name}</Heading>
-            <Badge colorScheme={p.profileComplete ? 'green' : 'orange'}>{p.profileComplete ? 'Profile complete' : 'Profile incomplete'}</Badge>
+            <Badge colorScheme={credentialReviewRequired ? 'orange' : p.profileComplete ? 'green' : 'orange'}>
+              {credentialReviewRequired ? 'Confirm your credentials' : p.profileComplete ? 'Profile complete' : 'Profile incomplete'}
+            </Badge>
           </Box>
         </HStack>
-        {!editing && <Button size="sm" variant="outline" onClick={startEdit}>Edit profile</Button>}
+        {!editing && !isAdmin && <Button size="sm" variant="outline" onClick={startEdit}>{credentialFieldsLocked ? 'Edit photo' : 'Edit profile'}</Button>}
       </HStack>
 
-      {!p.profileComplete && !editing && (
+      {credentialReviewRequired && !editing && (
+        <Box mb={5} p={4} borderRadius="md" bg="blue.50" borderWidth="1px" borderColor="blue.300" color="blue.900">
+          <Text fontSize="sm" mb={3}>
+            Review your account details. You can edit them before confirming; email and role can only be changed by an Admin. After confirmation, your account details are locked. Contact the administrator if you need a correction later.
+          </Text>
+          <Checkbox isChecked={privacyAccepted} onChange={(e) => setPrivacyAccepted(e.target.checked)} mb={3}>
+            I have read and accept the{' '}
+            <ChakraLink color="blue.600" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPrivacyOpen(); }}>Privacy Policy</ChakraLink>
+          </Checkbox>
+          <Button size="sm" colorScheme="blue" onClick={confirmCredentials} isLoading={confirming} isDisabled={!privacyAccepted}>
+            Confirm details
+          </Button>
+        </Box>
+      )}
+
+      {!p.profileComplete && !credentialReviewRequired && !editing && (
         <Box mb={5} p={4} borderRadius="md" bg="orange.50" borderWidth="1px" borderColor="orange.300" color="orange.900">
           <Text fontSize="sm" mb={3}>
             {isStudent
@@ -148,16 +229,20 @@ export default function ProfilePage() {
         <>
           <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4}>
             <Row label="School email" value={p.email} />
-            <Row label="Role" value={isStudent ? 'Student' : 'Faculty'} />
+            <Row label="Role" value={displayRole} />
             <Row label="Gender" value={p.gender} />
-            <Row label={isStudent ? 'Program, year and section' : 'Academic position'} value={p.programPosition} />
-            {!isStudent && <Row label="Program" value={p.program} />}
-            {!isStudent && <Row label="Employment type" value={p.employmentType} />}
-            <Row label={idLabel} value={idValue} />
+            {!isAdmin && <Row label={isStudent ? 'Program, year and section' : 'Academic position'} value={p.programPosition} />}
+            {isFaculty && <Row label="Program" value={p.program} />}
+            {isFaculty && <Row label="Employment type" value={p.employmentType} />}
+            {!isAdmin && <Row label={idLabel} value={idValue} />}
             <Row label="Privacy Policy accepted" value={p.privacyAcceptedAt ? new Date(p.privacyAcceptedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : ''} />
           </SimpleGrid>
           <Text fontSize="xs" color={muted} mt={5}>
-            You can edit your photo, name, gender{isStudent ? '' : ', program, employment type'} and ID. Your email, role and {isStudent ? 'program, year and section' : 'academic position'} can only be changed by the administrator.
+            {isAdmin
+              ? 'Administrator account details are managed by the System Administrator.'
+              : credentialFieldsLocked
+              ? 'Your account details are confirmed and locked. You can still update your profile photo.'
+              : `You can edit your photo, name, gender${isStudent ? '' : ', program and employment type'} and ID. Your email and role can only be changed by the administrator.`}
           </Text>
         </>
       ) : (
@@ -166,47 +251,87 @@ export default function ProfilePage() {
             <AvatarPicker name={nameClean || p.name} value={shownAvatar} onChange={setAvatarDraft} />
           </Box>
 
-          <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5}>
-            <FormControl isRequired isInvalid={!nameOk}>
-              <FormLabel fontSize="sm">Full name</FormLabel>
-              <Input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} maxLength={100} />
-            </FormControl>
-            <FormControl>
-              <FormLabel fontSize="sm">Gender</FormLabel>
-              <Select placeholder="Select gender" value={genderDraft} onChange={(e) => setGenderDraft(e.target.value)}>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </Select>
-            </FormControl>
-          </SimpleGrid>
+          {credentialFieldsLocked ? (
+            <Text fontSize="sm" color={muted} mb={5}>Your confirmed account details are locked. Only the profile photo can be changed.</Text>
+          ) : (
+            <>
+              <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5}>
+                <FormControl isRequired isInvalid={!nameOk}>
+                  <FormLabel fontSize="sm">Full name</FormLabel>
+                  <Input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} maxLength={100} />
+                </FormControl>
+                <FormControl isRequired={credentialReviewRequired}>
+                  <FormLabel fontSize="sm">Gender</FormLabel>
+                  <Select placeholder="Select gender" value={genderDraft} onChange={(e) => setGenderDraft(e.target.value)}>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </Select>
+                </FormControl>
+              </SimpleGrid>
 
-          <FormControl mb={5}>
-            <FormLabel fontSize="sm">{idLabel}</FormLabel>
-            <IdTray kind={idKind} value={idDraft} onChange={setIdDraft} />
-            {idChanged && !idOk && <Text fontSize="xs" color="red.500" mt={2} textAlign="center">Finish the ID, or restore your current one, to save.</Text>}
-          </FormControl>
+              <FormControl mb={5}>
+                <FormLabel fontSize="sm">{idLabel}</FormLabel>
+                <IdTray kind={idKind} value={idDraft} onChange={setIdDraft} />
+                {idChanged && !idOk && <Text fontSize="xs" color="red.500" mt={2} textAlign="center">Finish the ID, or restore your current one, to save.</Text>}
+              </FormControl>
 
-          {!isStudent && (
-            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5}>
-              <FormControl>
-                <FormLabel fontSize="sm">Program</FormLabel>
-                <SearchableSelect searchable={false} clearable={false} ariaLabel="Program" placeholder="Select program" isDisabled={isHead}
-                  value={isHead ? (p.program || '') : programDraft} onChange={setProgramDraft} options={PROGRAM_OPTIONS} />
-                {isHead && <FormHelperText>Taken from your position.</FormHelperText>}
-              </FormControl>
-              <FormControl>
-                <FormLabel fontSize="sm">Employment type</FormLabel>
-                <SearchableSelect searchable={false} clearable={false} ariaLabel="Employment type" placeholder="Select type"
-                  value={employmentDraft} onChange={setEmploymentDraft} options={EMPLOYMENT_OPTIONS} />
-              </FormControl>
-            </SimpleGrid>
+              {credentialReviewRequired && isStudent && (
+                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mb={5}>
+                  <FormControl isRequired>
+                    <FormLabel fontSize="sm">Program</FormLabel>
+                    <SearchableSelect searchable={false} clearable={false} ariaLabel="Program" placeholder="Select program"
+                      value={cohortDraft.program} onChange={(value) => setCohortDraft({ program: value, year: '', section: '' })}
+                      options={Object.keys(cohortConfig).map(value => ({ value, label: value }))} />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel fontSize="sm">Year</FormLabel>
+                    <SearchableSelect searchable={false} clearable={false} ariaLabel="Year" placeholder="Select year" isDisabled={!cohortDraft.program}
+                      value={cohortDraft.year} onChange={(value) => setCohortDraft({ ...cohortDraft, year: value, section: '' })}
+                      options={cohortDraft.program ? Object.keys(cohortConfig[cohortDraft.program]).map(value => ({ value, label: value })) : []} />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel fontSize="sm">Section</FormLabel>
+                    <SearchableSelect searchable={false} clearable={false} ariaLabel="Section" placeholder="Select section" isDisabled={!cohortDraft.year}
+                      value={cohortDraft.section} onChange={(value) => setCohortDraft({ ...cohortDraft, section: value })}
+                      options={cohortDraft.program && cohortDraft.year ? cohortConfig[cohortDraft.program][cohortDraft.year].map(value => ({ value, label: value })) : []} />
+                  </FormControl>
+                </SimpleGrid>
+              )}
+
+              {credentialReviewRequired && !isStudent && (
+                <FormControl isRequired mb={5}>
+                  <FormLabel fontSize="sm">Academic position</FormLabel>
+                  <SearchableSelect searchable={false} clearable={false} ariaLabel="Academic position" placeholder="Select position"
+                    value={positionDraft} onChange={setPositionDraft}
+                    options={FACULTY_POSITIONS.map(value => ({ value, label: value }))} />
+                </FormControl>
+              )}
+
+              {isFaculty && (
+                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5}>
+                  <FormControl>
+                    <FormLabel fontSize="sm">Program</FormLabel>
+                    <SearchableSelect searchable={false} clearable={false} ariaLabel="Program" placeholder="Select program" isDisabled={isHead}
+                      value={isHead ? (programOfPosition(nextPosition) || p.program || '') : programDraft} onChange={setProgramDraft} options={PROGRAM_OPTIONS} />
+                    {isHead && <FormHelperText>Taken from your position.</FormHelperText>}
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel fontSize="sm">Employment type</FormLabel>
+                    <SearchableSelect searchable={false} clearable={false} ariaLabel="Employment type" placeholder="Select type"
+                      value={employmentDraft} onChange={setEmploymentDraft} options={EMPLOYMENT_OPTIONS} />
+                  </FormControl>
+                </SimpleGrid>
+              )}
+
+              <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5} opacity={0.75}>
+                <Row label="School email (not editable)" value={p.email} />
+                <Row label="Role (not editable)" value={displayRole} />
+                {!credentialReviewRequired && !isAdmin && (
+                  <Row label={`${isStudent ? 'Program, year and section' : 'Academic position'} (not editable)`} value={p.programPosition} />
+                )}
+              </SimpleGrid>
+            </>
           )}
-
-          <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5} opacity={0.75}>
-            <Row label="School email (not editable)" value={p.email} />
-            <Row label="Role (not editable)" value={isStudent ? 'Student' : 'Faculty'} />
-            <Row label={`${isStudent ? 'Program, year and section' : 'Academic position'} (not editable)`} value={p.programPosition} />
-          </SimpleGrid>
 
           <HStack justify="flex-end" spacing={3}>
             <Button variant="ghost" onClick={() => setEditing(false)} isDisabled={saving}>Cancel</Button>
@@ -227,6 +352,7 @@ export default function ProfilePage() {
           localStorage.setItem('token', data.token);
           localStorage.setItem('programPosition', data.programPosition || '');
           localStorage.setItem('onboardingComplete', 'true');
+          localStorage.setItem('credentialConfirmationRequired', 'false');
           window.location.reload();
         }}
       />

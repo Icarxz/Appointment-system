@@ -76,6 +76,7 @@ facultyId: {
   // without it and are asked for it on first login (see routes/auth.js -> /onboarding).
   programPosition: { type: String, required: function () { return this.onboardingComplete !== false; } },
   onboardingComplete: { type: Boolean, default: true }, // existing accounts are already complete
+  credentialsConfirmedAt: { type: Date, default: null }, // set after a newly provisioned user confirms their account details
   googleSub: { type: String, unique: true, sparse: true }, // Google's stable account id
   room: { type: String }, 
   // The program a faculty member belongs to (optional). A Program Head's program is implied by the position (see utils/programs.js).

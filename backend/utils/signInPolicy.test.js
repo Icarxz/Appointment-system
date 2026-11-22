@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { decideSignIn, isProfileComplete, parseList } = require('./signInPolicy');
+const { decideSignIn, isProfileComplete, requiresCredentialConfirmation, parseList } = require('./signInPolicy');
 
 const base = { allowedDomains: ['school.edu.ph'], adminEmails: ['boss@school.edu.ph'], existingUser: null, rosterRole: null };
 const ok = (email) => ({ email, email_verified: true });
@@ -54,6 +54,31 @@ test('profile completeness', () => {
   assert.ok(!isProfileComplete({ role: 'STUDENT', schoolId: undefined }));        // legacy "no ID yet"
   assert.ok(!isProfileComplete({ role: 'STUDENT', schoolId: 'X', onboardingComplete: false }));
   assert.ok(isProfileComplete({ role: 'ADMIN' }));
+});
+
+test('requires first-login credential confirmation only for provisioned incomplete student and staff accounts', () => {
+  assert.ok(requiresCredentialConfirmation({
+    role: 'STUDENT', schoolId: '2025-S00001', programPosition: 'BS INFO 1A', onboardingComplete: false,
+  }));
+  for (const role of ['FACULTY', 'DEAN']) {
+    assert.ok(requiresCredentialConfirmation({
+      role, facultyId: '2025S-00001', programPosition: 'Faculty', onboardingComplete: false,
+    }));
+  }
+  assert.ok(!requiresCredentialConfirmation({ role: 'STUDENT', onboardingComplete: false }));
+  assert.ok(!requiresCredentialConfirmation({
+    role: 'FACULTY', facultyId: '2025S-00001', programPosition: 'Faculty', onboardingComplete: true,
+  }));
+  assert.ok(!requiresCredentialConfirmation({
+    role: 'FACULTY', facultyId: '2025S-00001', programPosition: 'Faculty',
+    onboardingComplete: false, credentialsConfirmedAt: new Date(),
+  }));
+  assert.ok(!requiresCredentialConfirmation({
+    role: 'DEAN', programPosition: 'Dean', onboardingComplete: false,
+  }));
+  assert.ok(!requiresCredentialConfirmation({
+    role: 'ADMIN', programPosition: 'Admin', onboardingComplete: false,
+  }));
 });
 
 test('ADMIN_EMAILS promotes an existing non-admin account', () => {

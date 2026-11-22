@@ -39,6 +39,12 @@ function isProfileComplete(user) {
   return true;
 }
 
+function requiresCredentialConfirmation(user) {
+  if (!user || user.credentialsConfirmedAt || user.onboardingComplete !== false) return false;
+  if (!['STUDENT', 'FACULTY', 'DEAN'].includes(user.role) || !user.programPosition) return false;
+  return user.role === 'STUDENT' ? !!user.schoolId : !!user.facultyId;
+}
+
 // The sign-in screens say which door the person used. The server still decides the role (from the roster / ADMIN_EMAILS /
 // the stored account); the audience only stops someone using the wrong door.
 //   'STUDENT' : older Student sign-up client.   'STAFF' : older Faculty/Dean sign-in client.
@@ -69,4 +75,4 @@ function loginNeedsAccount(audience, action, role) {
   return null;
 }
 
-module.exports = { decideSignIn, parseList, isProfileComplete, audienceMismatch, loginNeedsAccount };
+module.exports = { decideSignIn, parseList, isProfileComplete, requiresCredentialConfirmation, audienceMismatch, loginNeedsAccount };

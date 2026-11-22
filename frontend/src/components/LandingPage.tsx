@@ -176,6 +176,7 @@ export default function LandingPage() {
     localStorage.setItem('programPosition', data.programPosition || '');
     localStorage.setItem('userEmail', data.email || '');
     localStorage.setItem('onboardingComplete', data.onboardingComplete === false ? 'false' : 'true');
+    localStorage.setItem('credentialConfirmationRequired', String(data.credentialConfirmationRequired === true));
 
     toast({ title: 'Login Successful', status: 'success', duration: 2000 });
 
@@ -183,7 +184,7 @@ export default function LandingPage() {
     // One-shot, and only used when it is an allowlisted path on THIS person's own dashboard.
     const intendedRoute = sessionStorage.getItem('intendedRoute');
     sessionStorage.removeItem('intendedRoute');
-    if (isSafeAppLink(intendedRoute) && linkMatchesRole(intendedRoute, data.role)) {
+    if (data.credentialConfirmationRequired !== true && isSafeAppLink(intendedRoute) && linkMatchesRole(intendedRoute, data.role)) {
       navigate(intendedRoute);
       return;
     }
@@ -206,7 +207,7 @@ export default function LandingPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      finishLogin(data); // an incomplete profile is finished on the dashboard (ProfileGate)
+      finishLogin(data); // provisioned accounts with saved details review them on My Profile after sign-in
     } catch (error: any) {
       toast({ title: 'Sign-in failed', description: error.message, duration: 9000, isClosable: true, status: 'error', position: 'top' });
     }
