@@ -68,6 +68,10 @@ const { canDisableRole, canEnableAccountStatus } = require('../utils/accountStat
 const FacultyStatusEntry = require('../models/FacultyStatusEntry');
 const { resolveFacultyStatus, validateEntry, dropBlockedSlots, BOOKING_BLOCKING } = require('../utils/facultyStatus');
 const { windowFromNotice } = require('../utils/noticeWindow');
+const ExcelJS = require('exceljs');
+const multer = require('multer');
+const { Readable } = require('node:stream');
+const { MAX_ROWS, text, validateImportRows } = require('../utils/bulkProvision');
 const { groupStatusInputs, toLegacyStatus, publicNotices } = require('../utils/facultyStatusInputs');
 const { endFromChoice } = require('../utils/statusDuration');
 
@@ -499,6 +503,193 @@ router.post('/add', requireAuth(['ADMIN']), async (req, res) => {
     res.status(500).json({ error: 'Error provisioning account' });
   }
 });
+
+const BULK_UPLOAD_LIMIT = 2 * 1024 * 1024;
+const bulkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: BULK_UPLOAD_LIMIT, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const name = String(file.originalname || '').toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.csv')) {
+      cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Unsupported file type.'));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+const STUDENT_TEMPLATE_HEADERS = ['Full name', 'School email', 'School ID', 'Program', 'Year', 'Section', 'Gender (optional)'];
+const FACULTY_TEMPLATE_HEADERS = ['Full name', 'School email', 'Employee ID', 'Position', 'Program (optional)', 'Role (Faculty or Dean)', 'Employment type (optional)'];
+
+function safeCsvCell(value) {
+  let out = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(out)) out = "'" + out;
+  return '"' + out.replace(/"/g, '""') + '"';
+}
+
+function addTemplateSheet(workbook, kind) {
+  const headers = kind === 'student' ? STUDENT_TEMPLATE_HEADERS : FACULTY_TEMPLATE_HEADERS;
+  const sheet = workbook.addWorksheet(kind === 'student' ? 'Students' : 'Faculty');
+  sheet.addRow(headers);
+  headers.forEach((header, index) => {
+    sheet.getColumn(index + 1).width = Math.max(18, header.length + 4);
+  });
+  sheet.getRow(1).font = { bold: true };
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+}
+
+router.get('/bulk/template/:kind.xlsx', requireAuth(['ADMIN']), async (req, res) => {
+  try {
+    const kind = String(req.params.kind || '').toLowerCase();
+    if (!['student', 'faculty'].includes(kind)) return res.status(404).json({ error: 'Unknown template.' });
+    const workbook = new ExcelJS.Workbook();
+    addTemplateSheet(workbook, kind);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${kind}-account-template.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch {
+    res.status(500).json({ error: 'Could not create the spreadsheet template.' });
+  }
+});
+
+router.get('/bulk/template/:kind.csv', requireAuth(['ADMIN']), (req, res) => {
+  const kind = String(req.params.kind || '').toLowerCase();
+  if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Unknown template.' });
+  const headers = kind === 'student' ? STUDENT_TEMPLATE_HEADERS : FACULTY_TEMPLATE_HEADERS;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${kind}-account-template.csv"`);
+  res.send(headers.map(safeCsvCell).join(',') + '\r\n');
+});
+
+function normalizedHeader(value) {
+  return text(value).toLowerCase().replace(/\s+/g, ' ').replace(/[()]/g, '').replace(/[^a-z0-9]/g, '');
+}
+
+function workbookRows(buffer, originalName) {
+  return (async () => {
+    if (!buffer || buffer.length === 0) throw new Error('The selected file is empty.');
+    const workbook = new ExcelJS.Workbook();
+    const lowerName = String(originalName || '').toLowerCase();
+    if (lowerName.endsWith('.xlsx')) {
+      await workbook.xlsx.load(buffer);
+    } else if (lowerName.endsWith('.csv')) {
+      await workbook.csv.read(Readable.from(buffer));
+    } else {
+      throw new Error('Only .xlsx and .csv files are accepted.');
+    }
+    const sheet = workbook.worksheets[0];
+    if (!sheet) throw new Error('The spreadsheet is empty.');
+    if (sheet.rowCount < 2) throw new Error('The spreadsheet is empty.');
+
+    const headerRow = sheet.getRow(1);
+    const headers = {};
+    headerRow.eachCell((cell, colNumber) => {
+      if (cell.type === 6 || cell.formula) throw new Error('Spreadsheet headers cannot contain formulas.');
+      headers[normalizedHeader(cell.value)] = colNumber;
+    });
+
+    const rows = [];
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const get = (name) => {
+        const colNumber = headers[normalizedHeader(name)] || headers[normalizedHeader(name + ' (optional)')];
+        if (!colNumber) return '';
+        const cell = row.getCell(colNumber);
+        if (cell.type === 6 || cell.formula) return '=' + String(cell.result ?? cell.value?.result ?? '');
+        if (cell.type === 5 && cell.value?.text) return text(cell.value.text);
+        return text(cell.value);
+      };
+      const candidate = {
+        name: get('Full name'),
+        email: get('School email'),
+        schoolId: get('School ID'),
+        employeeId: get('Employee ID'),
+        program: get('Program'),
+        year: get('Year'),
+        section: get('Section'),
+        gender: get('Gender optional'),
+        position: get('Position'),
+        role: get('Role Faculty or Dean'),
+        employmentType: get('Employment type optional'),
+      };
+      if (Object.values(candidate).some(v => text(v) !== '')) {
+        rows.push(candidate);
+      }
+    });
+    if (rows.length > MAX_ROWS) throw new Error(`The spreadsheet exceeds the ${MAX_ROWS}-row limit.`);
+    if (!rows.length) throw new Error('The spreadsheet contains no account rows.');
+    return rows;
+  })();
+}
+
+async function handleBulkPreview(req, res) {
+  try {
+    const kind = String(req.query.template || '').toLowerCase();
+    if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Choose a Student or Faculty template.' });
+    if (!req.file) return res.status(400).json({ error: 'Choose an Excel or CSV file.' });
+    const rows = await workbookRows(req.file.buffer, req.file.originalname);
+    const results = await validateImportRows(User, rows, kind, process.env);
+    res.json({
+      template: kind,
+      totalRows: results.length,
+      validRows: results.filter(r => r.valid).length,
+      rejectedRows: results.filter(r => !r.valid).length,
+      rows: results.map(r => ({
+        rowNumber: r.rowNumber,
+        valid: r.valid,
+        errors: r.errors,
+        submitted: r.submitted,
+      })),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Could not read the spreadsheet.' });
+  }
+}
+
+async function handleBulkConfirm(req, res) {
+  try {
+    const kind = String(req.query.template || '').toLowerCase();
+    if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Choose a Student or Faculty template.' });
+    if (!req.file) return res.status(400).json({ error: 'Choose an Excel or CSV file.' });
+    const rows = await workbookRows(req.file.buffer, req.file.originalname);
+    const results = await validateImportRows(User, rows, kind, process.env);
+
+    let created = 0;
+    const rejected = [];
+    for (const result of results) {
+      if (!result.valid) {
+        rejected.push({
+          rowNumber: result.rowNumber,
+          submitted: result.submitted,
+          reason: result.errors.join(' '),
+        });
+        continue;
+      }
+      try {
+        await User.create(result.account);
+        created += 1;
+      } catch (error) {
+        let reason = 'Database validation failed.';
+        if (error && error.code === 11000) reason = 'An account with that email or ID already exists.';
+        rejected.push({ rowNumber: result.rowNumber, submitted: result.submitted, reason });
+      }
+    }
+
+    res.json({
+      template: kind,
+      totalRows: results.length,
+      created,
+      rejected: rejected.length,
+      rejectedRows: rejected,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Could not import the spreadsheet.' });
+  }
+}
+
+router.post('/bulk/preview', requireAuth(['ADMIN']), bulkUpload.single('file'), handleBulkPreview);
+router.post('/bulk/confirm', requireAuth(['ADMIN']), bulkUpload.single('file'), handleBulkConfirm);
 
 // PATCH /api/faculty/program/:id  { program }  - set or clear (program: '') the program of a faculty account
 router.patch('/program/:id', requireAuth(STAFF), async (req, res) => {
@@ -1847,5 +2038,12 @@ router.patch('/broadcasts/:id/end', requireAuth(['DEAN']), async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Server error ending broadcast.' }); }
 });
 
+router.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'The file exceeds the 2 MB limit.' });
+    if (error.code === 'LIMIT_UNEXPECTED_FILE') return res.status(400).json({ error: 'Only .xlsx and .csv files are accepted.' });
+  }
+  next(error);
+});
 
 module.exports = router;

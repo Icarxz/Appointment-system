@@ -108,6 +108,11 @@ export default function AdminDashboard() {
   const [emailDomainWarn, setEmailDomainWarn] = useState(false);
   const [statusTarget, setStatusTarget] = useState<any | null>(null); // account about to be disabled / re-enabled
   const [statusSaving, setStatusSaving] = useState(false);
+  const [bulkTemplateKind, setBulkTemplateKind] = useState<'student' | 'faculty'>('student');
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkPreview, setBulkPreview] = useState<any | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkSummary, setBulkSummary] = useState<any | null>(null);
 
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
 
@@ -227,6 +232,114 @@ export default function AdminDashboard() {
       if (response.ok) setFacultyList(list => list.map(f => (f._id === id ? { ...f, program: data.program || undefined } : f)));
       else toast({ title: data.error || 'Could not save the program.', status: 'error' });
     } catch { toast({ title: 'Could not reach the server.', status: 'error' }); }
+  };
+
+  const downloadBulkTemplate = async (kind: 'student' | 'faculty', format: 'xlsx' | 'csv') => {
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/template/${kind}.${format}`);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Could not download the template.');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${kind}-account-template.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      toast({ title: 'Template download failed', description: error.message, status: 'error' });
+    }
+  };
+
+  const previewBulkFile = async () => {
+    if (!bulkFile) return;
+    setBulkBusy(true);
+    setBulkPreview(null);
+    setBulkSummary(null);
+    try {
+      const extension = bulkFile.name.toLowerCase();
+      if (!extension.endsWith('.xlsx') && !extension.endsWith('.csv')) throw new Error('Only .xlsx and .csv files are accepted.');
+      if (bulkFile.size > 2 * 1024 * 1024) throw new Error('The file exceeds the 2 MB limit.');
+      const form = new FormData();
+      form.append('file', bulkFile);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/preview?template=${bulkTemplateKind}`, {
+        method: 'POST',
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not preview the spreadsheet.');
+      setBulkPreview(data);
+    } catch (error: any) {
+      toast({ title: 'Preview failed', description: error.message, status: 'error' });
+    }
+    setBulkBusy(false);
+  };
+
+  const confirmBulkFile = async () => {
+    if (!bulkFile || !bulkPreview) return;
+    setBulkBusy(true);
+    try {
+      const form = new FormData();
+      form.append('file', bulkFile);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/confirm?template=${bulkTemplateKind}`, {
+        method: 'POST',
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not import the spreadsheet.');
+      setBulkSummary(data);
+      setBulkPreview(null);
+      fetchAllData();
+    } catch (error: any) {
+      toast({ title: 'Import failed', description: error.message, status: 'error' });
+    }
+    setBulkBusy(false);
+  };
+
+  const downloadBulkErrorReport = () => {
+    const rejected = bulkSummary?.rejectedRows || bulkPreview?.rows?.filter((r: any) => !r.valid).map((r: any) => ({
+      rowNumber: r.rowNumber,
+      submitted: r.submitted,
+      reason: r.errors.join(' '),
+    })) || [];
+    if (!rejected.length) return;
+    const escapeCsv = (value: any) => {
+      let out = value === null || value === undefined ? '' : String(value);
+      if (/^[=+\-@\t\r]/.test(out)) out = "'" + out;
+      return '"' + out.replace(/"/g, '""') + '"';
+    };
+    const headers = ['Row number', 'Full name', 'School email', 'School ID', 'Employee ID', 'Program', 'Year', 'Section', 'Position', 'Role', 'Employment type', 'Reason'];
+    const lines = [headers.map(escapeCsv).join(',')];
+    rejected.forEach((item: any) => {
+      const s = item.submitted || {};
+      lines.push([
+        item.rowNumber,
+        s.name,
+        s.email,
+        s.schoolId,
+        s.employeeId,
+        s.program,
+        s.year,
+        s.section,
+        s.position,
+        s.role,
+        s.employmentType,
+        item.reason,
+      ].map(escapeCsv).join(','));
+    });
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'account-import-rejected-rows.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const handleAddFaculty = async (e: React.FormEvent) => {
@@ -448,6 +561,7 @@ export default function AdminDashboard() {
         )}
 
         {activePage === 'provision' && (
+          <>
           <Box display="flex" gap={8} flexDir={{ base: 'column', xl: 'row' }}>
             <Box flex={{ base: 'none', xl: '0 0 520px' }}>
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
@@ -558,6 +672,71 @@ export default function AdminDashboard() {
               )}
             </Box>
           </Box>
+          <Box bg={cardBg} p={6} mt={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+            <Heading size="md" color={textColor} mb={1}>Bulk Account Provisioning</Heading>
+            <Text fontSize="sm" color={mutedText} mb={4}>Preview is read-only. Accounts are created only after confirmation.</Text>
+            <HStack flexWrap="wrap" spacing={3} mb={4}>
+              <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('student', 'xlsx')}>Download Student Template (Excel)</ChakraButton>
+              <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('student', 'csv')}>Download Student Template (CSV)</ChakraButton>
+              <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('faculty', 'xlsx')}>Download Faculty/Dean Template (Excel)</ChakraButton>
+              <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('faculty', 'csv')}>Download Faculty/Dean Template (CSV)</ChakraButton>
+            </HStack>
+            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} alignItems="end">
+              <FormControl>
+                <FormLabel color={textColor}>Template type</FormLabel>
+                <Select value={bulkTemplateKind} onChange={(e) => { setBulkTemplateKind(e.target.value as 'student' | 'faculty'); setBulkFile(null); setBulkPreview(null); setBulkSummary(null); }} color={textColor}>
+                  <option value="student">Student accounts</option>
+                  <option value="faculty">Faculty and Dean accounts</option>
+                </Select>
+              </FormControl>
+              <FormControl>
+                <FormLabel color={textColor}>Spreadsheet file</FormLabel>
+                <Input type="file" accept=".xlsx,.csv" p={1} onChange={(e) => { setBulkFile(e.target.files?.[0] || null); setBulkPreview(null); setBulkSummary(null); }} />
+              </FormControl>
+              <ChakraButton colorScheme="blue" onClick={previewBulkFile} isDisabled={!bulkFile} isLoading={bulkBusy}>Preview Accounts</ChakraButton>
+            </SimpleGrid>
+
+            {bulkPreview && (
+              <Box mt={5}>
+                <HStack justify="space-between" flexWrap="wrap" mb={3}>
+                  <Text fontWeight="semibold" color={textColor}>{bulkPreview.totalRows} rows: {bulkPreview.validRows} valid, {bulkPreview.rejectedRows} rejected</Text>
+                  <HStack>
+                    {bulkPreview.rejectedRows > 0 && (
+                      <ChakraButton size="sm" variant="outline" onClick={downloadBulkErrorReport}>Download Rejected Rows</ChakraButton>
+                    )}
+                    <ChakraButton size="sm" colorScheme="green" onClick={confirmBulkFile} isDisabled={bulkPreview.validRows === 0} isLoading={bulkBusy}>Confirm Import</ChakraButton>
+                  </HStack>
+                </HStack>
+                <ScrollTable><Table size="sm">
+                  <Thead><Tr><Th>Row</Th><Th>Status</Th><Th>Submitted values</Th><Th>Reason</Th></Tr></Thead>
+                  <Tbody>
+                    {bulkPreview.rows.map((row: any) => (
+                      <Tr key={row.rowNumber}>
+                        <Td>{row.rowNumber}</Td>
+                        <Td><Badge colorScheme={row.valid ? 'green' : 'red'}>{row.valid ? 'Valid' : 'Invalid'}</Badge></Td>
+                        <Td>
+                          <Text fontSize="xs">{row.submitted.name || '—'}{row.submitted.email ? ` · ${row.submitted.email}` : ''}</Text>
+                          <Text fontSize="xs" color={mutedText}>{row.submitted.schoolId || row.submitted.employeeId || ''}</Text>
+                        </Td>
+                        <Td><Text fontSize="xs" color={row.valid ? mutedText : 'red.500'}>{row.valid ? 'Ready to create' : row.errors.join(' ')}</Text></Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table></ScrollTable>
+              </Box>
+            )}
+
+            {bulkSummary && (
+              <Box mt={5} p={4} borderWidth="1px" borderColor={borderColor} borderRadius="md">
+                <Text fontWeight="semibold" color={textColor}>Import complete</Text>
+                <Text fontSize="sm" color={mutedText}>Processed {bulkSummary.totalRows}: {bulkSummary.created} created, {bulkSummary.rejected} rejected.</Text>
+                {bulkSummary.rejectedRows?.length > 0 && (
+                  <ChakraButton mt={3} size="sm" variant="outline" onClick={downloadBulkErrorReport}>Download Error Report</ChakraButton>
+                )}
+              </Box>
+            )}
+          </Box>
+          </>
         )}
 
         {dataReady && activePage === 'users' && userTab === 'faculty' && (
