@@ -161,8 +161,10 @@ function validateProvisionRow(raw, kind, allowedDomains) {
 async function validateImportRows(User, rows, kind, env) {
   const allowedDomains = parseList(env.ALLOWED_EMAIL_DOMAIN);
   const results = rows.map((row, index) => {
-    const checked = validateProvisionRow(row, kind, allowedDomains);
-    return { rowNumber: index + 2, submitted: row, ...checked };
+    const submitted = row && row.submitted && typeof row.submitted === 'object' ? row.submitted : row;
+    const checked = validateProvisionRow(submitted, kind, allowedDomains);
+    const rowNumber = Number.isInteger(row?.rowNumber) && row.rowNumber >= 2 ? row.rowNumber : index + 2;
+    return { rowNumber, submitted, ...checked };
   });
 
   const emailCounts = new Map();

@@ -182,3 +182,27 @@ test('marks database email and ID duplicates', async () => {
   assert.match(results[0].errors.join(' '), /Duplicate email in the database/i);
   assert.match(results[0].errors.join(' '), /Duplicate School ID in the database/i);
 });
+
+test('revalidates edited submitted values without losing spreadsheet row numbers', async () => {
+  const fakeUser = {
+    find() {
+      return { select() { return { lean: async () => [] }; } };
+    },
+  };
+  const rows = await validateImportRows(fakeUser, [{
+    rowNumber: 8,
+    submitted: {
+      name: 'Corrected Fiction Student',
+      email: 'corrected.student@antiquespride.edu.ph',
+      schoolId: '2025-S00008',
+      program: 'BS INFO',
+      year: '1',
+      section: 'A',
+      gender: 'Female',
+    },
+  }], 'student', { ALLOWED_EMAIL_DOMAIN: 'antiquespride.edu.ph' });
+
+  assert.equal(rows[0].rowNumber, 8);
+  assert.equal(rows[0].submitted.name, 'Corrected Fiction Student');
+  assert.equal(rows[0].valid, true);
+});

@@ -517,6 +517,20 @@ const bulkUpload = multer({
     cb(null, true);
   },
 });
+const bulkRowsUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fields: 1, fieldSize: 512 * 1024, files: 0 },
+});
+
+function parseBulkRows(req, res, next) {
+  bulkRowsUpload.none()(req, res, (error) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError) {
+      return res.status(413).json({ error: 'Edited rows exceed the request limit or contain unsupported file data.' });
+    }
+    return next(error);
+  });
+}
 
 const STUDENT_TEMPLATE_HEADERS = ['Full name', 'School email', 'School ID', 'Program', 'Year', 'Section', 'Gender'];
 const FACULTY_TEMPLATE_HEADERS = ['Full name', 'School email', 'Employee ID', 'Position', 'Program (optional)', 'Role (Faculty or Dean)', 'Employment type (optional)', 'Gender'];
@@ -644,12 +658,68 @@ async function handleBulkPreview(req, res) {
   }
 }
 
+function bulkRowsFromBody(body) {
+  let parsedRows = body?.rows;
+  if (typeof parsedRows === 'string') {
+    try {
+      parsedRows = JSON.parse(parsedRows);
+    } catch {
+      throw new Error('Edited rows could not be read. Please review the preview and try again.');
+    }
+  }
+  if (!Array.isArray(parsedRows) || parsedRows.length === 0 || parsedRows.length > MAX_ROWS) {
+    throw new Error(`Send between 1 and ${MAX_ROWS} account rows.`);
+  }
+  const fields = ['name', 'email', 'schoolId', 'employeeId', 'program', 'year', 'section', 'gender', 'position', 'role', 'employmentType'];
+  return parsedRows.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error('Each edited row must be an account record.');
+    }
+    const source = item.submitted && typeof item.submitted === 'object' && !Array.isArray(item.submitted)
+      ? item.submitted
+      : item;
+    const submitted = {};
+    for (const field of fields) {
+      const value = source[field];
+      submitted[field] = value === null || value === undefined ? '' : String(value).trim();
+    }
+    return {
+      rowNumber: Number.isInteger(item.rowNumber) && item.rowNumber >= 2
+        ? item.rowNumber
+        : index + 2,
+      submitted,
+    };
+  });
+}
+
+async function handleBulkRevalidate(req, res) {
+  try {
+    const kind = String(req.query.template || '').toLowerCase();
+    if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Choose a Student or Faculty template.' });
+    const rows = bulkRowsFromBody(req.body);
+    const results = await validateImportRows(User, rows, kind, process.env);
+    res.json({
+      template: kind,
+      totalRows: results.length,
+      validRows: results.filter(r => r.valid).length,
+      rejectedRows: results.filter(r => !r.valid).length,
+      rows: results.map(r => ({
+        rowNumber: r.rowNumber,
+        valid: r.valid,
+        errors: r.errors,
+        submitted: r.submitted,
+      })),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Could not validate the edited rows.' });
+  }
+}
+
 async function handleBulkConfirm(req, res) {
   try {
     const kind = String(req.query.template || '').toLowerCase();
     if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Choose a Student or Faculty template.' });
-    if (!req.file) return res.status(400).json({ error: 'Choose an Excel or CSV file.' });
-    const rows = await workbookRows(req.file.buffer, req.file.originalname);
+    const rows = bulkRowsFromBody(req.body);
     const results = await validateImportRows(User, rows, kind, process.env);
 
     let created = 0;
@@ -686,7 +756,8 @@ async function handleBulkConfirm(req, res) {
 }
 
 router.post('/bulk/preview', requireAuth(['ADMIN']), bulkUpload.single('file'), handleBulkPreview);
-router.post('/bulk/confirm', requireAuth(['ADMIN']), bulkUpload.single('file'), handleBulkConfirm);
+router.post('/bulk/revalidate', requireAuth(['ADMIN']), parseBulkRows, handleBulkRevalidate);
+router.post('/bulk/confirm', requireAuth(['ADMIN']), parseBulkRows, handleBulkConfirm);
 
 // PATCH /api/faculty/program/:id  { program }  - set or clear (program: '') the program of a faculty account
 router.patch('/program/:id', requireAuth(STAFF), async (req, res) => {

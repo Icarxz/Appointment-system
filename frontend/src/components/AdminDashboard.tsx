@@ -6,6 +6,7 @@ import { formatDate, formatDateTime } from './dateUtils';
 import { 
   Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
   useToast, Select, HStack, Flex, SimpleGrid, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
+  Tabs, TabList, TabPanels, Tab, TabPanel,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter,
   InputGroup, InputRightAddon
 } from '@chakra-ui/react';
@@ -113,6 +114,7 @@ export default function AdminDashboard() {
   const [bulkPreview, setBulkPreview] = useState<any | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkSummary, setBulkSummary] = useState<any | null>(null);
+  const [bulkNeedsValidation, setBulkNeedsValidation] = useState(false);
 
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
 
@@ -273,10 +275,43 @@ export default function AdminDashboard() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not preview the spreadsheet.');
       setBulkPreview(data);
+      setBulkNeedsValidation(false);
     } catch (error: any) {
       toast({ title: 'Preview failed', description: error.message, status: 'error' });
     }
     setBulkBusy(false);
+  };
+
+  const updateBulkRow = (rowNumber: number, field: string, value: string) => {
+    setBulkPreview((current: any) => current && ({
+      ...current,
+      rows: current.rows.map((row: any) => row.rowNumber === rowNumber
+        ? { ...row, submitted: { ...row.submitted, [field]: value } }
+        : row),
+    }));
+    setBulkNeedsValidation(true);
+    setBulkSummary(null);
+  };
+
+  const revalidateBulkRows = async () => {
+    if (!bulkPreview) return;
+    setBulkBusy(true);
+    try {
+      const form = new FormData();
+      form.append('rows', JSON.stringify(bulkPreview.rows));
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/revalidate?template=${bulkTemplateKind}`, {
+        method: 'POST',
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not validate the edited rows.');
+      setBulkPreview(data);
+      setBulkNeedsValidation(false);
+    } catch (error: any) {
+      toast({ title: 'Revalidation failed', description: error.message, status: 'error' });
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   const confirmBulkFile = async () => {
@@ -284,7 +319,7 @@ export default function AdminDashboard() {
     setBulkBusy(true);
     try {
       const form = new FormData();
-      form.append('file', bulkFile);
+      form.append('rows', JSON.stringify(bulkPreview.rows));
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/confirm?template=${bulkTemplateKind}`, {
         method: 'POST',
         body: form,
@@ -293,6 +328,7 @@ export default function AdminDashboard() {
       if (!response.ok) throw new Error(data.error || 'Could not import the spreadsheet.');
       setBulkSummary(data);
       setBulkPreview(null);
+      setBulkNeedsValidation(false);
       fetchAllData();
     } catch (error: any) {
       toast({ title: 'Import failed', description: error.message, status: 'error' });
@@ -494,6 +530,27 @@ export default function AdminDashboard() {
     setStatusSaving(false);
   };
 
+  const bulkColumns = bulkTemplateKind === 'student'
+    ? [
+      { field: 'name', label: 'Full name' },
+      { field: 'email', label: 'School email' },
+      { field: 'schoolId', label: 'School ID' },
+      { field: 'program', label: 'Program' },
+      { field: 'year', label: 'Year' },
+      { field: 'section', label: 'Section' },
+      { field: 'gender', label: 'Gender' },
+    ]
+    : [
+      { field: 'name', label: 'Full name' },
+      { field: 'email', label: 'School email' },
+      { field: 'employeeId', label: 'Employee ID' },
+      { field: 'position', label: 'Position' },
+      { field: 'program', label: 'Program' },
+      { field: 'role', label: 'Role' },
+      { field: 'employmentType', label: 'Employment type' },
+      { field: 'gender', label: 'Gender' },
+    ];
+
   return (
     <DashboardShell
       portalLabel="Admin Console"
@@ -562,6 +619,13 @@ export default function AdminDashboard() {
         )}
 
         {activePage === 'provision' && (
+          <Tabs variant="soft-rounded" size="sm" colorScheme="blue">
+            <TabList mb={4}>
+              <Tab>Single Account</Tab>
+              <Tab>Bulk Accounts</Tab>
+            </TabList>
+            <TabPanels>
+              <TabPanel px={0} pt={0}>
           <VStack align="stretch" spacing={6}>
           <Box display="flex" gap={8} flexDir={{ base: 'column', xl: 'row' }}>
             <Box flex={{ base: 'none', xl: '0 0 520px' }}>
@@ -674,9 +738,12 @@ export default function AdminDashboard() {
               )}
             </Box>
           </Box>
-          <Box order={-1} bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+          </VStack>
+              </TabPanel>
+              <TabPanel px={0} pt={0}>
+          <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <Heading size="md" color={textColor} mb={1}>Bulk Account Provisioning</Heading>
-            <Text fontSize="sm" color={mutedText} mb={4}>Preview is read-only. Accounts are created only after confirmation.</Text>
+            <Text fontSize="sm" color={mutedText} mb={4}>Edit spreadsheet values in the preview, revalidate, then confirm to create accounts.</Text>
             <HStack flexWrap="wrap" spacing={3} mb={4}>
               <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('student', 'xlsx')}>Download Student Template (Excel)</ChakraButton>
               <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('student', 'csv')}>Download Student Template (CSV)</ChakraButton>
@@ -686,14 +753,14 @@ export default function AdminDashboard() {
             <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} alignItems="end">
               <FormControl>
                 <FormLabel color={textColor}>Template type</FormLabel>
-                <Select value={bulkTemplateKind} onChange={(e) => { setBulkTemplateKind(e.target.value as 'student' | 'faculty'); setBulkFile(null); setBulkPreview(null); setBulkSummary(null); }} color={textColor}>
+                <Select value={bulkTemplateKind} onChange={(e) => { setBulkTemplateKind(e.target.value as 'student' | 'faculty'); setBulkFile(null); setBulkPreview(null); setBulkSummary(null); setBulkNeedsValidation(false); }} color={textColor}>
                   <option value="student">Student accounts</option>
                   <option value="faculty">Faculty and Dean accounts</option>
                 </Select>
               </FormControl>
               <FormControl>
                 <FormLabel color={textColor}>Spreadsheet file</FormLabel>
-                <Input type="file" accept=".xlsx,.csv" p={1} onChange={(e) => { setBulkFile(e.target.files?.[0] || null); setBulkPreview(null); setBulkSummary(null); }} />
+                <Input type="file" accept=".xlsx,.csv" p={1} onChange={(e) => { setBulkFile(e.target.files?.[0] || null); setBulkPreview(null); setBulkSummary(null); setBulkNeedsValidation(false); }} />
               </FormControl>
               <ChakraButton colorScheme="blue" onClick={previewBulkFile} isDisabled={!bulkFile} isLoading={bulkBusy}>Preview Accounts</ChakraButton>
             </SimpleGrid>
@@ -701,26 +768,38 @@ export default function AdminDashboard() {
             {bulkPreview && (
               <Box mt={5}>
                 <HStack justify="space-between" flexWrap="wrap" mb={3}>
-                  <Text fontWeight="semibold" color={textColor}>{bulkPreview.totalRows} rows: {bulkPreview.validRows} valid, {bulkPreview.rejectedRows} rejected</Text>
+                  <Text fontWeight="semibold" color={textColor}>
+                    {bulkNeedsValidation ? 'Edits need validation. ' : ''}
+                    {bulkPreview.totalRows} rows: {bulkPreview.validRows} valid, {bulkPreview.rejectedRows} rejected
+                  </Text>
                   <HStack>
-                    {bulkPreview.rejectedRows > 0 && (
+                    <ChakraButton size="sm" variant="outline" onClick={revalidateBulkRows} isLoading={bulkBusy}>Revalidate Rows</ChakraButton>
+                    {!bulkNeedsValidation && bulkPreview.rejectedRows > 0 && (
                       <ChakraButton size="sm" variant="outline" onClick={downloadBulkErrorReport}>Download Rejected Rows</ChakraButton>
                     )}
-                    <ChakraButton size="sm" colorScheme="green" onClick={confirmBulkFile} isDisabled={bulkPreview.validRows === 0} isLoading={bulkBusy}>Confirm Import</ChakraButton>
+                    <ChakraButton size="sm" colorScheme="green" onClick={confirmBulkFile} isDisabled={bulkNeedsValidation || bulkPreview.validRows === 0} isLoading={bulkBusy}>Confirm Import</ChakraButton>
                   </HStack>
                 </HStack>
-                <ScrollTable><Table size="sm">
-                  <Thead><Tr><Th>Row</Th><Th>Status</Th><Th>Submitted values</Th><Th>Reason</Th></Tr></Thead>
+                <ScrollTable><Table size="sm" minW="1200px">
+                  <Thead><Tr><Th>Row</Th><Th>Status</Th>{bulkColumns.map(column => <Th key={column.field} minW="150px">{column.label}</Th>)}<Th minW="240px">Validation</Th></Tr></Thead>
                   <Tbody>
                     {bulkPreview.rows.map((row: any) => (
                       <Tr key={row.rowNumber}>
                         <Td>{row.rowNumber}</Td>
-                        <Td><Badge colorScheme={row.valid ? 'green' : 'red'}>{row.valid ? 'Valid' : 'Invalid'}</Badge></Td>
-                        <Td>
-                          <Text fontSize="xs">{row.submitted.name || '—'}{row.submitted.email ? ` · ${row.submitted.email}` : ''}</Text>
-                          <Text fontSize="xs" color={mutedText}>{row.submitted.schoolId || row.submitted.employeeId || ''}{row.submitted.gender ? ` · ${row.submitted.gender}` : ''}</Text>
-                        </Td>
-                        <Td><Text fontSize="xs" color={row.valid ? mutedText : 'red.500'}>{row.valid ? 'Ready to create' : row.errors.join(' ')}</Text></Td>
+                        <Td><Badge colorScheme={bulkNeedsValidation ? 'orange' : row.valid ? 'green' : 'red'}>{bulkNeedsValidation ? 'Changed' : row.valid ? 'Valid' : 'Invalid'}</Badge></Td>
+                        {bulkColumns.map(column => (
+                          <Td key={column.field}>
+                            <Input
+                              size="sm"
+                              value={row.submitted?.[column.field] ?? ''}
+                              aria-label={`${column.label}, row ${row.rowNumber}`}
+                              onChange={(event) => updateBulkRow(row.rowNumber, column.field, event.target.value)}
+                            />
+                          </Td>
+                        ))}
+                        <Td><Text fontSize="xs" color={bulkNeedsValidation || row.valid ? mutedText : 'red.500'}>
+                          {bulkNeedsValidation ? 'Edited; revalidate before confirming.' : row.valid ? 'Ready to create' : row.errors.join(' ')}
+                        </Text></Td>
                       </Tr>
                     ))}
                   </Tbody>
@@ -738,7 +817,9 @@ export default function AdminDashboard() {
               </Box>
             )}
           </Box>
-          </VStack>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
         )}
 
         {dataReady && activePage === 'users' && userTab === 'faculty' && (
