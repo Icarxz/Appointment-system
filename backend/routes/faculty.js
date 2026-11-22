@@ -455,7 +455,7 @@ router.post('/add', requireAuth(['ADMIN']), async (req, res) => {
     const domain = email.split('@')[1];
     if (!allowedDomains.length || !allowedDomains.includes(domain)) return res.status(400).json({ error: 'Please use a valid school email address.' });
     if (!['STUDENT', 'FACULTY', 'DEAN'].includes(role)) return res.status(400).json({ error: 'Choose Student, Faculty or Dean.' });
-    if (gender && !['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female, or leave gender blank.' });
+    if (!['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female.' });
     if (await User.findOne({ email }).select('_id')) return res.status(409).json({ error: 'An account already uses this email.' });
 
     const account = {
@@ -518,8 +518,8 @@ const bulkUpload = multer({
   },
 });
 
-const STUDENT_TEMPLATE_HEADERS = ['Full name', 'School email', 'School ID', 'Program', 'Year', 'Section', 'Gender (optional)'];
-const FACULTY_TEMPLATE_HEADERS = ['Full name', 'School email', 'Employee ID', 'Position', 'Program (optional)', 'Role (Faculty or Dean)', 'Employment type (optional)'];
+const STUDENT_TEMPLATE_HEADERS = ['Full name', 'School email', 'School ID', 'Program', 'Year', 'Section', 'Gender'];
+const FACULTY_TEMPLATE_HEADERS = ['Full name', 'School email', 'Employee ID', 'Position', 'Program (optional)', 'Role (Faculty or Dean)', 'Employment type (optional)', 'Gender'];
 
 function safeCsvCell(value) {
   let out = value === null || value === undefined ? '' : String(value);
@@ -594,7 +594,6 @@ function workbookRows(buffer, originalName) {
       programoptional: 'program',
       year: 'year',
       section: 'section',
-      genderoptional: 'gender',
       gender: 'gender',
       position: 'position',
       role: 'role',

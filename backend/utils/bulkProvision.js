@@ -54,7 +54,7 @@ function validateProvisionRow(raw, kind, allowedDomains) {
     }
     const genderRaw = text(row.gender).toLowerCase();
     const gender = genderRaw === 'male' ? 'Male' : genderRaw === 'female' ? 'Female' : text(row.gender);
-    if (gender && !['Male', 'Female'].includes(gender)) errors.push('Gender must be Male, Female or blank.');
+    if (!['Male', 'Female'].includes(gender)) errors.push('Gender must be Male or Female.');
     if (formulaOrInjection(row.schoolId) || formulaOrInjection(program) || formulaOrInjection(year) || formulaOrInjection(section)) {
       errors.push('Student fields cannot contain formula or formula-injection values.');
     }
@@ -90,7 +90,7 @@ function validateProvisionRow(raw, kind, allowedDomains) {
     if (!employeeIdCheck.ok) errors.push(employeeIdCheck.error);
     const genderRaw = text(row.gender).toLowerCase();
     const gender = genderRaw === 'male' ? 'Male' : genderRaw === 'female' ? 'Female' : text(row.gender);
-    if (gender && !['Male', 'Female'].includes(gender)) errors.push('Gender must be Male, Female or blank.');
+    if (!['Male', 'Female'].includes(gender)) errors.push('Gender must be Male or Female.');
     const employmentRaw = text(row.employmentType).toLowerCase();
     const employmentType = employmentRaw === 'full-time' || employmentRaw === 'full time' ? 'Full-time'
       : employmentRaw === 'part-time' || employmentRaw === 'part time' ? 'Part-time'

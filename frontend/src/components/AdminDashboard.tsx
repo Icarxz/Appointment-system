@@ -312,7 +312,7 @@ export default function AdminDashboard() {
       if (/^[=+\-@\t\r]/.test(out)) out = "'" + out;
       return '"' + out.replace(/"/g, '""') + '"';
     };
-    const headers = ['Row number', 'Full name', 'School email', 'School ID', 'Employee ID', 'Program', 'Year', 'Section', 'Position', 'Role', 'Employment type', 'Reason'];
+    const headers = ['Row number', 'Full name', 'School email', 'School ID', 'Employee ID', 'Program', 'Year', 'Section', 'Gender', 'Position', 'Role', 'Employment type', 'Reason'];
     const lines = [headers.map(escapeCsv).join(',')];
     rejected.forEach((item: any) => {
       const s = item.submitted || {};
@@ -325,6 +325,7 @@ export default function AdminDashboard() {
         s.program,
         s.year,
         s.section,
+        s.gender,
         s.position,
         s.role,
         s.employmentType,
@@ -593,7 +594,7 @@ export default function AdminDashboard() {
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                           <FormControl isRequired>
                             <FormLabel color={textColor}>School ID</FormLabel>
-                            <Input value={schoolId} onChange={(e) => setSchoolId(e.target.value.toUpperCase())} placeholder="2025-S00001" />
+                            <IdTray kind="STUDENT" value={schoolId} onChange={setSchoolId} />
                           </FormControl>
                           <FormControl isRequired>
                             <FormLabel color={textColor}>Program</FormLabel>
@@ -613,9 +614,9 @@ export default function AdminDashboard() {
                               options={studentProgram && studentYear ? cohortConfig[studentProgram][studentYear].map(s => ({ value: s, label: s })) : []} />
                           </FormControl>
                         </SimpleGrid>
-                        <FormControl>
-                          <FormLabel color={textColor}>Gender (optional)</FormLabel>
-                          <SearchableSelect placeholder="Not specified" value={gender} onChange={setGender} searchable={false} options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
+                        <FormControl isRequired>
+                          <FormLabel color={textColor}>Gender</FormLabel>
+                          <SearchableSelect placeholder="Select gender..." value={gender} onChange={setGender} searchable={false} options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
                         </FormControl>
                       </VStack>
                     ) : (
@@ -623,7 +624,7 @@ export default function AdminDashboard() {
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                           <FormControl isRequired>
                             <FormLabel color={textColor}>Employee ID</FormLabel>
-                            <Input value={facultyId} onChange={(e) => setFacultyId(e.target.value.toUpperCase())} placeholder="2025S-00001" />
+                            <IdTray kind="FACULTY" value={facultyId} onChange={setFacultyId} />
                           </FormControl>
                           <FormControl isRequired>
                             <FormLabel color={textColor}>Position</FormLabel>
@@ -637,14 +638,17 @@ export default function AdminDashboard() {
                             <SearchableSelect placeholder="Not set" value={newProgram} onChange={setNewProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
                           </FormControl>
                         )}
-                        <FormControl>
-                          <FormLabel color={textColor}>Gender (optional)</FormLabel>
-                          <SearchableSelect placeholder="Not specified" value={gender} onChange={setGender} searchable={false} options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
+                        <FormControl isRequired>
+                          <FormLabel color={textColor}>Gender</FormLabel>
+                          <SearchableSelect placeholder="Select gender..." value={gender} onChange={setGender} searchable={false} options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
                         </FormControl>
                       </VStack>
                     )}
 
-                    <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={loading}>Generate Account</ChakraButton>
+                    <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={loading}
+                      isDisabled={!gender || (role === 'STUDENT' ? !isIdComplete('STUDENT', schoolId) : !isIdComplete('FACULTY', facultyId))}>
+                      Generate Account
+                    </ChakraButton>
                   </VStack>
                 </form>
               </Box>
@@ -716,7 +720,7 @@ export default function AdminDashboard() {
                         <Td><Badge colorScheme={row.valid ? 'green' : 'red'}>{row.valid ? 'Valid' : 'Invalid'}</Badge></Td>
                         <Td>
                           <Text fontSize="xs">{row.submitted.name || '—'}{row.submitted.email ? ` · ${row.submitted.email}` : ''}</Text>
-                          <Text fontSize="xs" color={mutedText}>{row.submitted.schoolId || row.submitted.employeeId || ''}</Text>
+                          <Text fontSize="xs" color={mutedText}>{row.submitted.schoolId || row.submitted.employeeId || ''}{row.submitted.gender ? ` · ${row.submitted.gender}` : ''}</Text>
                         </Td>
                         <Td><Text fontSize="xs" color={row.valid ? mutedText : 'red.500'}>{row.valid ? 'Ready to create' : row.errors.join(' ')}</Text></Td>
                       </Tr>

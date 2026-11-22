@@ -12,6 +12,7 @@ test('accepts a valid student row', () => {
     program: 'BS INFO',
     year: '1',
     section: 'A',
+    gender: 'Female',
   }, 'student', domains);
   assert.equal(result.valid, true);
   assert.equal(result.account.role, 'STUDENT');
@@ -33,6 +34,31 @@ test('rejects wrong domain, bad ID and bad cohort', () => {
   assert.match(result.errors.join(' '), /program, year and section/i);
 });
 
+test('requires a valid gender for student, faculty, and dean imports', () => {
+  const student = validateProvisionRow({
+    name: 'Fiction Student',
+    email: 'fiction.student@antiquespride.edu.ph',
+    schoolId: '2025-S00001',
+    program: 'BS INFO',
+    year: '1',
+    section: 'A',
+  }, 'student', domains);
+  assert.equal(student.valid, false);
+  assert.match(student.errors.join(' '), /Gender must be Male or Female/);
+
+  for (const role of ['Faculty', 'Dean']) {
+    const result = validateProvisionRow({
+      name: `Fiction ${role}`,
+      email: `fiction.${role.toLowerCase()}@antiquespride.edu.ph`,
+      employeeId: role === 'Dean' ? '2025S-00002' : '2025S-00003',
+      position: role,
+      role,
+    }, 'faculty', domains);
+    assert.equal(result.valid, false);
+    assert.match(result.errors.join(' '), /Gender must be Male or Female/);
+  }
+});
+
 test('accepts valid faculty and dean rows', () => {
   const faculty = validateProvisionRow({
     name: 'Fiction Faculty',
@@ -42,6 +68,7 @@ test('accepts valid faculty and dean rows', () => {
     program: 'BS INFO',
     role: 'Faculty',
     employmentType: 'Full-time',
+    gender: 'Male',
   }, 'faculty', domains);
   assert.equal(faculty.valid, true);
   assert.equal(faculty.account.role, 'FACULTY');
@@ -52,6 +79,7 @@ test('accepts valid faculty and dean rows', () => {
     employeeId: '2025S-00002',
     position: 'Dean',
     role: 'Dean',
+    gender: 'Female',
   }, 'faculty', domains);
   assert.equal(dean.valid, true);
   assert.equal(dean.account.role, 'DEAN');
@@ -94,6 +122,7 @@ test('reads rich-text values and normalizes common Excel casing', () => {
     program: 'bs info',
     year: 1,
     section: 'a',
+    gender: 'female',
   }, 'student', domains);
   assert.equal(student.valid, true);
 
@@ -105,6 +134,7 @@ test('reads rich-text values and normalizes common Excel casing', () => {
     program: 'bsinfo',
     role: 'faculty',
     employmentType: 'full time',
+    gender: 'male',
   }, 'faculty', domains);
   assert.equal(faculty.valid, true);
   assert.equal(faculty.account.role, 'FACULTY');
@@ -119,8 +149,8 @@ test('marks duplicate emails and IDs within a spreadsheet', async () => {
     },
   };
   const results = await validateImportRows(fakeUser, [
-    { name: 'First Student', email: 'same@antiquespride.edu.ph', schoolId: '2025-S00001', program: 'BS INFO', year: '1', section: 'A' },
-    { name: 'Second Student', email: 'same@antiquespride.edu.ph', schoolId: '2025-S00001', program: 'BS INFO', year: '1', section: 'A' },
+    { name: 'First Student', email: 'same@antiquespride.edu.ph', schoolId: '2025-S00001', program: 'BS INFO', year: '1', section: 'A', gender: 'Female' },
+    { name: 'Second Student', email: 'same@antiquespride.edu.ph', schoolId: '2025-S00001', program: 'BS INFO', year: '1', section: 'A', gender: 'Male' },
   ], 'student', { ALLOWED_EMAIL_DOMAIN: 'antiquespride.edu.ph' });
   assert.equal(results[0].valid, false);
   assert.equal(results[1].valid, false);
@@ -141,7 +171,7 @@ test('marks database email and ID duplicates', async () => {
     },
   };
   const results = await validateImportRows(fakeUser, [
-    { name: 'Existing Student', email: 'existing@antiquespride.edu.ph', schoolId: '2025-S00009', program: 'BS INFO', year: '1', section: 'A' },
+    { name: 'Existing Student', email: 'existing@antiquespride.edu.ph', schoolId: '2025-S00009', program: 'BS INFO', year: '1', section: 'A', gender: 'Male' },
   ], 'student', { ALLOWED_EMAIL_DOMAIN: 'antiquespride.edu.ph' });
   assert.equal(results[0].valid, false);
   assert.match(results[0].errors.join(' '), /Duplicate email in the database/i);
