@@ -64,6 +64,7 @@ const { reportDecision } = require('../utils/reportFacultyMissed');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
+const { canDisableRole, canEnableAccountStatus } = require('../utils/accountStatus');
 const FacultyStatusEntry = require('../models/FacultyStatusEntry');
 const { resolveFacultyStatus, validateEntry, dropBlockedSlots, BOOKING_BLOCKING } = require('../utils/facultyStatus');
 const { windowFromNotice } = require('../utils/noticeWindow');
@@ -842,8 +843,8 @@ router.patch('/users/:id/email', requireAuth(['ADMIN']), async (req, res) => {
   }
 });
 
-// ADMIN: disable / re-enable a student or faculty account.
-// Disabled = accountStatus RESTRICTED: they cannot sign in (password login, Google sign-in, or an
+// ADMIN: disable / re-enable a student, faculty or Dean account.
+// Disabled = accountStatus RESTRICTED or ARCHIVED: they cannot sign in (password login, Google sign-in, or an
 // already-open session) and faculty are hidden from booking lists. Appointments, ID and records are kept.
 router.patch('/users/:id/status', requireAuth(['ADMIN']), async (req, res) => {
   try {
@@ -855,19 +856,19 @@ router.patch('/users/:id/status', requireAuth(['ADMIN']), async (req, res) => {
     }
     const user = await User.findById(req.params.id).select('name role accountStatus');
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.role !== 'STUDENT' && user.role !== 'FACULTY') {
-      return res.status(400).json({ error: 'Only student and faculty accounts can be disabled here.' });
+    if (!canDisableRole(user.role)) {
+      return res.status(400).json({ error: 'Only student, faculty and Dean accounts can be disabled here.' });
     }
 
     if (req.body.disabled) {
       if (user.accountStatus !== 'ACTIVE' && user.accountStatus !== 'RESTRICTED') {
-        return res.status(400).json({ error: 'Only active accounts can be disabled.' });
+        return res.status(400).json({ error: 'Only active or restricted accounts can be disabled.' });
       }
       await User.updateOne({ _id: user._id }, { accountStatus: 'RESTRICTED' });
       return res.json({ message: `${user.name}'s account is disabled.`, user: { _id: user._id, accountStatus: 'RESTRICTED' } });
     }
 
-    if (user.accountStatus !== 'RESTRICTED') {
+    if (!canEnableAccountStatus(user.accountStatus)) {
       return res.status(400).json({ error: 'This account is not disabled.' });
     }
     await User.updateOne({ _id: user._id }, { accountStatus: 'ACTIVE' });

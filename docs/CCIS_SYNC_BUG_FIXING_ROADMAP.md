@@ -368,7 +368,7 @@ Update this section as work is completed. Only mark tasks complete after verific
 
 | Phase | Status | Notes / branch / verification |
 |---|---|---|
-| Phase 0 — Authentication and User Management | **In progress, NOT complete** (Nov 22) | `provisioning-stage1` implements the administrator-provisioned account flow: configurable strict sign-in, Student/Faculty/Dean provisioning, privacy-first onboarding, and removal of current frontend self-registration. Verified by 346 backend utility tests and the frontend production build; browser/API provisioning walkthrough not yet run. |
+| Phase 0 — Authentication and User Management | **In progress, NOT complete** (Nov 22) | `provisioning-stage1` implements the administrator-provisioned account flow: configurable strict sign-in, Student/Faculty/Dean provisioning, privacy-first onboarding, and removal of current frontend self-registration. `provisioning-stage2` adds Disabled-account management for Student, Faculty and Dean accounts, including restore for RESTRICTED and ARCHIVED statuses. Stage 1/2 browser/API walkthrough and real-database verification remain open. |
 | Phase 1 — Authorization and Data Isolation | In progress, early (Nov 21) | Faculty-own-schedule rule added in PR #103, not tested by direct API request. Role-vs-token check in `requireAuth` on branch `admin-edit-role-position`. Full route audit not started. |
 | Phase 2 — Appointments and Consultation | Partly implemented, unverified | PRs #101, #102 merged. Needs the booking-to-log walkthrough and the stale "correct a missed one" wording check. |
 | Phase 3 — Schedules, Import and Status | Largely implemented, unverified | Status rebuild (#81-#89), schedule tabs (#103), importers (#60-#65, #68, #70, #80, #88). Needs the demo-machine test. |
@@ -415,6 +415,7 @@ Evidence level: **Vercel** = the Vercel preview build of the PR passed; **tests*
 
 | PR | Area | What changed | Evidence |
 |---|---|---|---|
+| provisioning-stage2 (Nov 22) | Disabled accounts | Added a Disabled Accounts tab with role/search filters and Enable actions; Student, Faculty and Dean accounts can be disabled or restored from RESTRICTED or ARCHIVED status; active Student and Faculty lists exclude disabled accounts. | 349 backend utility tests pass; frontend `npm run build` passes; browser/API walkthrough not run |
 | provisioning-stage1 (Nov 22) | Account provisioning | Added the `REQUIRE_PROVISIONED_ACCOUNTS` compatibility flag, strict unknown-user denial, Admin-only Student/Faculty/Dean provisioning, provisioned-data-aware onboarding, and unified frontend login. | 346 backend utility tests pass; frontend `npm run build` passes; browser/API walkthrough not run |
 | #66 | Deployment | `docs/DEPLOYMENT.md`, `frontend/vercel.json` SPA rewrite | Vercel |
 | #69 | Email | Brevo HTTP email API (SMTP ports are blocked on Render); `npm run check-email` | tests; a real test mail reached an inbox from the laptop |

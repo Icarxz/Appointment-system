@@ -36,8 +36,8 @@ import AnalyticsReport from './AnalyticsReport';
 
 const SCHOOL_DOMAIN = 'antiquespride.edu.ph';
 
-// Disabled accounts have accountStatus RESTRICTED (the backend blocks sign-in and hides them from booking lists)
-const isAccountDisabled = (u: any) => u?.accountStatus === 'RESTRICTED';
+// Disabled accounts are RESTRICTED or ARCHIVED (the backend blocks sign-in and hides them from booking lists).
+const isAccountDisabled = (u: any) => u?.accountStatus === 'RESTRICTED' || u?.accountStatus === 'ARCHIVED';
 
 // "mx@antiquespride.edu.ph" -> "mx"; anything not on the school domain -> ''
 const emailLocalOf = (email?: string) => {
@@ -61,9 +61,11 @@ export default function AdminDashboard() {
   const [activePage, setActivePage] = useState('appointments');
   const [facultyList, setFacultyList] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [userTab, setUserTab] = useState<'faculty' | 'students'>('faculty');
+  const [userTab, setUserTab] = useState<'faculty' | 'students' | 'disabled'>('faculty');
   const [facultySearch, setFacultySearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
+  const [disabledSearch, setDisabledSearch] = useState('');
+  const [disabledRoleFilter, setDisabledRoleFilter] = useState('');
   const [filterProgram, setFilterProgram] = useState('');
   const [filterYear, setFilterYear] = useState('');
   const [filterSection, setFilterSection] = useState('');
@@ -204,7 +206,8 @@ export default function AdminDashboard() {
 
   // The Faculty list also shows every Dean account (even one who has not turned consultations on), so an account switched to Dean can still be edited.
   const facultyRows = React.useMemo(
-    () => [...facultyList, ...allUsers.filter(u => u.role === 'DEAN' && !facultyList.some(f => f._id === u._id))],
+    () => [...facultyList, ...allUsers.filter(u => u.role === 'DEAN' && !facultyList.some(f => f._id === u._id))]
+      .filter(u => !isAccountDisabled(allUsers.find(a => a._id === u._id))),
     [facultyList, allUsers],
   );
   const filteredFacultyList = React.useMemo(() => facultyRows.filter(f =>
@@ -269,7 +272,7 @@ export default function AdminDashboard() {
   );
 
   const studentQ = studentSearch.trim().toLowerCase();
-  const allStudents = allUsers.filter(u => u.role === 'STUDENT');
+  const allStudents = allUsers.filter(u => u.role === 'STUDENT' && !isAccountDisabled(u));
   const visibleStudents = allStudents.filter(u => {
     const pp = u.programPosition || '';
     const c = parseCohort(pp);
@@ -278,6 +281,15 @@ export default function AdminDashboard() {
       (!filterSection || c.section === filterSection) &&
       matchesGender(u.gender, studentGender) &&
       (!studentQ || u.name.toLowerCase().includes(studentQ) || (u.email || '').toLowerCase().includes(studentQ) || (u.schoolId || '').toLowerCase().includes(studentQ));
+  });
+  const disabledAccounts = allUsers.filter(u =>
+    ['STUDENT', 'FACULTY', 'DEAN'].includes(u.role) && isAccountDisabled(u)
+  );
+  const visibleDisabledAccounts = disabledAccounts.filter(u => {
+    const q = disabledSearch.trim().toLowerCase();
+    return (!disabledRoleFilter || u.role === disabledRoleFilter) &&
+      (!q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) ||
+        (u.schoolId || '').toLowerCase().includes(q) || (u.facultyId || '').toLowerCase().includes(q));
   });
 
   const saveName = async () => {
@@ -378,8 +390,9 @@ export default function AdminDashboard() {
         { key: 'appointments', section: 'Operations', icon: 'inbox', label: 'Appointments', badge: appointments.filter(a => a.status === 'PENDING').length, active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
         { key: 'home', section: 'Operations', icon: 'grid', label: 'Class Schedules', active: activePage === 'home', onClick: () => setActivePage('home') },
         { key: 'provision', section: 'People', icon: 'userPlus', label: 'Provision Account', active: activePage === 'provision', onClick: () => setActivePage('provision') },
-        { key: 'faculty', section: 'People', icon: 'users', label: `Faculty (${allUsers.filter(u => u.role === 'FACULTY').length || facultyList.length})`, active: activePage === 'users' && userTab === 'faculty', onClick: () => { setUserTab('faculty'); setActivePage('users'); } },
-        { key: 'students', section: 'People', icon: 'graduation', label: `Students (${allUsers.filter(u => u.role === 'STUDENT').length})`, active: activePage === 'users' && userTab === 'students', onClick: () => { setUserTab('students'); setActivePage('users'); } },
+        { key: 'faculty', section: 'People', icon: 'users', label: `Faculty (${allUsers.filter(u => u.role === 'FACULTY' && !isAccountDisabled(u)).length})`, active: activePage === 'users' && userTab === 'faculty', onClick: () => { setUserTab('faculty'); setActivePage('users'); } },
+        { key: 'students', section: 'People', icon: 'graduation', label: `Students (${allUsers.filter(u => u.role === 'STUDENT' && !isAccountDisabled(u)).length})`, active: activePage === 'users' && userTab === 'students', onClick: () => { setUserTab('students'); setActivePage('users'); } },
+        { key: 'disabled', section: 'People', icon: 'users', label: `Disabled (${disabledAccounts.length})`, active: activePage === 'users' && userTab === 'disabled', onClick: () => { setUserTab('disabled'); setActivePage('users'); } },
         { key: 'analytics', section: 'Reports', icon: 'chart', label: 'Reports & Analytics', active: activePage === 'analytics', onClick: () => setActivePage('analytics') },
         { key: 'records', section: 'Reports', icon: 'file', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
         { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
@@ -391,7 +404,7 @@ export default function AdminDashboard() {
         {activePage !== 'analytics' && <PageTitle>
           {activePage === 'home' && "Class Schedules"}
           {activePage === 'provision' && "Provision Account"}
-          {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : "Student Management")}
+          {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : userTab === 'students' ? "Student Management" : "Disabled Accounts")}
           {activePage === 'appointments' && "Appointments"}
           {activePage === 'records' && "Consultation Records"}
           {activePage === 'profile' && "My Profile"}
@@ -605,7 +618,7 @@ export default function AdminDashboard() {
                         <HStack spacing={2}>
                           {userById[prof._id]?.role === 'FACULTY' && <ChakraButton size="xs" variant="outline" onClick={() => setScheduleOf(prof)}>Schedule</ChakraButton>}
                           <ChakraButton size="xs" variant="outline" onClick={() => userById[prof._id] && setAccountEdit(userById[prof._id])}>Edit</ChakraButton>
-                          {userById[prof._id]?.role === 'FACULTY' && (
+                          {(userById[prof._id]?.role === 'FACULTY' || userById[prof._id]?.role === 'DEAN') && (
                             <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(userById[prof._id]) ? 'green' : 'red'} onClick={() => setStatusTarget(userById[prof._id])}>
                               {isAccountDisabled(userById[prof._id]) ? 'Enable' : 'Disable'}
                             </ChakraButton>
@@ -675,6 +688,59 @@ export default function AdminDashboard() {
                           {isAccountDisabled(student) ? 'Enable' : 'Disable'}
                         </ChakraButton>
                       </HStack>
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table></ScrollTable>
+          </Box>
+        )}
+
+        {dataReady && activePage === 'users' && userTab === 'disabled' && (
+          <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+            <FilterPanel
+              shown={visibleDisabledAccounts.length} total={disabledAccounts.length} noun="disabled accounts"
+              canClear={!!(disabledSearch || disabledRoleFilter)}
+              onClear={() => { setDisabledSearch(''); setDisabledRoleFilter(''); }}
+            >
+              <FilterField label="Role">
+                <SearchableSelect placeholder="All roles" value={disabledRoleFilter} onChange={setDisabledRoleFilter} maxW="100%"
+                  searchable={false}
+                  options={[
+                    { value: 'STUDENT', label: 'Student' },
+                    { value: 'FACULTY', label: 'Faculty' },
+                    { value: 'DEAN', label: 'Dean' },
+                  ]} />
+              </FilterField>
+              <Box gridColumn={{ base: 'auto', lg: '1 / -1' }}>
+                <FilterField label="Search">
+                  <Input
+                    placeholder="Name, email or ID..."
+                    value={disabledSearch}
+                    onChange={(e) => setDisabledSearch(e.target.value)}
+                    color={textColor} borderColor={borderColor} bg={cardBg}
+                  />
+                </FilterField>
+              </Box>
+            </FilterPanel>
+
+            <ScrollTable><Table variant="simple" size="md">
+              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Role</Th><Th color={mutedText}>Email</Th><Th color={mutedText}>ID</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+              <Tbody>
+                {visibleDisabledAccounts.length === 0 && (
+                  <Tr><Td colSpan={6}><Text color={mutedText} py={6} textAlign="center">No disabled accounts match these filters.</Text></Td></Tr>
+                )}
+                {visibleDisabledAccounts.map(account => (
+                  <Tr key={account._id} _hover={{ bg: hoverBg }}>
+                    <Td color={textColor}><PersonCell name={account.name} sub={account.email} disabled /></Td>
+                    <Td color={textColor}>{account.role.charAt(0) + account.role.slice(1).toLowerCase()}</Td>
+                    <Td color={textColor}>{account.email}</Td>
+                    <Td color={textColor}>{account.role === 'STUDENT' ? (account.schoolId || '—') : (account.facultyId || '—')}</Td>
+                    <Td><Badge colorScheme={account.accountStatus === 'ARCHIVED' ? 'gray' : 'red'} borderRadius="full" px={2}>{account.accountStatus}</Badge></Td>
+                    <Td>
+                      <ChakraButton size="xs" variant="outline" colorScheme="green" onClick={() => setStatusTarget(account)}>
+                        Enable
+                      </ChakraButton>
                     </Td>
                   </Tr>
                 ))}
