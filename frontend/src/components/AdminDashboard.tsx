@@ -591,11 +591,11 @@ export default function AdminDashboard() {
 
                     {role === 'STUDENT' ? (
                       <VStack spacing={4} align="stretch">
+                        <FormControl isRequired maxW="520px" mx="auto">
+                          <FormLabel color={textColor} textAlign="center">School ID</FormLabel>
+                          <IdTray kind="STUDENT" value={schoolId} onChange={setSchoolId} />
+                        </FormControl>
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                          <FormControl isRequired>
-                            <FormLabel color={textColor}>School ID</FormLabel>
-                            <IdTray kind="STUDENT" value={schoolId} onChange={setSchoolId} />
-                          </FormControl>
                           <FormControl isRequired>
                             <FormLabel color={textColor}>Program</FormLabel>
                             <SearchableSelect placeholder="Select program..." value={studentProgram} onChange={(v) => { setStudentProgram(v); setStudentYear(''); setStudentSection(''); }} searchable={false}
@@ -621,17 +621,15 @@ export default function AdminDashboard() {
                       </VStack>
                     ) : (
                       <VStack spacing={4} align="stretch">
-                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                          <FormControl isRequired>
-                            <FormLabel color={textColor}>Employee ID</FormLabel>
-                            <IdTray kind="FACULTY" value={facultyId} onChange={setFacultyId} />
-                          </FormControl>
-                          <FormControl isRequired>
-                            <FormLabel color={textColor}>Position</FormLabel>
-                            <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
-                              options={FACULTY_POSITIONS.map(position => ({ value: position, label: position }))} />
-                          </FormControl>
-                        </SimpleGrid>
+                        <FormControl isRequired maxW="520px" mx="auto">
+                          <FormLabel color={textColor} textAlign="center">Employee ID</FormLabel>
+                          <IdTray kind="FACULTY" value={facultyId} onChange={setFacultyId} />
+                        </FormControl>
+                        <FormControl isRequired>
+                          <FormLabel color={textColor}>Position</FormLabel>
+                          <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
+                            options={FACULTY_POSITIONS.map(position => ({ value: position, label: position }))} />
+                        </FormControl>
                         {role === 'FACULTY' && (
                           <FormControl>
                             <FormLabel color={textColor}>Faculty Program (optional)</FormLabel>
