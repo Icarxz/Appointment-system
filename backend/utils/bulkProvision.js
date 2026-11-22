@@ -11,6 +11,9 @@ const FORMULA_PREFIX = /^[=+\-@\t\r]/;
 
 const text = (value) => {
   if (value === null || value === undefined) return '';
+  if (typeof value === 'object' && Array.isArray(value.richText)) {
+    return value.richText.map(part => String(part.text || '')).join('').trim();
+  }
   if (typeof value === 'object' && value.text !== undefined) return String(value.text).trim();
   return String(value).trim();
 };
@@ -23,7 +26,9 @@ function validateProvisionRow(raw, kind, allowedDomains) {
   const row = raw && typeof raw === 'object' ? raw : {};
   const name = text(row.name);
   const rawEmail = text(row.email).toLowerCase();
-  const role = kind === 'student' ? 'STUDENT' : text(row.role).toUpperCase();
+  const role = kind === 'student'
+    ? 'STUDENT'
+    : ({ faculty: 'FACULTY', dean: 'DEAN' }[text(row.role).toLowerCase()] || text(row.role).toUpperCase());
   const errors = [];
 
   if (!name || name.length < 2 || name.length > 100) errors.push('Full name must be 2 to 100 characters.');
@@ -40,13 +45,15 @@ function validateProvisionRow(raw, kind, allowedDomains) {
   if (kind === 'student') {
     const schoolIdCheck = validateId(row.schoolId, 'STUDENT');
     if (!schoolIdCheck.ok) errors.push(schoolIdCheck.error);
-    const program = text(row.program);
+    const programRaw = text(row.program).toUpperCase().replace(/\s+/g, ' ').trim();
+    const program = ({ 'BSINFO': 'BS INFO', 'BS INFO': 'BS INFO', 'BSCOMSCI': 'BS COMSCI', 'BS COMSCI': 'BS COMSCI', 'BLIS': 'BLIS' }[programRaw] || programRaw);
     const year = text(row.year);
     const section = text(row.section).toUpperCase();
     if (!isValidCohort(program, year, section)) {
       errors.push('Unknown or invalid program, year and section combination.');
     }
-    const gender = text(row.gender);
+    const genderRaw = text(row.gender).toLowerCase();
+    const gender = genderRaw === 'male' ? 'Male' : genderRaw === 'female' ? 'Female' : text(row.gender);
     if (gender && !['Male', 'Female'].includes(gender)) errors.push('Gender must be Male, Female or blank.');
     if (formulaOrInjection(row.schoolId) || formulaOrInjection(program) || formulaOrInjection(year) || formulaOrInjection(section)) {
       errors.push('Student fields cannot contain formula or formula-injection values.');
@@ -68,18 +75,32 @@ function validateProvisionRow(raw, kind, allowedDomains) {
     }
   } else {
     if (!['FACULTY', 'DEAN'].includes(role)) errors.push('Role must be Faculty or Dean.');
-    const position = text(row.position);
+    const positionRaw = text(row.position).trim();
+    const positionAliases = {
+      faculty: 'Faculty',
+      librarian: 'Librarian',
+      'program head (bs info)': 'Program Head (BS INFO)',
+      'program head (bs comsci)': 'Program Head (BS COMSCI)',
+      'program head (blis)': 'Program Head (BLIS)',
+      dean: 'Dean',
+    };
+    const position = positionAliases[positionRaw.toLowerCase()] || positionRaw;
     if (!isApprovedFacultyPosition(position)) errors.push('Invalid faculty or Dean position.');
     const employeeIdCheck = validateId(row.employeeId, 'EMPLOYEE');
     if (!employeeIdCheck.ok) errors.push(employeeIdCheck.error);
-    const gender = text(row.gender);
+    const genderRaw = text(row.gender).toLowerCase();
+    const gender = genderRaw === 'male' ? 'Male' : genderRaw === 'female' ? 'Female' : text(row.gender);
     if (gender && !['Male', 'Female'].includes(gender)) errors.push('Gender must be Male, Female or blank.');
-    const employmentType = text(row.employmentType);
+    const employmentRaw = text(row.employmentType).toLowerCase();
+    const employmentType = employmentRaw === 'full-time' || employmentRaw === 'full time' ? 'Full-time'
+      : employmentRaw === 'part-time' || employmentRaw === 'part time' ? 'Part-time'
+      : text(row.employmentType);
     if (employmentType && !isEmploymentType(employmentType)) errors.push('Employment type must be Full-time or Part-time.');
 
     let facultyProgram = '';
     const headProgram = programOfPosition(position);
-    const submittedProgram = text(row.program);
+    const submittedProgramRaw = text(row.program).toUpperCase().replace(/\s+/g, ' ').trim();
+    const submittedProgram = ({ 'BSINFO': 'BS INFO', 'BS INFO': 'BS INFO', 'BSCOMSCI': 'BS COMSCI', 'BS COMSCI': 'BS COMSCI', 'BLIS': 'BLIS' }[submittedProgramRaw] || submittedProgramRaw);
     if (headProgram) facultyProgram = headProgram;
     else if (submittedProgram) {
       if (!isProgram(submittedProgram)) errors.push('Program must be BS INFO, BS COMSCI or BLIS.');

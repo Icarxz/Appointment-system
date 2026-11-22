@@ -86,6 +86,32 @@ test('rejects formula-injection values', () => {
   assert.match(result.errors.join(' '), /formula/i);
 });
 
+test('reads rich-text values and normalizes common Excel casing', () => {
+  const student = validateProvisionRow({
+    name: { richText: [{ text: 'Fiction ' }, { text: 'Student' }] },
+    email: 'fiction.student@antiquespride.edu.ph',
+    schoolId: '2025-S00001',
+    program: 'bs info',
+    year: 1,
+    section: 'a',
+  }, 'student', domains);
+  assert.equal(student.valid, true);
+
+  const faculty = validateProvisionRow({
+    name: 'Fiction Faculty',
+    email: 'fiction.faculty@antiquespride.edu.ph',
+    employeeId: '2025S-00001',
+    position: 'faculty',
+    program: 'bsinfo',
+    role: 'faculty',
+    employmentType: 'full time',
+  }, 'faculty', domains);
+  assert.equal(faculty.valid, true);
+  assert.equal(faculty.account.role, 'FACULTY');
+  assert.equal(faculty.account.program, 'BS INFO');
+  assert.equal(faculty.account.employmentType, 'Full-time');
+});
+
 test('marks duplicate emails and IDs within a spreadsheet', async () => {
   const fakeUser = {
     find() {

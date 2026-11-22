@@ -583,17 +583,38 @@ function workbookRows(buffer, originalName) {
     if (sheet.rowCount < 2) throw new Error('The spreadsheet is empty.');
 
     const headerRow = sheet.getRow(1);
+    const headerAliases = {
+      fullname: 'name',
+      name: 'name',
+      schoolemail: 'email',
+      email: 'email',
+      schoolid: 'schoolId',
+      employeeid: 'employeeId',
+      program: 'program',
+      programoptional: 'program',
+      year: 'year',
+      section: 'section',
+      genderoptional: 'gender',
+      gender: 'gender',
+      position: 'position',
+      role: 'role',
+      rolefacultyordean: 'role',
+      employmenttypeoptional: 'employmentType',
+      employmenttype: 'employmentType',
+    };
     const headers = {};
     headerRow.eachCell((cell, colNumber) => {
       if (cell.type === 6 || cell.formula) throw new Error('Spreadsheet headers cannot contain formulas.');
-      headers[normalizedHeader(cell.value)] = colNumber;
+      const normalized = normalizedHeader(cell.value);
+      const canonical = headerAliases[normalized];
+      if (canonical) headers[canonical] = colNumber;
     });
 
     const rows = [];
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
-      const get = (name) => {
-        const colNumber = headers[normalizedHeader(name)] || headers[normalizedHeader(name + ' (optional)')];
+      const get = (canonical) => {
+        const colNumber = headers[canonical];
         if (!colNumber) return '';
         const cell = row.getCell(colNumber);
         if (cell.type === 6 || cell.formula) return '=' + String(cell.result ?? cell.value?.result ?? '');
@@ -601,17 +622,17 @@ function workbookRows(buffer, originalName) {
         return text(cell.value);
       };
       const candidate = {
-        name: get('Full name'),
-        email: get('School email'),
-        schoolId: get('School ID'),
-        employeeId: get('Employee ID'),
-        program: get('Program'),
-        year: get('Year'),
-        section: get('Section'),
-        gender: get('Gender optional'),
-        position: get('Position'),
-        role: get('Role Faculty or Dean'),
-        employmentType: get('Employment type optional'),
+        name: get('name'),
+        email: get('email'),
+        schoolId: get('schoolId'),
+        employeeId: get('employeeId'),
+        program: get('program'),
+        year: get('year'),
+        section: get('section'),
+        gender: get('gender'),
+        position: get('position'),
+        role: get('role'),
+        employmentType: get('employmentType'),
       };
       if (Object.values(candidate).some(v => text(v) !== '')) {
         rows.push(candidate);
