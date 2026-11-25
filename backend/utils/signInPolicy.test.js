@@ -35,13 +35,19 @@ test('ADMIN_EMAILS bootstrap wins', () => {
 test('existing active user logs in', () => {
   assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus: 'ACTIVE' } }).action, 'LOGIN');
 });
-test('archived user denied', () => {
-  assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus: 'ARCHIVED' } }).action, 'DENY');
+test('disabled users are denied with an explicit disabled-account message', () => {
+  for (const accountStatus of ['ARCHIVED', 'RESTRICTED']) {
+    const decision = decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus } });
+    assert.strictEqual(decision.action, 'DENY');
+    assert.match(decision.error, /account has been disabled/i);
+  }
 });
 test('restricted and pending-approval users denied, a new student is still created', () => {
   for (const accountStatus of ['RESTRICTED', 'PENDING_APPROVAL']) {
     assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus } }).action, 'DENY');
   }
+  const pending = decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus: 'PENDING_APPROVAL' } });
+  assert.match(pending.error, /not active/i);
   const created = decideSignIn({ ...base, payload: ok('new@school.edu.ph'), existingUser: null, rosterRole: null });
   assert.deepStrictEqual([created.action, created.role], ['CREATE', 'STUDENT']);
 });

@@ -13,6 +13,7 @@ import { EMPLOYMENT_OPTIONS } from '../utils/employment';
 import { IdTray, isIdComplete, idRawOf } from './IdTray';
 import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import { parseCohort } from './PeopleUi';
+import PersonalHistoryPanel from './PersonalHistoryPanel';
 
 interface Profile {
   name: string; email: string; role: string; gender: string; programPosition: string;
@@ -47,6 +48,7 @@ export default function ProfilePage() {
   const border = useColorModeValue('#dde3ec', '#1e3048');
   const text = useColorModeValue('#0f2240', '#e8f0fe');
   const muted = useColorModeValue('#6b7fa0', '#7a93b0');
+  const valueBg = useColorModeValue('gray.50', '#17263b');
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_API_URL}/api/auth/me`)
@@ -79,8 +81,22 @@ export default function ProfilePage() {
   const displayRole = isStudent ? 'Student' : isFaculty ? 'Faculty' : p.role === 'DEAN' ? 'Dean' : 'Admin';
   const Row = ({ label, value }: { label: string; value?: string | null }) => (
     <Box>
-      <Text fontSize="xs" color={muted}>{label}</Text>
-      <Text fontWeight="600" color={text}>{value || '—'}</Text>
+      <Text fontSize="sm" color={muted} mb={1}>{label}</Text>
+      <Box
+        minH="40px"
+        display="flex"
+        alignItems="center"
+        px={3}
+        py={2}
+        borderWidth="1px"
+        borderColor={border}
+        borderRadius="md"
+        bg={valueBg}
+      >
+        <Text fontSize="sm" fontWeight="medium" color={text} overflowWrap="anywhere">
+          {value || '—'}
+        </Text>
+      </Box>
     </Box>
   );
 
@@ -204,11 +220,18 @@ export default function ProfilePage() {
           <Text fontSize="sm" mb={3}>
             Review your account details. You can edit them before confirming; email and role can only be changed by an Admin. After confirmation, your account details are locked. Contact the administrator if you need a correction later.
           </Text>
-          <Checkbox isChecked={privacyAccepted} onChange={(e) => setPrivacyAccepted(e.target.checked)} mb={3}>
+          <Checkbox
+            display="flex"
+            alignItems="flex-start"
+            width="100%"
+            mb={3}
+            isChecked={privacyAccepted}
+            onChange={(e) => setPrivacyAccepted(e.target.checked)}
+          >
             I have read and accept the{' '}
             <ChakraLink color="blue.600" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPrivacyOpen(); }}>Privacy Policy</ChakraLink>
           </Checkbox>
-          <Button size="sm" colorScheme="blue" onClick={confirmCredentials} isLoading={confirming} isDisabled={!privacyAccepted}>
+          <Button size="sm" alignSelf="flex-start" colorScheme="blue" onClick={confirmCredentials} isLoading={confirming} isDisabled={!privacyAccepted}>
             Confirm details
           </Button>
         </Box>
@@ -334,8 +357,8 @@ export default function ProfilePage() {
           )}
 
           <HStack justify="flex-end" spacing={3}>
-            <Button variant="ghost" onClick={() => setEditing(false)} isDisabled={saving}>Cancel</Button>
-            <Button colorScheme="blue" onClick={save} isLoading={saving} isDisabled={!canSave}>Save changes</Button>
+            <Button size="sm" variant="outline" onClick={() => setEditing(false)} isDisabled={saving}>Cancel</Button>
+            <Button size="sm" colorScheme="blue" onClick={save} isLoading={saving} isDisabled={!canSave}>Save changes</Button>
           </HStack>
         </Box>
       )}
@@ -357,6 +380,7 @@ export default function ProfilePage() {
         }}
       />
       <PrivacyPolicyModal isOpen={privacyOpen} onClose={onPrivacyClose} />
+      <PersonalHistoryPanel />
     </Box>
   );
 }

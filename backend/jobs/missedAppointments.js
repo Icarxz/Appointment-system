@@ -5,6 +5,7 @@ const { notify, fmtDate, fmtTime } = require('../utils/notify');
 const { manilaNow } = require('../utils/manilaTime');
 const { transition } = require('../utils/statusTransition');
 const { REASON_NOT_SIGNED_OFF } = require('../utils/missReason');
+const { appendAppointmentHistory } = require('../utils/historyEvents');
 
 // An APPROVED consultation that nobody signed off (completed) or marked as a student
 // Missed by Student by the end of its day (Philippine time) is counted as MISSED (FACULTY) (shown as Missed by Faculty).
@@ -19,6 +20,9 @@ async function markMissedFaculty() {
     const updated = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (FACULTY)', missedAt: new Date(), missReason: REASON_NOT_SIGNED_OFF, missedBy: 'SYSTEM' });
     if (!updated) continue;
     marked += 1;
+    await appendAppointmentHistory(updated, 'APPOINTMENT_STATUS_CHANGED', {
+      actorRole: 'SYSTEM', details: { fromStatus: apt.status, toStatus: updated.status },
+    });
 
     const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
     await notify(apt.facultyId, {

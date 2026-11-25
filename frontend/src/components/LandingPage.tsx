@@ -137,6 +137,20 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const toast = useToast();
 
+  React.useEffect(() => {
+    const notice = sessionStorage.getItem('accountDisabledNotice');
+    if (!notice) return;
+    sessionStorage.removeItem('accountDisabledNotice');
+    toast({
+      title: 'Account disabled',
+      description: notice,
+      duration: 9000,
+      isClosable: true,
+      status: 'error',
+      position: 'top',
+    });
+  }, [toast]);
+
   // Theme tokens (light by default, readable in dark mode too)
   const pageBg = useColorModeValue(LIGHT, '#0b1220');
   const altBg = useColorModeValue('#ffffff', 'gray.800');

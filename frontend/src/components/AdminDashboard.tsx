@@ -4,7 +4,7 @@ import { PROGRAM_OPTIONS, facultyProgram, programOfPosition } from '../utils/pro
 import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 import { formatDate, formatDateTime } from './dateUtils';
 import { 
-  Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
+  Alert, AlertIcon, Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel,
   useToast, Select, HStack, Flex, SimpleGrid, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
   Tabs, TabList, TabPanels, Tab, TabPanel,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter,
@@ -1192,10 +1192,18 @@ export default function AdminDashboard() {
             <ModalHeader>{isAccountDisabled(statusTarget) ? 'Enable account' : 'Disable account'} — {statusTarget?.name}</ModalHeader>
             <ModalCloseButton />
             <ModalBody>
+              {statusTarget?.accountStatus === 'ACTIVE' && (
+                <Alert status="warning" alignItems="flex-start" mb={3} borderRadius="md">
+                  <AlertIcon mt={0.5} />
+                  <Text fontSize="sm">
+                    This account is currently active. Disabling it will sign the user out on their next app request and tell them their account has been disabled.
+                  </Text>
+                </Alert>
+              )}
               <Text fontSize="sm" color={mutedText}>
                 {isAccountDisabled(statusTarget)
                   ? 'This account will be able to sign in again and will show up in booking lists.'
-                  : 'This account will not be able to sign in and will be hidden from booking lists. Their appointments, ID and records are kept, and you can enable it again any time.'}
+                  : 'They will no longer be able to sign in or appear in booking lists. Their appointments, ID and records are kept, and you can enable the account again any time.'}
               </Text>
             </ModalBody>
             <ModalFooter gap={2}>

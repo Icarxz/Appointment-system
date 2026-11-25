@@ -6,6 +6,7 @@ const { notify } = require('../utils/notify');
 const { manilaNow } = require('../utils/manilaTime');
 const { revalidate, applyImport } = require('../utils/scheduleImportService');
 const { mongoStore } = require('../utils/scheduleStore');
+const { appendHistoryEvent } = require('../utils/historyEvents');
 
 // Every hour (and once at startup, to catch up after downtime): a staged schedule whose effectivity date has arrived is applied.
 // It is checked AGAIN first, against the appointments as they are today. If it no longer passes, it is marked FAILED and the faculty is told;
@@ -19,6 +20,10 @@ async function activateDueImports() {
     if (!claimed) continue;
     const fail = async (reason) => {
       await ScheduleImport.updateOne({ _id: imp._id }, { $set: { status: 'FAILED', failureReason: reason } });
+      await appendHistoryEvent({
+        userId: imp.facultyId, eventType: 'SCHEDULE_IMPORT_FAILED', actorRole: 'SYSTEM',
+        details: { importId: imp._id, effectivityDate: imp.effectivityDate, reason },
+      });
       await notify([imp.facultyId, imp.uploadedBy], { type: 'SCHEDULE_IMPORT', title: 'Scheduled class schedule was not applied', message: `The schedule effective ${imp.effectivityDate} could not be applied: ${reason} Your current schedule was not changed.`, page: 'schedule' });
     };
     try {
@@ -34,10 +39,19 @@ async function activateDueImports() {
       if (!r.ok) { await fail(r.message); continue; }
       await ScheduleImport.updateMany({ facultyId: imp.facultyId, status: 'ACTIVE' }, { $set: { status: 'SUPERSEDED' } });
       await ScheduleImport.updateOne({ _id: imp._id }, { $set: { status: 'ACTIVE', failureReason: '', activatedAt: new Date(), previousSnapshot: { classes: r.snapshot.classes, hours: r.snapshot.hours } } });
+      try {
+        await appendHistoryEvent({
+          userId: imp.facultyId, eventType: 'SCHEDULE_IMPORT_ACTIVATED', actorRole: 'SYSTEM',
+          details: { importId: imp._id, effectivityDate: imp.effectivityDate, term: imp.term, academicYear: imp.academicYear, classBlocks: imp.classes.length, consultationBlocks: imp.consultationHours.length },
+        });
+      } catch (historyError) {
+        console.error('Schedule import applied but its history event could not be recorded:', historyError.message);
+      }
       await notify([imp.facultyId], { type: 'SCHEDULE_IMPORT', title: 'New class schedule is now in effect', message: `Your class schedule effective ${imp.effectivityDate} is now active.`, page: 'schedule' });
       applied++;
     } catch (e) {
-      await fail('A server error stopped it. Nothing was changed unless the schedule page says otherwise.').catch(() => {});
+      await fail('A server error stopped it. Nothing was changed unless the schedule page says otherwise.')
+        .catch(failureError => console.error('Could not record scheduled import failure:', failureError.message));
       console.error('Schedule import activation failed:', e.message);
     }
   }

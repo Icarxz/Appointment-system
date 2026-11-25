@@ -42,4 +42,7 @@ const AppointmentSchema = new mongoose.Schema({
   isDemo:            { type: Boolean } // set only on records made by scripts/demoData.js
 }, { timestamps: true });
 
+AppointmentSchema.index({ studentId: 1, createdAt: -1 });
+AppointmentSchema.index({ facultyId: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Appointment', AppointmentSchema);

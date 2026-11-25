@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { STUDENT_ID_REGEX, EMPLOYEE_ID_REGEX } = require('../utils/idValidator');
 const { PROGRAMS } = require('../utils/programs');
 const { EMPLOYMENT_TYPES } = require('../utils/employment');
+const { activationAtForNewAccount } = require('../utils/activation');
 
 const UserSchema = new mongoose.Schema({
   role: { 
@@ -20,6 +21,7 @@ const UserSchema = new mongoose.Schema({
     enum: ['ACTIVE', 'PENDING_APPROVAL', 'ARCHIVED', 'RESTRICTED'],
     default: 'ACTIVE'
   },
+  activatedAt: { type: Date, default: null },
 
   // Email verification
   isVerified: { type: Boolean, default: false },
@@ -105,6 +107,9 @@ facultyId: {
   isDemo: { type: Boolean }, // set only on records made by scripts/demoData.js, so they can be removed
 }, { timestamps: true });
 
-
+UserSchema.pre('save', function () {
+  const activatedAt = activationAtForNewAccount(this);
+  if (activatedAt) this.activatedAt = activatedAt;
+});
 
 module.exports = mongoose.model('User', UserSchema);

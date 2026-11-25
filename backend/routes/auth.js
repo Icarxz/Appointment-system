@@ -11,6 +11,7 @@ const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
 const { isProgram, programOfPosition, effectiveProgram } = require('../utils/programs');
 const { isEmploymentType } = require('../utils/employment');
 const { isValidCohort, cohortLabel } = require('../utils/studentCohort');
+const { appendHistoryEvent } = require('../utils/historyEvents');
 
 const router = express.Router();
 
@@ -81,14 +82,32 @@ router.post('/google', googleLimiter, async (req, res) => {
         accountStatus: 'ACTIVE',
         onboardingComplete: false
       });
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ACCOUNT_ACTIVATED', actorRole: 'SYSTEM',
+        details: { activatedAt: user.activatedAt },
+      });
     } else {
       if (user.googleSub && user.googleSub !== payload.sub) {
         return res.status(403).json({ error: 'This account is linked to a different Google account.' });
       }
       let changed = false;
+      const previousRole = user.role;
+      const previousRoleDetails = {
+        schoolId: user.schoolId || '',
+        facultyId: user.facultyId || '',
+        program: user.program || '',
+        programPosition: user.programPosition || '',
+        employmentType: user.employmentType || '',
+      };
       if (!user.googleSub) { user.googleSub = payload.sub; user.isVerified = true; changed = true; } // link an older account to its Google identity
       if (decision.promoteTo && user.role !== decision.promoteTo) { user.role = decision.promoteTo; changed = true; } // listed in ADMIN_EMAILS
       if (changed) await user.save();
+      if (previousRole !== user.role) {
+        await appendHistoryEvent({
+          userId: user._id, eventType: 'ROLE_CHANGED', actorRole: 'SYSTEM',
+          details: { fromRole: previousRole, toRole: user.role, previousRoleDetails },
+        });
+      }
     }
 
     res.json(sessionPayload(user));
@@ -145,6 +164,10 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
       user.noIdYet = false;
       user.onboardingComplete = true;
       await user.save();
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ACCOUNT_ONBOARDED', actorId: user._id, actorRole: user.role,
+        details: { profileFields: genderGiven ? ['gender', 'privacyAcceptedAt'] : ['privacyAcceptedAt'] },
+      });
       return res.json(sessionPayload(user));
     }
 
@@ -180,6 +203,10 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
     user.noIdYet = false;
     user.onboardingComplete = true;
     await user.save(); // runs the model's validators
+    await appendHistoryEvent({
+      userId: user._id, eventType: 'ACCOUNT_ONBOARDED', actorId: user._id, actorRole: user.role,
+      details: { profileFields: ['programPosition', ...(user.role === 'STUDENT' ? ['schoolId'] : ['facultyId']), 'privacyAcceptedAt'] },
+    });
     res.json(sessionPayload(user));
   } catch (error) {
     if (error.code === 11000) return res.status(409).json({ error: 'That ID is already registered to another account.' });
@@ -281,6 +308,14 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY', 'DEAN']), async (req
     }
 
     await user.save({ validateModifiedOnly: true });
+    const changedFields = credentialFields.filter(field => body[field] !== undefined);
+    if (avatar !== undefined) changedFields.push('avatar');
+    if (changedFields.length) {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'PROFILE_UPDATED', actorId: user._id, actorRole: user.role,
+        details: { fields: changedFields },
+      });
+    }
     res.json({
       message: 'Profile saved.',
       profile: {
@@ -335,6 +370,10 @@ router.post('/profile/confirm-credentials', requireAuth(['STUDENT', 'FACULTY', '
     user.onboardingComplete = true;
     user.credentialsConfirmedAt = new Date();
     await user.save();
+    await appendHistoryEvent({
+      userId: user._id, eventType: 'ACCOUNT_DETAILS_CONFIRMED', actorId: user._id, actorRole: user.role,
+      details: { confirmedAt: user.credentialsConfirmedAt },
+    });
     res.json({
       message: 'Your credentials are confirmed.',
       profile: {

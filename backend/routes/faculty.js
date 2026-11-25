@@ -57,6 +57,8 @@ const { isProgram, programOfPosition, effectiveProgram } = require('../utils/pro
 const { isEmploymentType } = require('../utils/employment');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { transition, CHANGED_MESSAGE } = require('../utils/statusTransition');
+const { appendHistoryEvent, appendAppointmentHistory } = require('../utils/historyEvents');
+const { activationAtForApproval } = require('../utils/activation');
 const { canMarkMissed, missOpensAt, canCorrectMiss, hasStarted, CORRECTION_HOURS, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
 const { validateId } = require('../utils/idValidator');
 const { cleanReason } = require('../utils/missReason');
@@ -82,6 +84,7 @@ const { hoursTotalError } = require('../utils/consultationHoursRule');
 const { checkWeeklyLimit, limitMessage, weekBounds, COUNTED_STATUSES } = require('../utils/weeklyLimit');
 const { BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS } = require('../utils/appointmentTime'); // 1 hour to book, 1 hour to cancel
 const hoursUntil = (date, time) => (manilaDate(date, time).getTime() - Date.now()) / 36e5;
+const appendActor = (req) => ({ actorId: req.user.userId, actorRole: req.user.role });
 
 // ---- Access control helpers ------------------------------------------------
 const ALL_ROLES = ['STUDENT', 'FACULTY', 'DEAN', 'ADMIN'];
@@ -301,6 +304,9 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
     targetApt = saved; // from here on, the saved version (new status, time and duration) is used
 
     if (status !== previousStatus) {
+      await appendAppointmentHistory(targetApt, 'APPOINTMENT_STATUS_CHANGED', {
+        ...appendActor(req), details: { fromStatus: previousStatus, toStatus: status },
+      });
       const when = `${fmtDate(targetApt.date)} at ${fmtTime(targetApt.time)}`;
       if (req.user.role === 'STUDENT') {
         await notify(targetApt.facultyId, {
@@ -391,6 +397,10 @@ router.post('/schedule/add', requireAuth(SCHEDULE_EDITORS), async (req, res) => 
     if (!check.ok) return res.status(400).json({ error: check.error });
 
     const created = await Schedule.create({ facultyId: faculty._id, ...check.value });
+    await appendHistoryEvent({
+      userId: faculty._id, eventType: 'CLASS_SCHEDULE_ADDED', ...appendActor(req),
+      details: { dayOfWeek: created.dayOfWeek, startTime: created.startTime, endTime: created.endTime, subject: created.subject, room: created.room },
+    });
     if (hasSignedIn(faculty) && !actorIsOwner(req, faculty._id)) {
       await notify(faculty._id, { type: 'SCHEDULE_ASSIGNED', title: 'New class added to your schedule', message: `${classLine(check.value)}.`, page: 'schedule' });
     }
@@ -411,8 +421,16 @@ router.put('/schedule/:id', requireAuth(SCHEDULE_EDITORS), async (req, res) => {
     if (!check.ok) return res.status(400).json({ error: check.error });
 
     const before = classLine(block);
+    const beforeSnapshot = block.toObject();
     Object.assign(block, check.value); // the instructor never changes here
     await block.save();
+    await appendHistoryEvent({
+      userId: block.facultyId, eventType: 'CLASS_SCHEDULE_UPDATED', ...appendActor(req),
+      details: {
+        before: { dayOfWeek: beforeSnapshot.dayOfWeek, startTime: beforeSnapshot.startTime, endTime: beforeSnapshot.endTime, subject: beforeSnapshot.subject, room: beforeSnapshot.room },
+        after: { dayOfWeek: block.dayOfWeek, startTime: block.startTime, endTime: block.endTime, subject: block.subject, room: block.room },
+      },
+    });
     const faculty = await User.findById(block.facultyId).select('googleSub privacyAcceptedAt');
     if (hasSignedIn(faculty) && !actorIsOwner(req, block.facultyId)) {
       await notify(block.facultyId, { type: 'SCHEDULE_CHANGED', title: 'A class in your schedule was changed', message: `${before} is now ${classLine(check.value)}.`, page: 'schedule' });
@@ -431,6 +449,10 @@ router.delete('/schedule/:id', requireAuth(SCHEDULE_EDITORS), async (req, res) =
     if (!ownScheduleOnly(req, existing.facultyId)) return res.status(403).json({ error: 'You can only change your own class schedule.' });
     const block = await Schedule.findByIdAndDelete(req.params.id);
     if (!block) return res.status(404).json({ error: 'Class not found.' });
+    await appendHistoryEvent({
+      userId: block.facultyId, eventType: 'CLASS_SCHEDULE_REMOVED', ...appendActor(req),
+      details: { dayOfWeek: block.dayOfWeek, startTime: block.startTime, endTime: block.endTime, subject: block.subject, room: block.room },
+    });
     const faculty = await User.findById(block.facultyId).select('googleSub privacyAcceptedAt');
     if (hasSignedIn(faculty) && !actorIsOwner(req, block.facultyId)) {
       await notify(block.facultyId, { type: 'SCHEDULE_CHANGED', title: 'A class was removed from your schedule', message: `${classLine(block)} was removed.`, page: 'schedule' });
@@ -496,6 +518,12 @@ router.post('/add', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     const newUser = await User.create(account);
+    if (newUser.activatedAt) {
+      await appendHistoryEvent({
+        userId: newUser._id, eventType: 'ACCOUNT_ACTIVATED', actorId: req.user.userId, actorRole: req.user.role,
+        details: { activatedAt: newUser.activatedAt },
+      });
+    }
     res.json({ message: 'Account provisioned successfully', facultyName: newUser.name, userId: newUser._id, role: newUser.role });
   } catch (error) {
     if (error.code === 11000) return res.status(409).json({ error: 'An account with that email or ID already exists.' });
@@ -734,9 +762,24 @@ async function handleBulkConfirm(req, res) {
         continue;
       }
       try {
-        await User.create(result.account);
+        const user = await User.create(result.account);
+        if (user.activatedAt) {
+          try {
+            await appendHistoryEvent({
+              userId: user._id, eventType: 'ACCOUNT_ACTIVATED', actorId: req.user.userId, actorRole: req.user.role,
+              details: { activatedAt: user.activatedAt },
+            });
+          } catch (historyError) {
+            console.error('Provisioned account activation history failed:', historyError.message);
+            return res.status(500).json({
+              error: `Account row ${result.rowNumber} was created, but its activation history could not be recorded. Check User Management before retrying.`,
+              created,
+            });
+          }
+        }
         created += 1;
       } catch (error) {
+        if (error && error.code !== 11000 && error.name !== 'ValidationError') throw error;
         let reason = 'Database validation failed.';
         if (error && error.code === 11000) reason = 'An account with that email or ID already exists.';
         rejected.push({ rowNumber: result.rowNumber, submitted: result.submitted, reason });
@@ -862,7 +905,12 @@ router.post('/added-hours', requireAuth(['FACULTY', 'DEAN']), async (req, res) =
     if (hit(official)) return res.status(400).json({ error: 'That time is already part of your weekly consultation hours.' });
     if (hit(added)) return res.status(400).json({ error: 'You already added hours that overlap this time.' });
 
-    res.json(await AddedConsultationHours.create({ facultyId, dayOfWeek: dow, startTime, endTime }));
+    const addedHour = await AddedConsultationHours.create({ facultyId, dayOfWeek: dow, startTime, endTime });
+    await appendHistoryEvent({
+      userId: facultyId, eventType: 'ADDED_CONSULTATION_HOURS',
+      ...appendActor(req), details: { dayOfWeek: dow, startTime, endTime },
+    });
+    res.json(addedHour);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Could not add the hours.' });
   }
@@ -889,6 +937,10 @@ router.delete('/added-hours/:id', requireAuth(['FACULTY', 'DEAN']), async (req, 
       return res.status(400).json({ error: 'Students have upcoming requests in these hours. Decline or cancel them first.' });
     }
     await block.deleteOne();
+    await appendHistoryEvent({
+      userId: block.facultyId, eventType: 'ADDED_CONSULTATION_HOURS_REMOVED',
+      ...appendActor(req), details: { dayOfWeek: block.dayOfWeek, startTime: block.startTime, endTime: block.endTime },
+    });
     res.json({ message: 'Added hours removed.' });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Could not remove the hours.' });
@@ -950,13 +1002,13 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
       reason,
       status: 'PENDING'
     });
-
     // Two requests sent at the same moment can both pass the check above: count again and undo this one if it went over.
     if (limitCheck.limit && (await sameWeek()).length > limitCheck.limit) { // this request is already saved, so it is counted too
       await Appointment.deleteOne({ _id: newAppointment._id });
       return res.status(429).json({ error: limitMessage(faculty.name, limitCheck.limit), code: 'WEEKLY_LIMIT', limit: limitCheck.limit });
     }
 
+    await appendAppointmentHistory(newAppointment, 'APPOINTMENT_REQUESTED', appendActor(req));
     await notify(facultyId, {
       type: 'APPOINTMENT_REQUEST',
       title: 'New consultation request',
@@ -1007,8 +1059,18 @@ router.patch('/users/:id/verify', requireAuth(STAFF), async (req, res) => {
       return res.status(400).json({ error: 'This role cannot be verified this way.' });
     }
 
+    const previousStatus = user.accountStatus;
     user.accountStatus = 'ACTIVE';
+    user.activatedAt = activationAtForApproval({
+      previousStatus, currentStatus: user.accountStatus, activatedAt: user.activatedAt,
+    });
     await user.save();
+    if (previousStatus !== 'ACTIVE') {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ACCOUNT_ACTIVATED', ...appendActor(req),
+        details: { activatedAt: user.activatedAt },
+      });
+    }
 
     let emailSent = true;
     let notEmailed = false; // true when SMTP isn't set up, so nothing really left the server
@@ -1113,7 +1175,7 @@ router.patch('/users/:id/status', requireAuth(['ADMIN']), async (req, res) => {
     if (req.params.id === req.user.userId) {
       return res.status(400).json({ error: 'You cannot disable your own account.' });
     }
-    const user = await User.findById(req.params.id).select('name role accountStatus');
+    const user = await User.findById(req.params.id).select('name role accountStatus activatedAt');
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (!canDisableRole(user.role)) {
       return res.status(400).json({ error: 'Only student, faculty and Dean accounts can be disabled here.' });
@@ -1123,14 +1185,26 @@ router.patch('/users/:id/status', requireAuth(['ADMIN']), async (req, res) => {
       if (user.accountStatus !== 'ACTIVE' && user.accountStatus !== 'RESTRICTED') {
         return res.status(400).json({ error: 'Only active or restricted accounts can be disabled.' });
       }
-      await User.updateOne({ _id: user._id }, { accountStatus: 'RESTRICTED' });
+      const previousStatus = user.accountStatus;
+      user.accountStatus = 'RESTRICTED';
+      await user.save();
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ACCOUNT_DISABLED', ...appendActor(req),
+        details: { fromStatus: previousStatus, toStatus: 'RESTRICTED' },
+      });
       return res.json({ message: `${user.name}'s account is disabled.`, user: { _id: user._id, accountStatus: 'RESTRICTED' } });
     }
 
     if (!canEnableAccountStatus(user.accountStatus)) {
       return res.status(400).json({ error: 'This account is not disabled.' });
     }
-    await User.updateOne({ _id: user._id }, { accountStatus: 'ACTIVE' });
+    const previousStatus = user.accountStatus;
+    user.accountStatus = 'ACTIVE';
+    await user.save();
+    await appendHistoryEvent({
+      userId: user._id, eventType: 'ACCOUNT_ENABLED', ...appendActor(req),
+      details: { fromStatus: previousStatus, toStatus: 'ACTIVE' },
+    });
     res.json({ message: `${user.name}'s account is enabled again.`, user: { _id: user._id, accountStatus: 'ACTIVE' } });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Could not update the account.' });
@@ -1147,6 +1221,14 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     if (user.role !== 'STUDENT' && user.role !== 'FACULTY' && user.role !== 'DEAN') {
       return res.status(400).json({ error: 'Only student, faculty and Dean accounts can be edited here.' });
     }
+    const previousRole = user.role;
+    const previousRoleDetails = {
+      schoolId: user.schoolId || '',
+      facultyId: user.facultyId || '',
+      program: user.program || '',
+      programPosition: user.programPosition || '',
+      employmentType: user.employmentType || '',
+    };
     const wasStudent = user.role === 'STUDENT';
     let isStudent = wasStudent;
     const { name, gender, idValue, program, year, section, employmentType, role: newRole, programPosition: newPosition } = req.body || {};
@@ -1222,6 +1304,19 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     await user.save({ validateModifiedOnly: true });
+    const changedProfileFields = Object.keys(req.body || {}).filter(field => field !== 'role');
+    if (changedProfileFields.length) {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'PROFILE_UPDATED', ...appendActor(req),
+        details: { fields: changedProfileFields },
+      });
+    }
+    if (previousRole !== user.role) {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ROLE_CHANGED', ...appendActor(req),
+        details: { fromRole: previousRole, toRole: user.role, previousRoleDetails },
+      });
+    }
     res.json({
       message: `${user.name}'s account was updated.`,
       user: { _id: user._id, name: user.name, role: user.role, gender: user.gender, schoolId: user.schoolId, facultyId: user.facultyId, noIdYet: user.noIdYet, programPosition: user.programPosition,
@@ -1305,6 +1400,10 @@ router.post('/status-entry', requireAuth(['FACULTY', 'DEAN']), async (req, res) 
       facultyId: req.user.userId, type, startAt: now, endAt: end.endAt,
     });
     await StatusHistory.create({ facultyId: req.user.userId, status: type });
+    await appendHistoryEvent({
+      userId: req.user.userId, eventType: 'FACULTY_STATUS_SET', ...appendActor(req),
+      details: { status: type, startAt: entry.startAt, endAt: entry.endAt },
+    });
     res.status(201).json(entry);
   } catch (err) {
     res.status(500).json({ error: 'Error setting status' });
@@ -1396,6 +1495,7 @@ router.post('/appointment/:id/appeal', requireAuth(['STUDENT', 'FACULTY', 'DEAN'
 
     apt.appeal = { by: role, reason, status: 'SUBMITTED', submittedAt: new Date() }; // record only: no accept/reject review
     await apt.save();
+    await appendAppointmentHistory(apt, 'APPEAL_SUBMITTED', { ...appendActor(req), details: { appealBy: role } });
 
     const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
     if (role === 'STUDENT') {
@@ -1496,8 +1596,17 @@ router.post('/consultation-hours', requireAuth(['FACULTY', 'DEAN']), async (req,
       }
     }
 
+    const previous = await ConsultationHours.find({ facultyId }).select('dayOfWeek startTime endTime').lean();
     await ConsultationHours.deleteMany({ facultyId });
     const created = await ConsultationHours.insertMany(hours.map(h => ({ ...h, facultyId })));
+    await appendHistoryEvent({
+      userId: facultyId, eventType: 'CONSULTATION_HOURS_REPLACED',
+      ...appendActor(req),
+      details: {
+        previous: previous.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime })),
+        current: created.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime })),
+      },
+    });
     res.json({ message: 'Consultation hours saved.', hours: created });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -1650,6 +1759,9 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY', 'DEAN']), asyn
       ...(wasMissed ? { correctedAt: new Date(), correctedFrom: apt.status } : {}),
     }, { completedAt: { $exists: false } });
     if (!done) return res.status(409).json({ error: CHANGED_MESSAGE });
+    await appendAppointmentHistory(done, 'CONSULTATION_COMPLETED', {
+      ...appendActor(req), details: { fromStatus: apt.status, toStatus: done.status },
+    });
 
     await notify(await resolveStudentId(apt), {
       type: 'CONSULTATION_LOGGED',
@@ -1684,6 +1796,7 @@ router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY', 'DEAN'
     apt.casePresented = apt.casePresented || apt.reason;
     apt.interventionTaken = interventionTaken;
     await apt.save();
+    await appendAppointmentHistory(apt, 'CONSULTATION_LOG_UPDATED', appendActor(req));
 
     res.json({ message: 'Consultation log updated.', appointment: apt });
   } catch (error) {
@@ -1710,6 +1823,9 @@ router.patch('/appointment/:id/cancel', requireAuth(['FACULTY', 'DEAN']), async 
     if (!reason) return res.status(400).json({ error: 'Please select or enter a reason.' });
     const cancelled = await transition(Appointment, apt._id, 'APPROVED', { status: 'CANCELLED BY FACULTY', cancelReason: reason });
     if (!cancelled) return res.status(409).json({ error: CHANGED_MESSAGE });
+    await appendAppointmentHistory(cancelled, 'APPOINTMENT_STATUS_CHANGED', {
+      ...appendActor(req), details: { fromStatus: apt.status, toStatus: cancelled.status },
+    });
 
     const faculty = await User.findById(req.user.userId).select('name');
     await notify(await resolveStudentId(apt), {
@@ -1746,6 +1862,9 @@ router.post('/appointments/bulk-cancel', requireAuth(['STUDENT', 'FACULTY', 'DEA
 
       const moved = await transition(Appointment, apt._id, apt.status, { status: d.newStatus, cancelReason: reason });
       if (!moved) { skipped.push({ id, reason: 'Just updated by someone else.' }); continue; }
+      await appendAppointmentHistory(moved, 'APPOINTMENT_STATUS_CHANGED', {
+        ...appendActor(req), details: { fromStatus: apt.status, toStatus: moved.status },
+      });
       cancelled.push(id);
 
       const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
@@ -1781,6 +1900,9 @@ router.patch('/appointment/:id/no-show', requireAuth(['FACULTY', 'DEAN']), async
     if (!reason) return res.status(400).json({ error: 'Please select or enter a reason.' });
     const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (STUDENT)', missedAt: new Date(), missReason: reason, missedBy: 'FACULTY' });
     if (!marked) return res.status(409).json({ error: CHANGED_MESSAGE });
+    await appendAppointmentHistory(marked, 'APPOINTMENT_STATUS_CHANGED', {
+      ...appendActor(req), details: { fromStatus: apt.status, toStatus: marked.status },
+    });
 
     await notify(await resolveStudentId(apt), {
       type: 'APPOINTMENT_UPDATE',
@@ -1806,6 +1928,9 @@ router.patch('/appointment/:id/faculty-missed', requireAuth(['STUDENT']), async 
 
     const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (FACULTY)', missedAt: new Date(), missReason: d.reason, missedBy: 'STUDENT' });
     if (!marked) return res.status(409).json({ error: CHANGED_MESSAGE });
+    await appendAppointmentHistory(marked, 'APPOINTMENT_STATUS_CHANGED', {
+      ...appendActor(req), details: { fromStatus: apt.status, toStatus: marked.status },
+    });
 
     await notify(apt.facultyId, {
       type: 'APPOINTMENT_UPDATE',
