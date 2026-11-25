@@ -48,7 +48,6 @@ const { requireAuth } = require('../middleware/auth');
 // Generic shape check for admin-provisioned accounts (any domain, but still a single "@").
 const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 // Official ID formats (same rules as the User model).
-const { STUDENT_ID_REGEX: SCHOOL_ID_REGEX, EMPLOYEE_ID_REGEX: FACULTY_ID_REGEX } = require('../utils/idValidator');
 const Broadcast = require('../models/Broadcast');
 const { isProfileComplete, parseList, audienceMismatch } = require('../utils/signInPolicy');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
@@ -61,6 +60,7 @@ const { appendHistoryEvent, appendAppointmentHistory } = require('../utils/histo
 const { activationAtForApproval } = require('../utils/activation');
 const { canMarkMissed, missOpensAt, canCorrectMiss, hasStarted, CORRECTION_HOURS, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
 const { validateId } = require('../utils/idValidator');
+const { normalizePersonName } = require('../utils/personName');
 const { cleanReason } = require('../utils/missReason');
 const { reportDecision } = require('../utils/reportFacultyMissed');
 const { canViewAppointment } = require('../utils/appointmentAccess');
@@ -467,7 +467,7 @@ router.delete('/schedule/:id', requireAuth(SCHEDULE_EDITORS), async (req, res) =
 router.post('/add', requireAuth(['ADMIN']), async (req, res) => {
   try {
     const { name, email: rawEmail, role: rawRole, gender, program, year, section, schoolId, facultyId, programPosition, employmentType } = req.body || {};
-    const cleanName = typeof name === 'string' ? name.replace(/\s+/g, ' ').trim() : '';
+    const cleanName = normalizePersonName(name);
     const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
     const role = typeof rawRole === 'string' ? rawRole.trim().toUpperCase() : '';
 
@@ -667,7 +667,8 @@ async function handleBulkPreview(req, res) {
     const kind = String(req.query.template || '').toLowerCase();
     if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Choose a Student or Faculty template.' });
     if (!req.file) return res.status(400).json({ error: 'Choose an Excel or CSV file.' });
-    const rows = await workbookRows(req.file.buffer, req.file.originalname);
+    const rows = (await workbookRows(req.file.buffer, req.file.originalname))
+      .map(row => ({ ...row, name: normalizePersonName(row.name) }));
     const results = await validateImportRows(User, rows, kind, process.env);
     res.json({
       template: kind,
@@ -709,7 +710,8 @@ function bulkRowsFromBody(body) {
     const submitted = {};
     for (const field of fields) {
       const value = source[field];
-      submitted[field] = value === null || value === undefined ? '' : String(value).trim();
+      const cleanValue = value === null || value === undefined ? '' : String(value).trim();
+      submitted[field] = field === 'name' ? normalizePersonName(cleanValue) : cleanValue;
     }
     return {
       rowNumber: Number.isInteger(item.rowNumber) && item.rowNumber >= 2
@@ -1113,14 +1115,9 @@ router.patch('/users/:id/id', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     const isStudent = user.role === 'STUDENT';
-    const idValue = String(req.body.idValue || '').trim().toUpperCase();
-    if (!(isStudent ? SCHOOL_ID_REGEX : FACULTY_ID_REGEX).test(idValue)) {
-      return res.status(400).json({
-        error: isStudent
-          ? 'Invalid School ID format. Use 2025-S00001 or 2025-1234-A.'
-          : 'Invalid Faculty ID format. Use 2025S-00001.'
-      });
-    }
+    const idCheck = validateId(req.body.idValue, isStudent ? 'STUDENT' : 'EMPLOYEE');
+    if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
+    const idValue = idCheck.id;
     const taken = await User.findOne({ [isStudent ? 'schoolId' : 'facultyId']: idValue, _id: { $ne: user._id } });
     if (taken) return res.status(400).json({ error: 'Another account already uses this ID.' });
 
@@ -1260,7 +1257,7 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     if (name !== undefined) {
-      const clean = String(name).replace(/\s+/g, ' ').trim();
+      const clean = normalizePersonName(name);
       if (clean.length < 2 || clean.length > 100) return res.status(400).json({ error: 'Name must be 2 to 100 characters.' });
       user.name = clean;
     }
@@ -1271,12 +1268,9 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     if (idValue !== undefined) {
-      const id = String(idValue || '').trim().toUpperCase();
-      if (!(isStudent ? SCHOOL_ID_REGEX : FACULTY_ID_REGEX).test(id)) {
-        return res.status(400).json({
-          error: isStudent ? 'Invalid School ID format. Use 2025-S00001 or 2025-1234-A.' : 'Invalid Faculty ID format. Use 2025S-00001.'
-        });
-      }
+      const idCheck = validateId(idValue, isStudent ? 'STUDENT' : 'EMPLOYEE');
+      if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
+      const id = idCheck.id;
       const taken = await User.findOne({ [isStudent ? 'schoolId' : 'facultyId']: id, _id: { $ne: user._id } }).select('_id');
       if (taken) return res.status(400).json({ error: 'Another account already uses this ID.' });
       if (isStudent) user.schoolId = id; else user.facultyId = id;
@@ -1331,7 +1325,7 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
 // ADMIN: correct a user's display name (Google names are copied once at account creation).
 router.patch('/users/:id/name', requireAuth(['ADMIN']), async (req, res) => {
   try {
-    const name = String(req.body.name || '').replace(/\s+/g, ' ').trim();
+    const name = normalizePersonName(req.body.name);
     if (name.length < 2 || name.length > 100) {
       return res.status(400).json({ error: 'Name must be 2 to 100 characters.' });
     }

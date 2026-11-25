@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { STUDENT_ID_REGEX, EMPLOYEE_ID_REGEX } = require('../utils/idValidator');
+const { validateId } = require('../utils/idValidator');
 const { PROGRAMS } = require('../utils/programs');
 const { EMPLOYMENT_TYPES } = require('../utils/employment');
 const { activationAtForNewAccount } = require('../utils/activation');
@@ -49,9 +49,9 @@ const UserSchema = new mongoose.Schema({
     validator: function(v) {
       if (!v) return true; // no ID yet — allowed, will be flagged instead
       if (this.role !== 'STUDENT') return true;
-      return STUDENT_ID_REGEX.test(v);
+      return validateId(v, 'STUDENT').ok;
     },
-    message: props => `${props.value} is not a valid Student ID format. Use 2025-S00001 or 2025-1234-A.`
+    message: props => validateId(props.value, 'STUDENT').error
   }
 },
 
@@ -65,9 +65,9 @@ facultyId: {
     validator: function(v) {
       if (!v) return true; // no ID yet — allowed, will be flagged instead
       if (this.role !== 'FACULTY' && this.role !== 'DEAN') return true;
-      return EMPLOYEE_ID_REGEX.test(v);
+      return validateId(v, 'EMPLOYEE').ok;
     },
-    message: props => `${props.value} is not a valid Faculty ID format. Use 2025S-00001.`
+    message: props => validateId(props.value, 'EMPLOYEE').error
   }
 },
 

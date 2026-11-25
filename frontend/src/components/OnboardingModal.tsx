@@ -137,7 +137,7 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
               <FormControl isRequired isInvalid={idValue !== '' && !isValidId(idValue, idKind)}>
                 <FormLabel>{isStudent ? 'School ID' : 'Employee ID'}</FormLabel>
                 <Input
-                  placeholder={isStudent ? 'e.g. 2025-S00001 or 2025-1234-A' : 'e.g. 2025S-00001'}
+                  placeholder={`e.g. ${idHint(idKind)}`}
                   value={idValue}
                   onChange={e => setIdValue(e.target.value.toUpperCase())}
                 />

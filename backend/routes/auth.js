@@ -7,6 +7,7 @@ const RosterEntry = require('../models/RosterEntry');
 const { requireAuth } = require('../middleware/auth');
 const { decideSignIn, parseList, isProfileComplete, requiresCredentialConfirmation, audienceMismatch, loginNeedsAccount } = require('../utils/signInPolicy');
 const { validateId } = require('../utils/idValidator');
+const { normalizePersonName } = require('../utils/personName');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
 const { isProgram, programOfPosition, effectiveProgram } = require('../utils/programs');
 const { isEmploymentType } = require('../utils/employment');
@@ -75,7 +76,7 @@ router.post('/google', googleLimiter, async (req, res) => {
     if (decision.action === 'CREATE') {
       user = await User.create({
         role: decision.role,
-        name: payload.name || email,
+        name: payload.name ? normalizePersonName(payload.name) : email,
         email,
         googleSub: payload.sub,
         isVerified: true,
@@ -195,7 +196,7 @@ router.post('/onboarding', requireAuth(['STUDENT', 'FACULTY', 'DEAN', 'ADMIN']),
       user[field] = check.id;
     }
 
-    // The name stays as it came from the school Google account.
+    // Onboarding keeps the name normalized from the school Google account.
     if (genderGiven) user.gender = gender;
     user.programPosition = String(programPosition).trim();
     if (facultyProgram) user.program = facultyProgram;
@@ -242,7 +243,7 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY', 'DEAN']), async (req
     }
 
     if (name !== undefined) {
-      const clean = String(name).replace(/\s+/g, ' ').trim();
+      const clean = normalizePersonName(name);
       if (clean.length < 2 || clean.length > 100) return res.status(400).json({ error: 'Name must be 2 to 100 characters.' });
       user.name = clean;
     }

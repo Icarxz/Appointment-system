@@ -14,6 +14,7 @@ import { IdTray, isIdComplete, idRawOf } from './IdTray';
 import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import { parseCohort } from './PeopleUi';
 import PersonalHistoryPanel from './PersonalHistoryPanel';
+import { normalizePersonName } from '../utils/personName';
 
 interface Profile {
   name: string; email: string; role: string; gender: string; programPosition: string;
@@ -112,8 +113,8 @@ export default function ProfilePage() {
     setEditing(true);
   };
 
-  const nameClean = nameDraft.replace(/\s+/g, ' ').trim();
-  const nameChanged = !credentialFieldsLocked && nameClean !== p.name;
+  const nameClean = normalizePersonName(nameDraft);
+  const nameChanged = !credentialFieldsLocked && nameClean !== normalizePersonName(p.name);
   const genderChanged = !credentialFieldsLocked && genderDraft !== '' && genderDraft !== p.gender;
   const idChanged = !credentialFieldsLocked && idRawOf(idDraft) !== idRawOf(idValue);
   const avatarChanged = avatarDraft !== undefined;
@@ -281,7 +282,13 @@ export default function ProfilePage() {
               <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5}>
                 <FormControl isRequired isInvalid={!nameOk}>
                   <FormLabel fontSize="sm">Full name</FormLabel>
-                  <Input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} maxLength={100} />
+                  <Input
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    onBlur={() => setNameDraft(current => current === p.name ? current : normalizePersonName(current))}
+                    placeholder="First name MI. (optional) Last name"
+                    maxLength={100}
+                  />
                 </FormControl>
                 <FormControl isRequired={credentialReviewRequired}>
                   <FormLabel fontSize="sm">Gender</FormLabel>

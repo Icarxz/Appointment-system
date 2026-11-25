@@ -10,6 +10,7 @@ import { parseCohort } from './PeopleUi';
 import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import { PROGRAM_OPTIONS, facultyProgram, programOfPosition } from '../utils/programs';
 import { EMPLOYMENT_OPTIONS } from '../utils/employment';
+import { normalizePersonName } from '../utils/personName';
 
 // Admin > Faculty / Students > Edit. The same form a person sees on their own profile (name, gender, School / Faculty ID), plus program,
 // year and section for a student, or the program and employment type (Full-time / Part-time) for faculty. Email (it has its own safe change) is not editable here; a
@@ -54,19 +55,22 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
     if (!user) return;
     const c = parseCohort(user.role === 'STUDENT' ? user.programPosition : '');
     setRole(''); setPosition(user.role === 'STUDENT' ? '' : (user.programPosition || ''));
-    setName(user.name || ''); setGender(user.gender || ''); setIdDraft((user.role === 'STUDENT' ? user.schoolId : user.facultyId) || '');
+    setName(normalizePersonName(user.name || '')); setGender(user.gender || ''); setIdDraft((user.role === 'STUDENT' ? user.schoolId : user.facultyId) || '');
     setProgram(c.program); setYear(c.year); setSection(c.section); setSaving(false);
     setFProgram(facultyProgram(user)); setEmployment(user.employmentType || '');
   }, [user?._id]);
 
   if (!user) return null;
 
-  const nameClean = name.replace(/\s+/g, ' ').trim();
+  const nameClean = normalizePersonName(name);
   const nameChanged = nameClean !== (user.name || '');
   const nameOk = nameClean.length >= 2 && nameClean.length <= 100;
   const genderChanged = gender !== '' && gender !== (user.gender || '');
   const idChanged = idRawOf(idDraft) !== idRawOf(idValue);
-  const idOk = !idChanged || isIdComplete(idKind, idDraft);
+  const idOk = !idChanged && !idValue ? true : isIdComplete(idKind, idDraft);
+  const currentIdYear = new Date().getFullYear();
+  const idYear = Number(idRawOf(idDraft).slice(0, 4));
+  const idYearTooNew = idRawOf(idDraft).length >= 4 && idYear > currentIdYear;
   const roleChanged = role !== '' && role !== user.role;
   const cohortChanged = isStudent && (roleChanged || program !== cohort.program || year !== cohort.year || section !== cohort.section);
   const cohortOk = !cohortChanged || (!!program && !!year && !!section);
@@ -116,7 +120,14 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
           <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={5}>
             <FormControl isRequired isInvalid={!nameOk}>
               <FormLabel fontSize="sm">Full name</FormLabel>
-              <Input value={name} onChange={e => setName(e.target.value)} maxLength={100} />
+              <Input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onBlur={() => setName(current => normalizePersonName(current))}
+                placeholder="First name MI. (optional) Last name"
+                maxLength={100}
+              />
+              <FormHelperText>Names are capitalized automatically; middle names stay as entered.</FormHelperText>
             </FormControl>
             <FormControl>
               <FormLabel fontSize="sm">Gender</FormLabel>
@@ -131,7 +142,13 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
           <FormControl mb={5}>
             <FormLabel fontSize="sm">{isStudent ? 'School ID' : 'Employee ID'}</FormLabel>
             <IdTray kind={idKind} value={idDraft} onChange={setIdDraft} />
-            {idChanged && !idOk && <Text fontSize="xs" color="red.500" mt={2} textAlign="center">Finish the ID, or restore the current one, to save.</Text>}
+            {!idOk && (
+              <Text fontSize="xs" color="red.500" mt={2} textAlign="center">
+                {idYearTooNew
+                  ? `The ID year must be ${currentIdYear} or earlier. Update this ID to save changes.`
+                  : 'Enter a valid ID, or restore your current one, to save.'}
+              </Text>
+            )}
           </FormControl>
 
           {isStudent && (

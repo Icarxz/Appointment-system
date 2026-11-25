@@ -11,7 +11,7 @@ test('maps the prior optional-gender template header to the required gender fiel
 
 test('accepts a valid student row', () => {
   const result = validateProvisionRow({
-    name: 'Fiction Student',
+    name: '  fICTION   sTUDENT ',
     email: 'fiction.student@antiquespride.edu.ph',
     schoolId: '2025-S00001',
     program: 'BS INFO',
@@ -21,6 +21,7 @@ test('accepts a valid student row', () => {
   }, 'student', domains);
   assert.equal(result.valid, true);
   assert.equal(result.account.role, 'STUDENT');
+  assert.equal(result.account.name, 'Fiction Student');
   assert.equal(result.account.schoolId, '2025-S00001');
 });
 

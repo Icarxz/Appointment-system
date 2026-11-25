@@ -11,6 +11,7 @@ import {
   InputGroup, InputRightAddon
 } from '@chakra-ui/react';
 import { IdTray, isIdComplete } from './IdTray';
+import { normalizePersonName } from '../utils/personName';
 import { ConnectionBanner, OfflineState, FilterPanelSkeleton, TableSkeleton, CardListSkeleton, useOnlineStatus, useSlowLoading } from './LoadingStates';
 import { authFetch } from './authFetch';
 import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
@@ -387,7 +388,7 @@ export default function AdminDashboard() {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/add`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name, email, role, gender: gender || undefined,
+          name: normalizePersonName(name), email: `${email.trim().toLowerCase()}@${SCHOOL_DOMAIN}`, role, gender: gender || undefined,
           schoolId: role === 'STUDENT' ? schoolId : undefined,
           facultyId: role !== 'STUDENT' ? facultyId : undefined,
           program: role === 'STUDENT' ? studentProgram : (role === 'FACULTY' ? newProgram : ''),
@@ -449,7 +450,7 @@ export default function AdminDashboard() {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/users/${nameEdit._id}/name`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: nameEditValue })
+        body: JSON.stringify({ name: normalizePersonName(nameEditValue) })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
@@ -634,12 +635,31 @@ export default function AdminDashboard() {
                   <VStack spacing={4} align="stretch">
                     <FormControl isRequired>
                       <FormLabel color={textColor}>Full Name</FormLabel>
-                      <Input value={name} onChange={(e) => setName(e.target.value)} color={textColor} borderColor={borderColor}/>
+                      <Input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        onBlur={() => setName(normalizePersonName(name))}
+                        placeholder="First name MI. (optional) Last name"
+                        color={textColor}
+                        borderColor={borderColor}
+                      />
                     </FormControl>
 
                     <FormControl isRequired>
-                      <FormLabel color={textColor}>Email</FormLabel>
-                      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} color={textColor} borderColor={borderColor}/>
+                      <FormLabel color={textColor}>School email</FormLabel>
+                      <InputGroup>
+                        <Input
+                          type="text"
+                          placeholder="username"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          color={textColor}
+                          borderColor={borderColor}
+                          pattern="[^@\\s]+"
+                          required
+                        />
+                        <InputRightAddon>@{SCHOOL_DOMAIN}</InputRightAddon>
+                      </InputGroup>
                     </FormControl>
 
                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
@@ -743,7 +763,9 @@ export default function AdminDashboard() {
               <TabPanel px={0} pt={0}>
           <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <Heading size="md" color={textColor} mb={1}>Bulk Account Provisioning</Heading>
-            <Text fontSize="sm" color={mutedText} mb={4}>Edit spreadsheet values in the preview, revalidate, then confirm to create accounts.</Text>
+            <Text fontSize="sm" color={mutedText} mb={4}>
+              Use First name MI. (optional) Last name. Names are title-cased on import. Edit spreadsheet values in the preview, revalidate, then confirm to create accounts.
+            </Text>
             <HStack flexWrap="wrap" spacing={3} mb={4}>
               <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('student', 'xlsx')}>Download Student Template (Excel)</ChakraButton>
               <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('student', 'csv')}>Download Student Template (CSV)</ChakraButton>
@@ -794,6 +816,11 @@ export default function AdminDashboard() {
                               value={row.submitted?.[column.field] ?? ''}
                               aria-label={`${column.label}, row ${row.rowNumber}`}
                               onChange={(event) => updateBulkRow(row.rowNumber, column.field, event.target.value)}
+                              onBlur={(event) => {
+                                if (column.field === 'name') {
+                                  updateBulkRow(row.rowNumber, column.field, normalizePersonName(event.target.value));
+                                }
+                              }}
                             />
                           </Td>
                         ))}
@@ -1157,11 +1184,16 @@ export default function AdminDashboard() {
             <ModalCloseButton />
             <ModalBody pb={6}>
               <Text fontSize="sm" mb={3} color={mutedText}>
-                Use this to fix a name copied wrongly from the Google account. Appointments stay linked to the account.
+                Use First name MI. (optional) Last name. Names are capitalized automatically; middle names stay as entered. Appointments stay linked to the account.
               </Text>
               <FormControl isRequired mb={4}>
                 <FormLabel>Full name</FormLabel>
-                <Input value={nameEditValue} onChange={(e) => setNameEditValue(e.target.value)} />
+                <Input
+                  value={nameEditValue}
+                  onChange={(e) => setNameEditValue(e.target.value)}
+                  onBlur={() => setNameEditValue(normalizePersonName(nameEditValue))}
+                  placeholder="First name MI. (optional) Last name"
+                />
               </FormControl>
               <ChakraButton colorScheme="blue" w="100%" onClick={saveName} isLoading={nameSaving}>Save name</ChakraButton>
             </ModalBody>

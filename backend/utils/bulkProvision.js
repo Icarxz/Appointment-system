@@ -1,5 +1,6 @@
 const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const { validateId } = require('./idValidator');
+const { normalizePersonName } = require('./personName');
 const { isValidCohort, cohortLabel } = require('./studentCohort');
 const { isApprovedFacultyPosition } = require('./facultyPositions');
 const { isProgram, programOfPosition } = require('./programs');
@@ -51,7 +52,7 @@ function formulaOrInjection(value) {
 
 function validateProvisionRow(raw, kind, allowedDomains) {
   const row = raw && typeof raw === 'object' ? raw : {};
-  const name = text(row.name);
+  const name = normalizePersonName(text(row.name));
   const rawEmail = text(row.email).toLowerCase();
   const role = kind === 'student'
     ? 'STUDENT'
