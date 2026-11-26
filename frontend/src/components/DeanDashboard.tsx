@@ -45,12 +45,14 @@ const CONSULTATION_PAGES: DeanPage[] = ['schedule', 'requests', 'log', 'hours', 
 
 export default function DeanDashboard() {
   const userName = localStorage.getItem('userName');
+  const credentialReviewRequired = localStorage.getItem('credentialConfirmationRequired') === 'true';
 
   // Unified Page State
-  const [activePage, setActivePage] = useState<DeanPage>('reports');
+  const [activePage, setActivePage] = useState<DeanPage>(credentialReviewRequired ? 'profile' : 'reports');
   // Executive Broadcast is hidden for now (Nov 9): its page and menu item are removed here; DeanBroadcastPanel.tsx is kept.
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink(['roster', 'reports', 'records', 'requests', 'analytics', 'schedule', 'log', 'hours', 'status'] as const, setActivePage);
+  const { aptId, closeApt } = useDeepLink(credentialReviewRequired ? ['profile'] as const : ['roster', 'reports', 'records', 'requests', 'analytics', 'schedule', 'log', 'hours', 'status'] as const, setActivePage);
+  useEffect(() => { if (credentialReviewRequired) closeApt(); }, [credentialReviewRequired, closeApt]);
   
   // Shared navy palette (same colours in every portal)
   const C = useNavPalette();
@@ -156,7 +158,8 @@ export default function DeanDashboard() {
     <DashboardShell
       portalLabel="Dean's Office"
       userName={userName || ''}
-      showMailbox
+      showMailbox={!credentialReviewRequired}
+      profileRequired={credentialReviewRequired}
       extras={<ProfileGate role="DEAN" />}
       nav={[
         { key: 'reports', section: 'Overview', icon: 'chart', label: 'Reports & Analytics', active: activePage === 'reports', onClick: () => setActivePage('reports') },
@@ -353,7 +356,7 @@ export default function DeanDashboard() {
       </Box>
       )}
     </DashboardShell>
-    <AppointmentDetailsDrawer aptId={aptId} onClose={closeApt} />
+    <AppointmentDetailsDrawer aptId={credentialReviewRequired ? null : aptId} onClose={closeApt} />
     </>
   );
 }

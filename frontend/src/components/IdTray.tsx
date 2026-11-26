@@ -1,9 +1,10 @@
 import React, { useRef } from 'react';
 import { Box, HStack, Input, Text, useColorModeValue } from '@chakra-ui/react';
+import { idHint, isValidId } from '../utils/idValidator';
 
 // ---------- School ID tray (one box per character) ----------
-// Student: 2025-S00001 (starts with S) or 2025-1234-A (starts with a number). The layout switches on the 5th character.
-// Employee / Faculty: 2025S-00001.
+// Student: YYYY-S00001 (starts with S) or YYYY-1234-A (starts with a number). The layout switches on the 5th character.
+// Employee / Faculty: YYYYS-00001.
 export type IdKind = 'STUDENT' | 'FACULTY';
 
 export const idRawOf = (v?: string) => (v || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
@@ -28,8 +29,7 @@ export const formatId = (kind: IdKind, raw: string) => {
   return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8)}`;
 };
 export const isIdComplete = (kind: IdKind, value: string) => {
-  const raw = idRawOf(value);
-  return kind === 'FACULTY' ? /^\d{4}S\d{5}$/.test(raw) : (/^\d{4}S\d{5}$/.test(raw) || /^\d{8}[A-Z]$/.test(raw));
+  return isValidId(value, kind === 'FACULTY' ? 'EMPLOYEE' : 'STUDENT');
 };
 
 export function IdTray({ kind, value, onChange }: { kind: IdKind; value: string; onChange: (formatted: string) => void }) {
@@ -39,6 +39,8 @@ export function IdTray({ kind, value, onChange }: { kind: IdKind; value: string;
   const muted = useColorModeValue('gray.600', 'gray.400');
   const boxBg = useColorModeValue('white', 'whiteAlpha.100');
   const boxLine = useColorModeValue('gray.300', 'whiteAlpha.300');
+  const validationKind = kind === 'FACULTY' ? 'EMPLOYEE' : 'STUDENT';
+  const currentYear = new Date().getFullYear();
 
   const focusAt = (i: number) => setTimeout(() => refs.current[Math.max(0, i)]?.focus(), 0);
   const commit = (next: string) => onChange(formatId(kind, next));
@@ -60,7 +62,7 @@ export function IdTray({ kind, value, onChange }: { kind: IdKind; value: string;
   return (
     <Box>
       <Text fontFamily="mono" fontSize="sm" color={muted} mb={2}>
-        {kind === 'FACULTY' ? 'Employee format: 2025S-00001' : 'Student formats: 2025-S00001 or 2025-1234-A'}
+        {kind === 'FACULTY' ? `Employee format: ${idHint(validationKind, currentYear)}` : `Student formats: ${idHint(validationKind, currentYear)}`}
       </Text>
       <HStack spacing={1} justify="center" flexWrap="nowrap">
         {segs.map((n, s) => {

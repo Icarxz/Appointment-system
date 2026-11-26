@@ -190,11 +190,13 @@ export default function FacultyDashboard({ embeddedPage, role = 'FACULTY', canIm
   
   const userId = localStorage.getItem('userId');
   const userName = localStorage.getItem('userName');
+  const credentialReviewRequired = !embedded && localStorage.getItem('credentialConfirmationRequired') === 'true';
 
   // ── UI State ─────────────────────────────────────────────────────────────────
-  const [activePage, setActivePage] = useState<Page>(embeddedPage ?? "schedule");
+  const [activePage, setActivePage] = useState<Page>(embeddedPage ?? (credentialReviewRequired ? 'profile' : 'schedule'));
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink<Page>(embedded ? [] : ["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage); // embedded: the Dean dashboard handles links itself
+  const { aptId, closeApt } = useDeepLink<Page>(embedded ? [] : credentialReviewRequired ? ['profile'] : ["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage); // embedded: the Dean dashboard handles links itself
+  useEffect(() => { if (credentialReviewRequired) closeApt(); }, [credentialReviewRequired, closeApt]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [scheduleTab, setScheduleTab] = useState<'view' | 'edit'>('view'); // Master Schedule: weekly view or Edit Schedule
   const [showWeekend, setShowWeekend] = useState(false); // display preference: reveal empty Saturday / Sunday columns
@@ -955,6 +957,8 @@ const saveConsultationHours = async () => {
     <Frame
       portalLabel="Faculty Portal"
       userName={userName || ''}
+      profileRequired={credentialReviewRequired}
+      showMailbox={!credentialReviewRequired}
       extras={<ProfileGate role="FACULTY" />}
       nav={([
         { page: "schedule",  section: "Consultations", icon: "calendar",  label: "Master Schedule" },
@@ -1721,7 +1725,7 @@ const saveConsultationHours = async () => {
         )}
     </Frame>
     <ConfirmAction config={confirmCfg} onClose={() => setConfirmCfg(null)} />
-    <AppointmentDetailsDrawer aptId={detailsId ?? (embedded ? null : aptId)} onClose={() => { setDetailsId(null); closeApt(); }} />
+    <AppointmentDetailsDrawer aptId={credentialReviewRequired ? null : detailsId ?? (embedded ? null : aptId)} onClose={() => { setDetailsId(null); closeApt(); }} />
     </>
   );
 }

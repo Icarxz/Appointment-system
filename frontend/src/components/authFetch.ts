@@ -17,6 +17,13 @@ export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}
   // Missing, invalid or expired (8h) token -> back to the login page.
   // 403 (not allowed) is NOT a logout; the caller handles it.
   if (res.status === 401) {
+    const data = await res.clone().json().catch(() => null);
+    if (data?.code === 'ACCOUNT_DISABLED') {
+      sessionStorage.setItem(
+        'accountDisabledNotice',
+        data.error || 'Your account has been disabled. Please contact the administrator.',
+      );
+    }
     localStorage.clear();
     window.location.href = '/';
   }

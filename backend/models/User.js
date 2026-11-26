@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
-const { STUDENT_ID_REGEX, EMPLOYEE_ID_REGEX } = require('../utils/idValidator');
+const { validateId } = require('../utils/idValidator');
 const { PROGRAMS } = require('../utils/programs');
 const { EMPLOYMENT_TYPES } = require('../utils/employment');
+const { activationAtForNewAccount } = require('../utils/activation');
 
 const UserSchema = new mongoose.Schema({
   role: { 
@@ -20,6 +21,7 @@ const UserSchema = new mongoose.Schema({
     enum: ['ACTIVE', 'PENDING_APPROVAL', 'ARCHIVED', 'RESTRICTED'],
     default: 'ACTIVE'
   },
+  activatedAt: { type: Date, default: null },
 
   // Email verification
   isVerified: { type: Boolean, default: false },
@@ -47,9 +49,9 @@ const UserSchema = new mongoose.Schema({
     validator: function(v) {
       if (!v) return true; // no ID yet — allowed, will be flagged instead
       if (this.role !== 'STUDENT') return true;
-      return STUDENT_ID_REGEX.test(v);
+      return validateId(v, 'STUDENT').ok;
     },
-    message: props => `${props.value} is not a valid Student ID format. Use 2025-S00001 or 2025-1234-A.`
+    message: props => validateId(props.value, 'STUDENT').error
   }
 },
 
@@ -62,10 +64,10 @@ facultyId: {
   validate: {
     validator: function(v) {
       if (!v) return true; // no ID yet — allowed, will be flagged instead
-      if (this.role !== 'FACULTY') return true;
-      return EMPLOYEE_ID_REGEX.test(v);
+      if (this.role !== 'FACULTY' && this.role !== 'DEAN') return true;
+      return validateId(v, 'EMPLOYEE').ok;
     },
-    message: props => `${props.value} is not a valid Faculty ID format. Use 2025S-00001.`
+    message: props => validateId(props.value, 'EMPLOYEE').error
   }
 },
 
@@ -76,6 +78,7 @@ facultyId: {
   // without it and are asked for it on first login (see routes/auth.js -> /onboarding).
   programPosition: { type: String, required: function () { return this.onboardingComplete !== false; } },
   onboardingComplete: { type: Boolean, default: true }, // existing accounts are already complete
+  credentialsConfirmedAt: { type: Date, default: null }, // set after a newly provisioned user confirms their account details
   googleSub: { type: String, unique: true, sparse: true }, // Google's stable account id
   room: { type: String }, 
   // The program a faculty member belongs to (optional). A Program Head's program is implied by the position (see utils/programs.js).
@@ -104,6 +107,9 @@ facultyId: {
   isDemo: { type: Boolean }, // set only on records made by scripts/demoData.js, so they can be removed
 }, { timestamps: true });
 
-
+UserSchema.pre('save', function () {
+  const activatedAt = activationAtForNewAccount(this);
+  if (activatedAt) this.activatedAt = activatedAt;
+});
 
 module.exports = mongoose.model('User', UserSchema);

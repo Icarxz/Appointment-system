@@ -48,7 +48,6 @@ const { requireAuth } = require('../middleware/auth');
 // Generic shape check for admin-provisioned accounts (any domain, but still a single "@").
 const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 // Official ID formats (same rules as the User model).
-const { STUDENT_ID_REGEX: SCHOOL_ID_REGEX, EMPLOYEE_ID_REGEX: FACULTY_ID_REGEX } = require('../utils/idValidator');
 const Broadcast = require('../models/Broadcast');
 const { isProfileComplete, parseList, audienceMismatch } = require('../utils/signInPolicy');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
@@ -57,15 +56,24 @@ const { isProgram, programOfPosition, effectiveProgram } = require('../utils/pro
 const { isEmploymentType } = require('../utils/employment');
 const { bulkCancelDecision, MAX_BULK } = require('../utils/bulkCancel');
 const { transition, CHANGED_MESSAGE } = require('../utils/statusTransition');
+const { appendHistoryEvent, appendAppointmentHistory } = require('../utils/historyEvents');
+const { activationAtForApproval } = require('../utils/activation');
 const { canMarkMissed, missOpensAt, canCorrectMiss, hasStarted, CORRECTION_HOURS, MISS_GRACE_MINUTES } = require('../utils/appointmentTime');
+const { validateId } = require('../utils/idValidator');
+const { normalizePersonName } = require('../utils/personName');
 const { cleanReason } = require('../utils/missReason');
 const { reportDecision } = require('../utils/reportFacultyMissed');
 const { canViewAppointment } = require('../utils/appointmentAccess');
 const { isObjectIdHex } = require('../utils/notifyLink');
 const { manilaNow, manilaDate } = require('../utils/manilaTime');
+const { canDisableRole, canEnableAccountStatus } = require('../utils/accountStatus');
 const FacultyStatusEntry = require('../models/FacultyStatusEntry');
 const { resolveFacultyStatus, validateEntry, dropBlockedSlots, BOOKING_BLOCKING } = require('../utils/facultyStatus');
 const { windowFromNotice } = require('../utils/noticeWindow');
+const ExcelJS = require('exceljs');
+const multer = require('multer');
+const { Readable } = require('node:stream');
+const { MAX_ROWS, text, importFieldForHeader, validateImportRows } = require('../utils/bulkProvision');
 const { groupStatusInputs, toLegacyStatus, publicNotices } = require('../utils/facultyStatusInputs');
 const { endFromChoice } = require('../utils/statusDuration');
 
@@ -76,6 +84,7 @@ const { hoursTotalError } = require('../utils/consultationHoursRule');
 const { checkWeeklyLimit, limitMessage, weekBounds, COUNTED_STATUSES } = require('../utils/weeklyLimit');
 const { BOOKING_LEAD_HOURS, CANCEL_CUTOFF_HOURS } = require('../utils/appointmentTime'); // 1 hour to book, 1 hour to cancel
 const hoursUntil = (date, time) => (manilaDate(date, time).getTime() - Date.now()) / 36e5;
+const appendActor = (req) => ({ actorId: req.user.userId, actorRole: req.user.role });
 
 // ---- Access control helpers ------------------------------------------------
 const ALL_ROLES = ['STUDENT', 'FACULTY', 'DEAN', 'ADMIN'];
@@ -295,6 +304,9 @@ router.put('/appointment/:id', requireAuth(ALL_ROLES), async (req, res) => {
     targetApt = saved; // from here on, the saved version (new status, time and duration) is used
 
     if (status !== previousStatus) {
+      await appendAppointmentHistory(targetApt, 'APPOINTMENT_STATUS_CHANGED', {
+        ...appendActor(req), details: { fromStatus: previousStatus, toStatus: status },
+      });
       const when = `${fmtDate(targetApt.date)} at ${fmtTime(targetApt.time)}`;
       if (req.user.role === 'STUDENT') {
         await notify(targetApt.facultyId, {
@@ -385,6 +397,10 @@ router.post('/schedule/add', requireAuth(SCHEDULE_EDITORS), async (req, res) => 
     if (!check.ok) return res.status(400).json({ error: check.error });
 
     const created = await Schedule.create({ facultyId: faculty._id, ...check.value });
+    await appendHistoryEvent({
+      userId: faculty._id, eventType: 'CLASS_SCHEDULE_ADDED', ...appendActor(req),
+      details: { dayOfWeek: created.dayOfWeek, startTime: created.startTime, endTime: created.endTime, subject: created.subject, room: created.room },
+    });
     if (hasSignedIn(faculty) && !actorIsOwner(req, faculty._id)) {
       await notify(faculty._id, { type: 'SCHEDULE_ASSIGNED', title: 'New class added to your schedule', message: `${classLine(check.value)}.`, page: 'schedule' });
     }
@@ -405,8 +421,16 @@ router.put('/schedule/:id', requireAuth(SCHEDULE_EDITORS), async (req, res) => {
     if (!check.ok) return res.status(400).json({ error: check.error });
 
     const before = classLine(block);
+    const beforeSnapshot = block.toObject();
     Object.assign(block, check.value); // the instructor never changes here
     await block.save();
+    await appendHistoryEvent({
+      userId: block.facultyId, eventType: 'CLASS_SCHEDULE_UPDATED', ...appendActor(req),
+      details: {
+        before: { dayOfWeek: beforeSnapshot.dayOfWeek, startTime: beforeSnapshot.startTime, endTime: beforeSnapshot.endTime, subject: beforeSnapshot.subject, room: beforeSnapshot.room },
+        after: { dayOfWeek: block.dayOfWeek, startTime: block.startTime, endTime: block.endTime, subject: block.subject, room: block.room },
+      },
+    });
     const faculty = await User.findById(block.facultyId).select('googleSub privacyAcceptedAt');
     if (hasSignedIn(faculty) && !actorIsOwner(req, block.facultyId)) {
       await notify(block.facultyId, { type: 'SCHEDULE_CHANGED', title: 'A class in your schedule was changed', message: `${before} is now ${classLine(check.value)}.`, page: 'schedule' });
@@ -425,6 +449,10 @@ router.delete('/schedule/:id', requireAuth(SCHEDULE_EDITORS), async (req, res) =
     if (!ownScheduleOnly(req, existing.facultyId)) return res.status(403).json({ error: 'You can only change your own class schedule.' });
     const block = await Schedule.findByIdAndDelete(req.params.id);
     if (!block) return res.status(404).json({ error: 'Class not found.' });
+    await appendHistoryEvent({
+      userId: block.facultyId, eventType: 'CLASS_SCHEDULE_REMOVED', ...appendActor(req),
+      details: { dayOfWeek: block.dayOfWeek, startTime: block.startTime, endTime: block.endTime, subject: block.subject, room: block.room },
+    });
     const faculty = await User.findById(block.facultyId).select('googleSub privacyAcceptedAt');
     if (hasSignedIn(faculty) && !actorIsOwner(req, block.facultyId)) {
       await notify(block.facultyId, { type: 'SCHEDULE_CHANGED', title: 'A class was removed from your schedule', message: `${classLine(block)} was removed.`, page: 'schedule' });
@@ -436,42 +464,345 @@ router.delete('/schedule/:id', requireAuth(SCHEDULE_EDITORS), async (req, res) =
 });
 
 // 5. POST ROUTE: Admin adds a new faculty member (QR Generation)
-router.post('/add', requireAuth(STAFF), async (req, res) => {
-  const { name, programPosition, room, role, schoolId, facultyId, program } = req.body;
-  const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+router.post('/add', requireAuth(['ADMIN']), async (req, res) => {
   try {
-    if (!EMAIL_REGEX.test(email)) {
-      return res.status(400).json({ error: 'Please enter a valid email address (a single "@", e.g. name@gmail.com).' });
-    }
-    if (!isApprovedFacultyPosition(programPosition)) {
-      return res.status(400).json({ error: 'Please select one of the approved positions: Faculty, Librarian, Program Head (BS INFO), Program Head (BS COMSCI), Program Head (BLIS), or Dean.' });
-    }
-    // The program is optional and only kept for faculty accounts (a Program Head's is implied by the position anyway)
-    const hasProgram = program !== undefined && program !== null && program !== '';
-    if (hasProgram && !isProgram(program)) return res.status(400).json({ error: 'Program must be BS INFO, BS COMSCI or BLIS.' });
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already exists' });
-    }
+    const { name, email: rawEmail, role: rawRole, gender, program, year, section, schoolId, facultyId, programPosition, employmentType } = req.body || {};
+    const cleanName = normalizePersonName(name);
+    const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+    const role = typeof rawRole === 'string' ? rawRole.trim().toUpperCase() : '';
 
-    const newUser = new User({
-      name,
+    if (cleanName.length < 2 || cleanName.length > 100) return res.status(400).json({ error: 'Full name must be 2 to 100 characters.' });
+    if (!EMAIL_REGEX.test(email)) return res.status(400).json({ error: 'Please enter a valid school email address.' });
+    const allowedDomains = parseList(process.env.ALLOWED_EMAIL_DOMAIN);
+    const domain = email.split('@')[1];
+    if (!allowedDomains.length || !allowedDomains.includes(domain)) return res.status(400).json({ error: 'Please use a valid school email address.' });
+    if (!['STUDENT', 'FACULTY', 'DEAN'].includes(role)) return res.status(400).json({ error: 'Choose Student, Faculty or Dean.' });
+    if (!['Male', 'Female'].includes(gender)) return res.status(400).json({ error: 'Choose Male or Female.' });
+    if (await User.findOne({ email }).select('_id')) return res.status(409).json({ error: 'An account already uses this email.' });
+
+    const account = {
+      name: cleanName,
       email,
-      programPosition,
-      room,
-      ...((role || 'FACULTY') === 'FACULTY' && (programOfPosition(programPosition) || hasProgram) ? { program: programOfPosition(programPosition) || program.trim() } : {}), // a head's program is the one in the position
-      role: role || 'FACULTY',
-      schoolId,
-      facultyId,
+      role,
+      accountStatus: 'ACTIVE',
+      isVerified: false,
+      onboardingComplete: false,
       currentStatus: 'OUT_OF_OFFICE',
-    });
+    };
+    if (gender) account.gender = gender;
 
-    await newUser.save();
-    res.json({ message: 'Account provisioned successfully', facultyName: name, userId: newUser._id, role: newUser.role });
+    if (role === 'STUDENT') {
+      if (!isValidCohort(program, year, section)) return res.status(400).json({ error: 'Choose a valid program, year and section.' });
+      const idCheck = validateId(schoolId, 'STUDENT');
+      if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
+      if (await User.findOne({ schoolId: idCheck.id }).select('_id')) return res.status(409).json({ error: 'That School ID is already registered to another account.' });
+      account.schoolId = idCheck.id;
+      account.noIdYet = false;
+      account.programPosition = cohortLabel(program, year, section);
+    } else {
+      if (!isApprovedFacultyPosition(programPosition)) return res.status(400).json({ error: 'Please select an approved faculty or Dean position.' });
+      const idCheck = validateId(facultyId, 'EMPLOYEE');
+      if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
+      if (await User.findOne({ facultyId: idCheck.id }).select('_id')) return res.status(409).json({ error: 'That Employee ID is already registered to another account.' });
+      account.facultyId = idCheck.id;
+      account.noIdYet = false;
+      account.programPosition = String(programPosition).trim();
+      const headProgram = programOfPosition(account.programPosition);
+      if (employmentType && !isEmploymentType(employmentType)) return res.status(400).json({ error: 'Choose Full-time or Part-time.' });
+      if (employmentType) account.employmentType = employmentType;
+      if (headProgram) account.program = headProgram;
+      else if (program) {
+        if (!isProgram(program)) return res.status(400).json({ error: 'Program must be BS INFO, BS COMSCI or BLIS.' });
+        account.program = program.trim();
+      }
+    }
+
+    const newUser = await User.create(account);
+    if (newUser.activatedAt) {
+      await appendHistoryEvent({
+        userId: newUser._id, eventType: 'ACCOUNT_ACTIVATED', actorId: req.user.userId, actorRole: req.user.role,
+        details: { activatedAt: newUser.activatedAt },
+      });
+    }
+    res.json({ message: 'Account provisioned successfully', facultyName: newUser.name, userId: newUser._id, role: newUser.role });
   } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ error: 'An account with that email or ID already exists.' });
+    console.error('Provisioning error:', error.message);
     res.status(500).json({ error: 'Error provisioning account' });
   }
 });
+
+const BULK_UPLOAD_LIMIT = 2 * 1024 * 1024;
+const bulkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: BULK_UPLOAD_LIMIT, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const name = String(file.originalname || '').toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.csv')) {
+      cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Unsupported file type.'));
+      return;
+    }
+    cb(null, true);
+  },
+});
+const bulkRowsUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fields: 1, fieldSize: 512 * 1024, files: 0 },
+});
+
+function parseBulkRows(req, res, next) {
+  bulkRowsUpload.none()(req, res, (error) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError) {
+      return res.status(413).json({ error: 'Edited rows exceed the request limit or contain unsupported file data.' });
+    }
+    return next(error);
+  });
+}
+
+const STUDENT_TEMPLATE_HEADERS = ['Full name', 'School email', 'School ID', 'Program', 'Year', 'Section', 'Gender'];
+const FACULTY_TEMPLATE_HEADERS = ['Full name', 'School email', 'Employee ID', 'Position', 'Program (optional)', 'Role (Faculty or Dean)', 'Employment type (optional)', 'Gender'];
+
+function safeCsvCell(value) {
+  let out = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(out)) out = "'" + out;
+  return '"' + out.replace(/"/g, '""') + '"';
+}
+
+function addTemplateSheet(workbook, kind) {
+  const headers = kind === 'student' ? STUDENT_TEMPLATE_HEADERS : FACULTY_TEMPLATE_HEADERS;
+  const sheet = workbook.addWorksheet(kind === 'student' ? 'Students' : 'Faculty');
+  sheet.addRow(headers);
+  headers.forEach((header, index) => {
+    sheet.getColumn(index + 1).width = Math.max(18, header.length + 4);
+  });
+  sheet.getRow(1).font = { bold: true };
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+}
+
+router.get('/bulk/template/:kind.xlsx', requireAuth(['ADMIN']), async (req, res) => {
+  try {
+    const kind = String(req.params.kind || '').toLowerCase();
+    if (!['student', 'faculty'].includes(kind)) return res.status(404).json({ error: 'Unknown template.' });
+    const workbook = new ExcelJS.Workbook();
+    addTemplateSheet(workbook, kind);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${kind}-account-template.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch {
+    res.status(500).json({ error: 'Could not create the spreadsheet template.' });
+  }
+});
+
+router.get('/bulk/template/:kind.csv', requireAuth(['ADMIN']), (req, res) => {
+  const kind = String(req.params.kind || '').toLowerCase();
+  if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Unknown template.' });
+  const headers = kind === 'student' ? STUDENT_TEMPLATE_HEADERS : FACULTY_TEMPLATE_HEADERS;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${kind}-account-template.csv"`);
+  res.send(headers.map(safeCsvCell).join(',') + '\r\n');
+});
+
+function workbookRows(buffer, originalName) {
+  return (async () => {
+    if (!buffer || buffer.length === 0) throw new Error('The selected file is empty.');
+    const workbook = new ExcelJS.Workbook();
+    const lowerName = String(originalName || '').toLowerCase();
+    if (lowerName.endsWith('.xlsx')) {
+      await workbook.xlsx.load(buffer);
+    } else if (lowerName.endsWith('.csv')) {
+      await workbook.csv.read(Readable.from(buffer));
+    } else {
+      throw new Error('Only .xlsx and .csv files are accepted.');
+    }
+    const sheet = workbook.worksheets[0];
+    if (!sheet) throw new Error('The spreadsheet is empty.');
+    if (sheet.rowCount < 2) throw new Error('The spreadsheet is empty.');
+
+    const headerRow = sheet.getRow(1);
+    const headers = {};
+    headerRow.eachCell((cell, colNumber) => {
+      if (cell.type === 6 || cell.formula) throw new Error('Spreadsheet headers cannot contain formulas.');
+      const canonical = importFieldForHeader(cell.value);
+      if (canonical) headers[canonical] = colNumber;
+    });
+
+    const rows = [];
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const get = (canonical) => {
+        const colNumber = headers[canonical];
+        if (!colNumber) return '';
+        const cell = row.getCell(colNumber);
+        if (cell.type === 6 || cell.formula) return '=' + String(cell.result ?? cell.value?.result ?? '');
+        if (cell.type === 5 && cell.value?.text) return text(cell.value.text);
+        return text(cell.value);
+      };
+      const candidate = {
+        name: get('name'),
+        email: get('email'),
+        schoolId: get('schoolId'),
+        employeeId: get('employeeId'),
+        program: get('program'),
+        year: get('year'),
+        section: get('section'),
+        gender: get('gender'),
+        position: get('position'),
+        role: get('role'),
+        employmentType: get('employmentType'),
+      };
+      if (Object.values(candidate).some(v => text(v) !== '')) {
+        rows.push(candidate);
+      }
+    });
+    if (rows.length > MAX_ROWS) throw new Error(`The spreadsheet exceeds the ${MAX_ROWS}-row limit.`);
+    if (!rows.length) throw new Error('The spreadsheet contains no account rows.');
+    return rows;
+  })();
+}
+
+async function handleBulkPreview(req, res) {
+  try {
+    const kind = String(req.query.template || '').toLowerCase();
+    if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Choose a Student or Faculty template.' });
+    if (!req.file) return res.status(400).json({ error: 'Choose an Excel or CSV file.' });
+    const rows = (await workbookRows(req.file.buffer, req.file.originalname))
+      .map(row => ({ ...row, name: normalizePersonName(row.name) }));
+    const results = await validateImportRows(User, rows, kind, process.env);
+    res.json({
+      template: kind,
+      totalRows: results.length,
+      validRows: results.filter(r => r.valid).length,
+      rejectedRows: results.filter(r => !r.valid).length,
+      rows: results.map(r => ({
+        rowNumber: r.rowNumber,
+        valid: r.valid,
+        errors: r.errors,
+        submitted: r.submitted,
+      })),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Could not read the spreadsheet.' });
+  }
+}
+
+function bulkRowsFromBody(body) {
+  let parsedRows = body?.rows;
+  if (typeof parsedRows === 'string') {
+    try {
+      parsedRows = JSON.parse(parsedRows);
+    } catch {
+      throw new Error('Edited rows could not be read. Please review the preview and try again.');
+    }
+  }
+  if (!Array.isArray(parsedRows) || parsedRows.length === 0 || parsedRows.length > MAX_ROWS) {
+    throw new Error(`Send between 1 and ${MAX_ROWS} account rows.`);
+  }
+  const fields = ['name', 'email', 'schoolId', 'employeeId', 'program', 'year', 'section', 'gender', 'position', 'role', 'employmentType'];
+  return parsedRows.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error('Each edited row must be an account record.');
+    }
+    const source = item.submitted && typeof item.submitted === 'object' && !Array.isArray(item.submitted)
+      ? item.submitted
+      : item;
+    const submitted = {};
+    for (const field of fields) {
+      const value = source[field];
+      const cleanValue = value === null || value === undefined ? '' : String(value).trim();
+      submitted[field] = field === 'name' ? normalizePersonName(cleanValue) : cleanValue;
+    }
+    return {
+      rowNumber: Number.isInteger(item.rowNumber) && item.rowNumber >= 2
+        ? item.rowNumber
+        : index + 2,
+      submitted,
+    };
+  });
+}
+
+async function handleBulkRevalidate(req, res) {
+  try {
+    const kind = String(req.query.template || '').toLowerCase();
+    if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Choose a Student or Faculty template.' });
+    const rows = bulkRowsFromBody(req.body);
+    const results = await validateImportRows(User, rows, kind, process.env);
+    res.json({
+      template: kind,
+      totalRows: results.length,
+      validRows: results.filter(r => r.valid).length,
+      rejectedRows: results.filter(r => !r.valid).length,
+      rows: results.map(r => ({
+        rowNumber: r.rowNumber,
+        valid: r.valid,
+        errors: r.errors,
+        submitted: r.submitted,
+      })),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Could not validate the edited rows.' });
+  }
+}
+
+async function handleBulkConfirm(req, res) {
+  try {
+    const kind = String(req.query.template || '').toLowerCase();
+    if (!['student', 'faculty'].includes(kind)) return res.status(400).json({ error: 'Choose a Student or Faculty template.' });
+    const rows = bulkRowsFromBody(req.body);
+    const results = await validateImportRows(User, rows, kind, process.env);
+
+    let created = 0;
+    const rejected = [];
+    for (const result of results) {
+      if (!result.valid) {
+        rejected.push({
+          rowNumber: result.rowNumber,
+          submitted: result.submitted,
+          reason: result.errors.join(' '),
+        });
+        continue;
+      }
+      try {
+        const user = await User.create(result.account);
+        if (user.activatedAt) {
+          try {
+            await appendHistoryEvent({
+              userId: user._id, eventType: 'ACCOUNT_ACTIVATED', actorId: req.user.userId, actorRole: req.user.role,
+              details: { activatedAt: user.activatedAt },
+            });
+          } catch (historyError) {
+            console.error('Provisioned account activation history failed:', historyError.message);
+            return res.status(500).json({
+              error: `Account row ${result.rowNumber} was created, but its activation history could not be recorded. Check User Management before retrying.`,
+              created,
+            });
+          }
+        }
+        created += 1;
+      } catch (error) {
+        if (error && error.code !== 11000 && error.name !== 'ValidationError') throw error;
+        let reason = 'Database validation failed.';
+        if (error && error.code === 11000) reason = 'An account with that email or ID already exists.';
+        rejected.push({ rowNumber: result.rowNumber, submitted: result.submitted, reason });
+      }
+    }
+
+    res.json({
+      template: kind,
+      totalRows: results.length,
+      created,
+      rejected: rejected.length,
+      rejectedRows: rejected,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Could not import the spreadsheet.' });
+  }
+}
+
+router.post('/bulk/preview', requireAuth(['ADMIN']), bulkUpload.single('file'), handleBulkPreview);
+router.post('/bulk/revalidate', requireAuth(['ADMIN']), parseBulkRows, handleBulkRevalidate);
+router.post('/bulk/confirm', requireAuth(['ADMIN']), parseBulkRows, handleBulkConfirm);
 
 // PATCH /api/faculty/program/:id  { program }  - set or clear (program: '') the program of a faculty account
 router.patch('/program/:id', requireAuth(STAFF), async (req, res) => {
@@ -576,7 +907,12 @@ router.post('/added-hours', requireAuth(['FACULTY', 'DEAN']), async (req, res) =
     if (hit(official)) return res.status(400).json({ error: 'That time is already part of your weekly consultation hours.' });
     if (hit(added)) return res.status(400).json({ error: 'You already added hours that overlap this time.' });
 
-    res.json(await AddedConsultationHours.create({ facultyId, dayOfWeek: dow, startTime, endTime }));
+    const addedHour = await AddedConsultationHours.create({ facultyId, dayOfWeek: dow, startTime, endTime });
+    await appendHistoryEvent({
+      userId: facultyId, eventType: 'ADDED_CONSULTATION_HOURS',
+      ...appendActor(req), details: { dayOfWeek: dow, startTime, endTime },
+    });
+    res.json(addedHour);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Could not add the hours.' });
   }
@@ -603,6 +939,10 @@ router.delete('/added-hours/:id', requireAuth(['FACULTY', 'DEAN']), async (req, 
       return res.status(400).json({ error: 'Students have upcoming requests in these hours. Decline or cancel them first.' });
     }
     await block.deleteOne();
+    await appendHistoryEvent({
+      userId: block.facultyId, eventType: 'ADDED_CONSULTATION_HOURS_REMOVED',
+      ...appendActor(req), details: { dayOfWeek: block.dayOfWeek, startTime: block.startTime, endTime: block.endTime },
+    });
     res.json({ message: 'Added hours removed.' });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Could not remove the hours.' });
@@ -664,13 +1004,13 @@ router.post('/appointment', requireAuth(['STUDENT']), async (req, res) => {
       reason,
       status: 'PENDING'
     });
-
     // Two requests sent at the same moment can both pass the check above: count again and undo this one if it went over.
     if (limitCheck.limit && (await sameWeek()).length > limitCheck.limit) { // this request is already saved, so it is counted too
       await Appointment.deleteOne({ _id: newAppointment._id });
       return res.status(429).json({ error: limitMessage(faculty.name, limitCheck.limit), code: 'WEEKLY_LIMIT', limit: limitCheck.limit });
     }
 
+    await appendAppointmentHistory(newAppointment, 'APPOINTMENT_REQUESTED', appendActor(req));
     await notify(facultyId, {
       type: 'APPOINTMENT_REQUEST',
       title: 'New consultation request',
@@ -721,8 +1061,18 @@ router.patch('/users/:id/verify', requireAuth(STAFF), async (req, res) => {
       return res.status(400).json({ error: 'This role cannot be verified this way.' });
     }
 
+    const previousStatus = user.accountStatus;
     user.accountStatus = 'ACTIVE';
+    user.activatedAt = activationAtForApproval({
+      previousStatus, currentStatus: user.accountStatus, activatedAt: user.activatedAt,
+    });
     await user.save();
+    if (previousStatus !== 'ACTIVE') {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ACCOUNT_ACTIVATED', ...appendActor(req),
+        details: { activatedAt: user.activatedAt },
+      });
+    }
 
     let emailSent = true;
     let notEmailed = false; // true when SMTP isn't set up, so nothing really left the server
@@ -765,14 +1115,9 @@ router.patch('/users/:id/id', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     const isStudent = user.role === 'STUDENT';
-    const idValue = String(req.body.idValue || '').trim().toUpperCase();
-    if (!(isStudent ? SCHOOL_ID_REGEX : FACULTY_ID_REGEX).test(idValue)) {
-      return res.status(400).json({
-        error: isStudent
-          ? 'Invalid School ID format. Use 2025-S00001 or 2025-1234-A.'
-          : 'Invalid Faculty ID format. Use 2025S-00001.'
-      });
-    }
+    const idCheck = validateId(req.body.idValue, isStudent ? 'STUDENT' : 'EMPLOYEE');
+    if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
+    const idValue = idCheck.id;
     const taken = await User.findOne({ [isStudent ? 'schoolId' : 'facultyId']: idValue, _id: { $ne: user._id } });
     if (taken) return res.status(400).json({ error: 'Another account already uses this ID.' });
 
@@ -816,8 +1161,8 @@ router.patch('/users/:id/email', requireAuth(['ADMIN']), async (req, res) => {
   }
 });
 
-// ADMIN: disable / re-enable a student or faculty account.
-// Disabled = accountStatus RESTRICTED: they cannot sign in (password login, Google sign-in, or an
+// ADMIN: disable / re-enable a student, faculty or Dean account.
+// Disabled = accountStatus RESTRICTED or ARCHIVED: they cannot sign in (password login, Google sign-in, or an
 // already-open session) and faculty are hidden from booking lists. Appointments, ID and records are kept.
 router.patch('/users/:id/status', requireAuth(['ADMIN']), async (req, res) => {
   try {
@@ -827,24 +1172,36 @@ router.patch('/users/:id/status', requireAuth(['ADMIN']), async (req, res) => {
     if (req.params.id === req.user.userId) {
       return res.status(400).json({ error: 'You cannot disable your own account.' });
     }
-    const user = await User.findById(req.params.id).select('name role accountStatus');
+    const user = await User.findById(req.params.id).select('name role accountStatus activatedAt');
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.role !== 'STUDENT' && user.role !== 'FACULTY') {
-      return res.status(400).json({ error: 'Only student and faculty accounts can be disabled here.' });
+    if (!canDisableRole(user.role)) {
+      return res.status(400).json({ error: 'Only student, faculty and Dean accounts can be disabled here.' });
     }
 
     if (req.body.disabled) {
       if (user.accountStatus !== 'ACTIVE' && user.accountStatus !== 'RESTRICTED') {
-        return res.status(400).json({ error: 'Only active accounts can be disabled.' });
+        return res.status(400).json({ error: 'Only active or restricted accounts can be disabled.' });
       }
-      await User.updateOne({ _id: user._id }, { accountStatus: 'RESTRICTED' });
+      const previousStatus = user.accountStatus;
+      user.accountStatus = 'RESTRICTED';
+      await user.save();
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ACCOUNT_DISABLED', ...appendActor(req),
+        details: { fromStatus: previousStatus, toStatus: 'RESTRICTED' },
+      });
       return res.json({ message: `${user.name}'s account is disabled.`, user: { _id: user._id, accountStatus: 'RESTRICTED' } });
     }
 
-    if (user.accountStatus !== 'RESTRICTED') {
+    if (!canEnableAccountStatus(user.accountStatus)) {
       return res.status(400).json({ error: 'This account is not disabled.' });
     }
-    await User.updateOne({ _id: user._id }, { accountStatus: 'ACTIVE' });
+    const previousStatus = user.accountStatus;
+    user.accountStatus = 'ACTIVE';
+    await user.save();
+    await appendHistoryEvent({
+      userId: user._id, eventType: 'ACCOUNT_ENABLED', ...appendActor(req),
+      details: { fromStatus: previousStatus, toStatus: 'ACTIVE' },
+    });
     res.json({ message: `${user.name}'s account is enabled again.`, user: { _id: user._id, accountStatus: 'ACTIVE' } });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Could not update the account.' });
@@ -861,6 +1218,14 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     if (user.role !== 'STUDENT' && user.role !== 'FACULTY' && user.role !== 'DEAN') {
       return res.status(400).json({ error: 'Only student, faculty and Dean accounts can be edited here.' });
     }
+    const previousRole = user.role;
+    const previousRoleDetails = {
+      schoolId: user.schoolId || '',
+      facultyId: user.facultyId || '',
+      program: user.program || '',
+      programPosition: user.programPosition || '',
+      employmentType: user.employmentType || '',
+    };
     const wasStudent = user.role === 'STUDENT';
     let isStudent = wasStudent;
     const { name, gender, idValue, program, year, section, employmentType, role: newRole, programPosition: newPosition } = req.body || {};
@@ -892,7 +1257,7 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     if (name !== undefined) {
-      const clean = String(name).replace(/\s+/g, ' ').trim();
+      const clean = normalizePersonName(name);
       if (clean.length < 2 || clean.length > 100) return res.status(400).json({ error: 'Name must be 2 to 100 characters.' });
       user.name = clean;
     }
@@ -903,12 +1268,9 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     if (idValue !== undefined) {
-      const id = String(idValue || '').trim().toUpperCase();
-      if (!(isStudent ? SCHOOL_ID_REGEX : FACULTY_ID_REGEX).test(id)) {
-        return res.status(400).json({
-          error: isStudent ? 'Invalid School ID format. Use 2025-S00001 or 2025-1234-A.' : 'Invalid Faculty ID format. Use 2025S-00001.'
-        });
-      }
+      const idCheck = validateId(idValue, isStudent ? 'STUDENT' : 'EMPLOYEE');
+      if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
+      const id = idCheck.id;
       const taken = await User.findOne({ [isStudent ? 'schoolId' : 'facultyId']: id, _id: { $ne: user._id } }).select('_id');
       if (taken) return res.status(400).json({ error: 'Another account already uses this ID.' });
       if (isStudent) user.schoolId = id; else user.facultyId = id;
@@ -936,6 +1298,19 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     await user.save({ validateModifiedOnly: true });
+    const changedProfileFields = Object.keys(req.body || {}).filter(field => field !== 'role');
+    if (changedProfileFields.length) {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'PROFILE_UPDATED', ...appendActor(req),
+        details: { fields: changedProfileFields },
+      });
+    }
+    if (previousRole !== user.role) {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ROLE_CHANGED', ...appendActor(req),
+        details: { fromRole: previousRole, toRole: user.role, previousRoleDetails },
+      });
+    }
     res.json({
       message: `${user.name}'s account was updated.`,
       user: { _id: user._id, name: user.name, role: user.role, gender: user.gender, schoolId: user.schoolId, facultyId: user.facultyId, noIdYet: user.noIdYet, programPosition: user.programPosition,
@@ -950,7 +1325,7 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
 // ADMIN: correct a user's display name (Google names are copied once at account creation).
 router.patch('/users/:id/name', requireAuth(['ADMIN']), async (req, res) => {
   try {
-    const name = String(req.body.name || '').replace(/\s+/g, ' ').trim();
+    const name = normalizePersonName(req.body.name);
     if (name.length < 2 || name.length > 100) {
       return res.status(400).json({ error: 'Name must be 2 to 100 characters.' });
     }
@@ -1019,6 +1394,10 @@ router.post('/status-entry', requireAuth(['FACULTY', 'DEAN']), async (req, res) 
       facultyId: req.user.userId, type, startAt: now, endAt: end.endAt,
     });
     await StatusHistory.create({ facultyId: req.user.userId, status: type });
+    await appendHistoryEvent({
+      userId: req.user.userId, eventType: 'FACULTY_STATUS_SET', ...appendActor(req),
+      details: { status: type, startAt: entry.startAt, endAt: entry.endAt },
+    });
     res.status(201).json(entry);
   } catch (err) {
     res.status(500).json({ error: 'Error setting status' });
@@ -1110,6 +1489,7 @@ router.post('/appointment/:id/appeal', requireAuth(['STUDENT', 'FACULTY', 'DEAN'
 
     apt.appeal = { by: role, reason, status: 'SUBMITTED', submittedAt: new Date() }; // record only: no accept/reject review
     await apt.save();
+    await appendAppointmentHistory(apt, 'APPEAL_SUBMITTED', { ...appendActor(req), details: { appealBy: role } });
 
     const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
     if (role === 'STUDENT') {
@@ -1210,8 +1590,17 @@ router.post('/consultation-hours', requireAuth(['FACULTY', 'DEAN']), async (req,
       }
     }
 
+    const previous = await ConsultationHours.find({ facultyId }).select('dayOfWeek startTime endTime').lean();
     await ConsultationHours.deleteMany({ facultyId });
     const created = await ConsultationHours.insertMany(hours.map(h => ({ ...h, facultyId })));
+    await appendHistoryEvent({
+      userId: facultyId, eventType: 'CONSULTATION_HOURS_REPLACED',
+      ...appendActor(req),
+      details: {
+        previous: previous.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime })),
+        current: created.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime })),
+      },
+    });
     res.json({ message: 'Consultation hours saved.', hours: created });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -1364,6 +1753,9 @@ router.patch('/appointment/:id/complete', requireAuth(['FACULTY', 'DEAN']), asyn
       ...(wasMissed ? { correctedAt: new Date(), correctedFrom: apt.status } : {}),
     }, { completedAt: { $exists: false } });
     if (!done) return res.status(409).json({ error: CHANGED_MESSAGE });
+    await appendAppointmentHistory(done, 'CONSULTATION_COMPLETED', {
+      ...appendActor(req), details: { fromStatus: apt.status, toStatus: done.status },
+    });
 
     await notify(await resolveStudentId(apt), {
       type: 'CONSULTATION_LOGGED',
@@ -1398,6 +1790,7 @@ router.patch('/appointment/:id/consultation-log', requireAuth(['FACULTY', 'DEAN'
     apt.casePresented = apt.casePresented || apt.reason;
     apt.interventionTaken = interventionTaken;
     await apt.save();
+    await appendAppointmentHistory(apt, 'CONSULTATION_LOG_UPDATED', appendActor(req));
 
     res.json({ message: 'Consultation log updated.', appointment: apt });
   } catch (error) {
@@ -1424,6 +1817,9 @@ router.patch('/appointment/:id/cancel', requireAuth(['FACULTY', 'DEAN']), async 
     if (!reason) return res.status(400).json({ error: 'Please select or enter a reason.' });
     const cancelled = await transition(Appointment, apt._id, 'APPROVED', { status: 'CANCELLED BY FACULTY', cancelReason: reason });
     if (!cancelled) return res.status(409).json({ error: CHANGED_MESSAGE });
+    await appendAppointmentHistory(cancelled, 'APPOINTMENT_STATUS_CHANGED', {
+      ...appendActor(req), details: { fromStatus: apt.status, toStatus: cancelled.status },
+    });
 
     const faculty = await User.findById(req.user.userId).select('name');
     await notify(await resolveStudentId(apt), {
@@ -1460,6 +1856,9 @@ router.post('/appointments/bulk-cancel', requireAuth(['STUDENT', 'FACULTY', 'DEA
 
       const moved = await transition(Appointment, apt._id, apt.status, { status: d.newStatus, cancelReason: reason });
       if (!moved) { skipped.push({ id, reason: 'Just updated by someone else.' }); continue; }
+      await appendAppointmentHistory(moved, 'APPOINTMENT_STATUS_CHANGED', {
+        ...appendActor(req), details: { fromStatus: apt.status, toStatus: moved.status },
+      });
       cancelled.push(id);
 
       const when = `${fmtDate(apt.date)} at ${fmtTime(apt.time)}`;
@@ -1495,6 +1894,9 @@ router.patch('/appointment/:id/no-show', requireAuth(['FACULTY', 'DEAN']), async
     if (!reason) return res.status(400).json({ error: 'Please select or enter a reason.' });
     const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (STUDENT)', missedAt: new Date(), missReason: reason, missedBy: 'FACULTY' });
     if (!marked) return res.status(409).json({ error: CHANGED_MESSAGE });
+    await appendAppointmentHistory(marked, 'APPOINTMENT_STATUS_CHANGED', {
+      ...appendActor(req), details: { fromStatus: apt.status, toStatus: marked.status },
+    });
 
     await notify(await resolveStudentId(apt), {
       type: 'APPOINTMENT_UPDATE',
@@ -1520,6 +1922,9 @@ router.patch('/appointment/:id/faculty-missed', requireAuth(['STUDENT']), async 
 
     const marked = await transition(Appointment, apt._id, 'APPROVED', { status: 'MISSED (FACULTY)', missedAt: new Date(), missReason: d.reason, missedBy: 'STUDENT' });
     if (!marked) return res.status(409).json({ error: CHANGED_MESSAGE });
+    await appendAppointmentHistory(marked, 'APPOINTMENT_STATUS_CHANGED', {
+      ...appendActor(req), details: { fromStatus: apt.status, toStatus: marked.status },
+    });
 
     await notify(apt.facultyId, {
       type: 'APPOINTMENT_UPDATE',
@@ -1820,5 +2225,12 @@ router.patch('/broadcasts/:id/end', requireAuth(['DEAN']), async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Server error ending broadcast.' }); }
 });
 
+router.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'The file exceeds the 2 MB limit.' });
+    if (error.code === 'LIMIT_UNEXPECTED_FILE') return res.status(400).json({ error: 'Only .xlsx and .csv files are accepted.' });
+  }
+  next(error);
+});
 
 module.exports = router;

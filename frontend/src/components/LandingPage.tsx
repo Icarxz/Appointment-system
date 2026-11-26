@@ -1,5 +1,5 @@
 import React from 'react';
-import { EmailIcon, PhoneIcon, CalendarIcon, CheckCircleIcon, ChevronRightIcon, ArrowBackIcon, InfoOutlineIcon } from '@chakra-ui/icons';
+import { EmailIcon, PhoneIcon, CalendarIcon, CheckCircleIcon, ChevronRightIcon, InfoOutlineIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
 import { isSafeAppLink, linkMatchesRole } from '../utils/deepLink';
 import GoogleSignInButton from './GoogleSignInButton';
@@ -120,13 +120,13 @@ const SERVICES = [
 ];
 
 const STEPS = [
-  { icon: EmailIcon, title: '1. Sign in', text: 'Use your university email to log in or create an account.' },
+  { icon: EmailIcon, title: '1. Sign in', text: 'Use your administrator-provisioned university account to log in.' },
   { icon: CalendarIcon, title: '2. Choose a time & faculty', text: 'Pick a consultant and an open slot that fits your schedule.' },
   { icon: CheckCircleIcon, title: '3. Get confirmed', text: 'Your faculty approves the request and you get notified in your Mail.' },
 ];
 
 const FAQS = [
-  { q: 'Who can use CCIS Sync?', a: 'Students and faculty of the College of Computing and Information Sciences. Sign in with your school Google account (@antiquespride.edu.ph) and complete your profile with your School/Employee ID.' },
+  { q: 'Who can use CCIS Sync?', a: 'Students, faculty, Deans and administrators of the College of Computing and Information Sciences need an account created by the System Administrator before they can sign in.' },
   { q: 'How do I appoint a consultation?', a: 'Log in, choose a faculty member and an available time, then submit your request with a short reason. The faculty member approves or declines it, and you are notified in your Mail.' },
   { q: 'Can I cancel an appointment?', a: 'Yes. You can cancel your own appointment from your dashboard, and the faculty member is notified.' },
   { q: 'Why is my account still pending?', a: 'New student and faculty accounts are reviewed by an administrator before access is granted. You will get an email once yours is approved; click the link in it to confirm your email, then log in.' },
@@ -136,6 +136,20 @@ const FAQS = [
 export default function LandingPage() {
   const navigate = useNavigate();
   const toast = useToast();
+
+  React.useEffect(() => {
+    const notice = sessionStorage.getItem('accountDisabledNotice');
+    if (!notice) return;
+    sessionStorage.removeItem('accountDisabledNotice');
+    toast({
+      title: 'Account disabled',
+      description: notice,
+      duration: 9000,
+      isClosable: true,
+      status: 'error',
+      position: 'top',
+    });
+  }, [toast]);
 
   // Theme tokens (light by default, readable in dark mode too)
   const pageBg = useColorModeValue(LIGHT, '#0b1220');
@@ -148,24 +162,19 @@ export default function LandingPage() {
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const modalBg = useColorModeValue('white', 'gray.800');
   const tabDivider = useColorModeValue('#dbeaf3', 'whiteAlpha.300');
-  const tabInactiveBg = useColorModeValue('#f7fbfd', 'whiteAlpha.50');
   const heroGradient = useColorModeValue('linear(to-b, #f3fafd, #e3f2f9)', 'linear(to-b, #0b1220, #0f1d33)');
   const faqHoverBg = useColorModeValue('#f3fafd', 'gray.700');
   const outlineBorder = useColorModeValue(NAVY, 'whiteAlpha.700');
   const outlineHoverBg = useColorModeValue('#dff0f8', 'whiteAlpha.200');
-  const choiceBg = useColorModeValue('#f3fafd', 'whiteAlpha.100');
-  const choiceBorder = useColorModeValue('#cfe3ef', 'whiteAlpha.300');
   const assistBg = useColorModeValue('#eaf5fb', 'whiteAlpha.100');
   const assistBorder = useColorModeValue('#9fd0e6', 'whiteAlpha.300');
 
   // Login / registration modal ("Book" buttons open it)
   const { isOpen, onOpen, onClose: closeModal } = useDisclosure();
-  // Step 1 is always the role choice. It only says which sign-in screen to show (and which audience the server checks);
-  // the server still decides the real role.
-  const [authStep, setAuthStep] = React.useState<'login' | 'role' | 'student' | 'faculty'>('login');
-  // "Log in" (and the Appoint Consultation buttons) go straight to Google for everyone; "Sign up" starts at the role choice.
-  const openAuth = (step: 'login' | 'role' = 'login') => { setAuthStep(step); onOpen(); };
-  const onClose = () => { closeModal(); setAuthStep('login'); };
+  // Unified authentication. The server decides the real role from the account record.
+  // "Log in" (and the Appoint Consultation buttons) go straight to Google for every provisioned role.
+  const openAuth = (_step: 'login' = 'login') => { onOpen(); };
+  const onClose = () => { closeModal(); };
 
   const goTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -181,6 +190,7 @@ export default function LandingPage() {
     localStorage.setItem('programPosition', data.programPosition || '');
     localStorage.setItem('userEmail', data.email || '');
     localStorage.setItem('onboardingComplete', data.onboardingComplete === false ? 'false' : 'true');
+    localStorage.setItem('credentialConfirmationRequired', String(data.credentialConfirmationRequired === true));
 
     toast({ title: 'Login Successful', status: 'success', duration: 2000 });
 
@@ -188,7 +198,7 @@ export default function LandingPage() {
     // One-shot, and only used when it is an allowlisted path on THIS person's own dashboard.
     const intendedRoute = sessionStorage.getItem('intendedRoute');
     sessionStorage.removeItem('intendedRoute');
-    if (isSafeAppLink(intendedRoute) && linkMatchesRole(intendedRoute, data.role)) {
+    if (data.credentialConfirmationRequired !== true && isSafeAppLink(intendedRoute) && linkMatchesRole(intendedRoute, data.role)) {
       navigate(intendedRoute);
       return;
     }
@@ -201,8 +211,7 @@ export default function LandingPage() {
   };
 
   // The only way to sign in. The server verifies the token, checks the school domain and decides the role (student, faculty,
-  // dean or admin) from its own records; the browser never sends a role. The audience only says which door was used:
-  // LOGIN = Log in (existing accounts only), STUDENT = Sign up > Student, STAFF = Sign up > Faculty (also Dean and Admin).
+  // dean or admin) from its own records; the browser never sends a role. LOGIN is used by the current frontend.
   const handleGoogleCredential = async (credential: string, audience: 'LOGIN' | 'STUDENT' | 'STAFF') => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/google`, {
@@ -212,79 +221,22 @@ export default function LandingPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      finishLogin(data); // an incomplete profile is finished on the dashboard (ProfileGate)
+      finishLogin(data); // provisioned accounts with saved details review them on My Profile after sign-in
     } catch (error: any) {
       toast({ title: 'Sign-in failed', description: error.message, duration: 9000, isClosable: true, status: 'error', position: 'top' });
     }
   };
 
-  const backToRoles = (
-    <Button variant="ghost" size="sm" leftIcon={<ArrowBackIcon />} color={headingColor} onClick={() => setAuthStep('role')} alignSelf="flex-start">
-      Back to Role Selection
-    </Button>
-  );
-
-  const roleChoice = (icon: any, title: string, text: string, step: 'student' | 'faculty') => (
-    <Box
-      as="button" type="button" onClick={() => setAuthStep(step)} textAlign="left" w="100%"
-      p={4} borderWidth="2px" borderColor={choiceBorder} bg={choiceBg} borderRadius="xl"
-      _hover={{ borderColor: TEAL, transform: 'translateY(-1px)' }} _focusVisible={{ boxShadow: `0 0 0 3px ${TEAL}` }}
-      transition="all 0.15s"
-    >
-      <HStack spacing={4} align="center">
-        <Flex w="48px" h="48px" borderRadius="full" bg={NAVY} color="white" align="center" justify="center" flexShrink={0}>
-          <Icon as={icon} boxSize={6} />
-        </Flex>
-        <Box flex="1" minW={0}>
-          <Text fontWeight="800" color={headingColor}>{title}</Text>
-          <Text fontSize="sm" color={bodyColor}>{text}</Text>
-        </Box>
-        <ChevronRightIcon boxSize={6} color={bodyColor} />
-      </HStack>
-    </Box>
-  );
-
   // Log in: Google only, same for every role (the server decides the role; no audience sent).
-  // Sign up: Student or Faculty first. Students continue with Google; Faculty only sees the administrator message (no faculty sign-up).
-  const authTabs = authStep === 'login' ? (
+  // All current authentication uses one administrator-provisioned account flow.
+  const authTabs = (
     <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
       <Text fontSize="sm" color={bodyColor}>
-        Sign in with your school Google account. Students, faculty, Dean and Admin all log in here. This is for existing accounts.
+        Sign in with your school Google account. Students, faculty, Dean and Admin accounts must be created by the System Administrator first.
       </Text>
       <VStack spacing={2}>
         <GoogleSignInButton onCredential={(c) => handleGoogleCredential(c, 'LOGIN')} />
         <Text fontSize="xs" color={bodyColor}>Use your @antiquespride.edu.ph account</Text>
-      </VStack>
-    </VStack>
-  ) : authStep === 'role' ? (
-    <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
-      <Text fontSize="sm" color={bodyColor}>Choose how you will use CCIS Sync.</Text>
-      {roleChoice(CapIcon, 'Student', 'Appoint consultations with your faculty.', 'student')}
-      {roleChoice(ChatBubbleIcon, 'Faculty', 'Faculty and Dean access.', 'faculty')}
-    </VStack>
-  ) : authStep === 'student' ? (
-    <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
-      {backToRoles}
-      <Heading size="md" color={headingColor}>Student Access</Heading>
-      <Text fontSize="sm" color={bodyColor}>
-        Sign in with your school Google account. First time here? Signing in creates your account, and you will then
-        complete your profile with your School ID.
-      </Text>
-      <VStack spacing={2}>
-        <GoogleSignInButton onCredential={(c) => handleGoogleCredential(c, 'STUDENT')} />
-        <Text fontSize="xs" color={bodyColor}>Use your @antiquespride.edu.ph account</Text>
-      </VStack>
-    </VStack>
-  ) : (
-    <VStack p={{ base: 5, sm: 8 }} spacing={4} align="stretch">
-      {backToRoles}
-      <Box>
-        <Heading size="md" color={headingColor}>Faculty Access</Heading>
-        <Text fontWeight="700" color={headingColor} mt={1}>Welcome Back!</Text>
-        <Text fontSize="sm" color={bodyColor}>Sign in using your registered school Google account.</Text>
-      </Box>
-      <VStack spacing={2}>
-        <GoogleSignInButton onCredential={(c) => handleGoogleCredential(c, 'STAFF')} />
       </VStack>
       <HStack align="flex-start" spacing={3} p={4} borderRadius="lg" borderWidth="1px" borderColor={assistBorder} bg={assistBg} role="note">
         <InfoOutlineIcon mt="3px" color={TEAL} flexShrink={0} />
@@ -306,11 +258,6 @@ export default function LandingPage() {
     { label: 'Contact', id: 'contact' },
   ];
 
-  const pillPrimary = {
-    bg: NAVY, color: 'white', borderRadius: 'full', fontWeight: 700, letterSpacing: '0.04em',
-    _hover: { bg: CARD }, _active: { bg: CARD },
-  };
-
   const authButtons = (
     <HStack spacing={{ base: 2, sm: 3 }} flexShrink={0}>
       <Button
@@ -321,7 +268,6 @@ export default function LandingPage() {
       >
         Log in
       </Button>
-      <Button size="sm" px={{ base: 3, sm: 5 }} {...pillPrimary} onClick={() => openAuth('role')}>Sign up</Button>
     </HStack>
   );
 
@@ -521,33 +467,24 @@ export default function LandingPage() {
         </Container>
       </Box>
 
-      {/* ================= LOGIN / REGISTER MODAL ================= */}
+      {/* ================= LOGIN MODAL ================= */}
       <Modal isOpen={isOpen} onClose={onClose} size="lg" isCentered scrollBehavior="inside">
         <ModalOverlay backdropFilter="blur(4px)" />
         <ModalContent borderRadius="2xl" overflow="hidden" bg={modalBg}>
-          {/* Log in | Sign up tabs, in the same order and wording as the nav buttons. Sign up covers the role choice and both sign-up screens; Log in is the Google-only screen. */}
+          {/* Unified login for all provisioned roles. */}
           <Flex role="tablist" aria-label="Account" borderBottomWidth="1px" borderColor={tabDivider}>
-            {([['login', 'Log in'], ['role', 'Sign up']] as const).map(([step, label]) => {
-              const active = step === 'login' ? authStep === 'login' : authStep !== 'login';
-              return (
-                <Box
-                  key={step} as="button" type="button" role="tab" aria-selected={active} flex="1" py={4}
-                  fontWeight="700" textAlign="center" color={active ? TEAL : bodyColor}
-                  bg={active ? 'transparent' : tabInactiveBg}
-                  borderBottomWidth="3px" borderBottomColor={active ? TEAL : 'transparent'} mb="-1px"
-                  _hover={{ color: TEAL }} _focusVisible={{ boxShadow: `inset 0 0 0 3px ${TEAL}` }}
-                  onClick={() => { if (!active) setAuthStep(step); }}
-                >
-                  {label}
-                </Box>
-              );
-            })}
-            {/* room for the close button, which sits over the right end of the tab row */}
+            <Box
+              role="tab" aria-selected="true" flex="1" py={4}
+              fontWeight="700" textAlign="center" color={TEAL}
+              borderBottomWidth="3px" borderBottomColor={TEAL} mb="-1px"
+            >
+              Log in
+            </Box>
             <Box w={12} flexShrink={0} />
           </Flex>
           <ModalHeader display="flex" alignItems="center" gap={3} pr={12} color={headingColor}>
             <LogoMark size={28} color={NAVY} />
-            <Text fontWeight="800" letterSpacing="0.04em">{authStep === 'login' ? 'Welcome back to CCIS Sync' : authStep === 'role' ? 'Create your CCIS Sync account' : authStep === 'student' ? 'CCIS Sync: Student' : 'CCIS Sync: Faculty'}</Text>
+            <Text fontWeight="800" letterSpacing="0.04em">Welcome back to CCIS Sync</Text>
           </ModalHeader>
           <ModalCloseButton top={3} />
           <ModalBody p={0}>

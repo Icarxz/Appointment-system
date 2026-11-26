@@ -42,6 +42,7 @@ Run `npm run check-email` locally to see what works on your own machine.
 | `GOOGLE_CLIENT_ID` | same OAuth client ID as the frontend |
 | `ALLOWED_EMAIL_DOMAIN` | `antiquespride.edu.ph` |
 | `ADMIN_EMAILS` | the admin school address(es) |
+| `REQUIRE_PROVISIONED_ACCOUNTS` | `true` to require Admin-provisioned accounts; `false` or unset retains compatibility behavior |
 | `NODE_ENV` | `production` |
 | `BREVO_API_KEY` | Brevo API key (permission: Transactional email = All only). Needs the Brevo mailer PR (#67) merged |
 | `BREVO_SENDER_EMAIL` | an address verified in Brevo (Settings > Senders, domains, IPs). Try the school address and the Gmail one; check spam |
