@@ -89,6 +89,13 @@ export interface ImportFile {
   identityRead: string;
   alreadyImported: string;
   importState: 'pending' | 'imported' | 'scheduled';
+  reviewDraft?: {
+    parsed: ImportParsed;
+    classes: ImportRow[];
+    hours: ImportRow[];
+    identity: boolean;
+    effDate: string;
+  };
 }
 
 export interface ImportSessionState {
@@ -139,6 +146,7 @@ interface ImportSessionActions {
   resetDraft: () => void;
   setReviewId: (id: string | null) => void;
   openReview: (id: string) => void;
+  backToList: () => void;
   closeReview: () => void;
   addFiles: (files: File[]) => Promise<void>;
   assignFaculty: (id: string, facultyId: string) => void;
@@ -423,7 +431,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
         return;
       }
       if (kind === 'bulk' && reviewId) {
-        patch(reviewId, { importState: data.status === 'ACTIVE' ? 'imported' : 'scheduled' });
+        patch(reviewId, { importState: data.status === 'ACTIVE' ? 'imported' : 'scheduled', reviewDraft: undefined });
       }
       setOutcome({ status: data.status, effectivityDate: data.effectivityDate, counts: data.counts });
       callbacksRef.current.onDone?.(data.status);
@@ -546,19 +554,31 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   const openReview = (id: string) => {
     const item = itemsRef.current.find(i => i.id === id);
     if (!item || !item.data || !item.facultyId) return;
+    const draft = item.reviewDraft;
     setFacultyId(item.facultyId);
     setFacultyName(facultyListRef.current.find(f => f._id === item.facultyId)?.name || '');
-    setParsed(item.data);
-    setClasses(item.data.classes);
-    setHours(item.data.consultationHours);
+    setParsed(draft?.parsed || item.data);
+    setClasses(draft?.classes || item.data.classes);
+    setHours(draft?.hours || item.data.consultationHours);
     setReport(null);
-    setIdentityState(false);
+    setIdentityState(draft?.identity || false);
     setFileHash(item.fileHash);
-    setEffDateState(item.data.metadata.effectivityDate || '');
+    setEffDateState(draft ? draft.effDate : item.data.metadata.effectivityDate || '');
     setOutcome(null);
     setReviewId(id);
   };
+  const backToList = () => {
+    if (kind !== 'bulk' || !reviewId || !parsed) return;
+    patch(reviewId, {
+      reviewDraft: { parsed, classes, hours, identity, effDate },
+      importState: 'pending',
+    });
+    setReport(null);
+    setOutcome(null);
+    setReviewId(null);
+  };
   const closeReview = () => {
+    if (reviewId) patch(reviewId, { reviewDraft: undefined });
     resetDraft();
     setReviewId(null);
   };
@@ -597,10 +617,10 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       notifyApplied,
       setIdentity, setEffDate, resetDraft,
       setReviewId,
-      openReview, closeReview,
+      openReview, backToList, closeReview,
       addFiles, assignFaculty, retryFile, removeFile, resetBulk,
     },
-  }), [active, kind, mode, facultyId, facultyName, facultyList, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, fileHash, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setEffDate, resetDraft, setReviewId, openReview, closeReview, addFiles, assignFaculty, retryFile, removeFile, resetBulk]);
+  }), [active, kind, mode, facultyId, facultyName, facultyList, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, fileHash, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setEffDate, resetDraft, setReviewId, openReview, backToList, closeReview, addFiles, assignFaculty, retryFile, removeFile, resetBulk]);
 
   return (
     <ImportSessionContext.Provider value={value}>{children}</ImportSessionContext.Provider>

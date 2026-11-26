@@ -163,6 +163,11 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
             </VStack>
           ) : (
             <VStack align="stretch" spacing={5}>
+              {state.kind === 'bulk' && (
+                <Button variant="link" alignSelf="flex-start" px={0} onClick={actions.backToList}>
+                  {'< Back to list'}
+                </Button>
+              )}
               <Box fontSize="sm" color={muted}>
                 {[parsed.metadata.term, parsed.metadata.academicYear && `AY ${parsed.metadata.academicYear}`, parsed.metadata.effectivityDate && `effective ${parsed.metadata.effectivityDate}`].filter(Boolean).join(' · ') || 'Term, year and effectivity date were not read: enter them when confirming.'}
               </Box>
@@ -255,6 +260,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
 
               <HStack justify="space-between">
                 <HStack>
+                  {state.kind === 'bulk' && <Button variant="ghost" onClick={actions.backToList}>Back to list</Button>}
                   <Button variant="ghost" onClick={discard}>Cancel / Discard</Button>
                   <Button variant="ghost" onClick={close}>Minimize</Button>
                   {state.kind === 'single' && <Button variant="ghost" onClick={reset} title={fileHash ? `File fingerprint ${fileHash.slice(0, 12)}` : undefined}>Choose another file</Button>}
