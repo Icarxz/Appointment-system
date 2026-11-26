@@ -193,6 +193,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   const pumping = useRef(false);
   const activeRef = useRef(false);
   const generationRef = useRef(0);
+  const draftGenerationRef = useRef(0);
   const counter = useRef(1);
   const histories = useRef<Record<string, Promise<{ status: string; effectivityDate: string }[]>>>({});
   const callbacksRef = useRef<ImportSessionCallbacks>({});
@@ -236,6 +237,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   };
 
   const resetDraft = () => {
+    draftGenerationRef.current += 1;
     setParsed(null);
     setClasses([]);
     setHours([]);
@@ -246,12 +248,16 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     setEffDateState('');
     setIdentityState(false);
     setUploadErrorState('');
+    setBusy(false);
+    setReading(false);
+    setConfirming(false);
   };
 
   const clear = () => {
     if (outcome === null) callbacksRef.current.onCancel?.();
     activeRef.current = false;
     generationRef.current += 1;
+    draftGenerationRef.current += 1;
     setMinimized(false);
     setPendingOpen(false);
     setActive(false);
@@ -262,7 +268,6 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     setSkipped(0);
     setReviewId(null);
     itemsRef.current = [];
-    pumping.current = false;
     counter.current = 1;
     histories.current = {};
     facultyListRef.current = [];
@@ -282,6 +287,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     }
     activeRef.current = true;
     generationRef.current += 1;
+    draftGenerationRef.current += 1;
     const initial = options?.initial;
     callbacksRef.current = options?.callbacks || {};
     facultyListRef.current = options?.facultyList || [];
@@ -295,7 +301,6 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       files: [], problems: [], skipped: 0, reviewId: null,
     });
     itemsRef.current = [];
-    pumping.current = false;
     counter.current = 1;
     histories.current = {};
     if (nextKind === 'bulk' && options?.files) {
@@ -310,6 +315,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   // ── single: upload PDF ──
   const uploadPdf = async (file: File | undefined) => {
     if (!file) return;
+    const generation = ++draftGenerationRef.current;
     setUploadErrorState('');
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') { setUploadErrorState('Choose a PDF file.'); return; }
     if (file.size > MAX_BYTES) { setUploadErrorState('That PDF is larger than 10 MB.'); return; }
@@ -319,6 +325,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
         method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: file,
       });
       const data = await res.json().catch(() => ({}));
+      if (generation !== draftGenerationRef.current) return;
       if (!res.ok) { setUploadErrorState(data.error || 'Could not read that PDF.'); return; }
       setParsed(data);
       setClasses(data.classes);
@@ -326,18 +333,20 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       setReport(null);
       setFileHash(data.fileHash || '');
       setEffDateState(data.metadata?.effectivityDate || '');
-    } catch { setUploadErrorState('Could not reach the server.'); }
-    finally { setReading(false); }
+    } catch { if (generation === draftGenerationRef.current) setUploadErrorState('Could not reach the server.'); }
+    finally { if (generation === draftGenerationRef.current) setReading(false); }
   };
 
   const loadFile = async (file: File | undefined) => {
     if (!file) return;
+    const generation = ++draftGenerationRef.current;
     try {
       const draft = JSON.parse(await file.text());
       const res = await authFetch(`${API}/api/schedule-import/parse`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft }),
       });
       const data = await res.json();
+      if (generation !== draftGenerationRef.current) return;
       if (!res.ok) {
         toast({ title: 'Could not read the draft', description: data.error, status: 'error', duration: 5000 });
         return;
@@ -349,7 +358,9 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       setFileHash('');
       setEffDateState(data.metadata?.effectivityDate || '');
     } catch {
-      toast({ title: 'That file is not a schedule draft', description: 'Choose the JSON file the OCR program wrote.', status: 'error', duration: 5000 });
+      if (generation === draftGenerationRef.current) {
+        toast({ title: 'That file is not a schedule draft', description: 'Choose the JSON file the OCR program wrote.', status: 'error', duration: 5000 });
+      }
     }
   };
 
@@ -382,6 +393,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
 
   // ── single: server re-check ──
   const check = async () => {
+    const generation = draftGenerationRef.current;
     setBusy(true);
     try {
       const res = await authFetch(`${API}/api/schedule-import/validate`, {
@@ -389,14 +401,16 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
         body: JSON.stringify({ facultyId, classes, consultationHours: hours, metadata: parsed?.metadata, workload: parsed?.workload, identityConfirmed: identity }),
       });
       const data = await res.json();
+      if (generation !== draftGenerationRef.current) return;
       if (!res.ok) { toast({ title: 'Could not check the schedule', description: data.error, status: 'error', duration: 5000 }); return; }
       setReport(data);
-    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
-    finally { setBusy(false); }
+    } catch { if (generation === draftGenerationRef.current) toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
+    finally { if (generation === draftGenerationRef.current) setBusy(false); }
   };
 
   // ── single: confirm ──
   const confirm = async () => {
+    const generation = draftGenerationRef.current;
     setConfirming(true);
     try {
       const res = await authFetch(`${API}/api/schedule-import/confirm`, {
@@ -405,6 +419,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
             effectivityDate: effDate, scheduleFingerprint: report?.scheduleFingerprint, fileHash }),
       });
       const data = await res.json().catch(() => ({}));
+      if (generation !== draftGenerationRef.current) return;
       if (!res.ok) {
         setReport(null);
         toast({ title: 'The schedule was not applied', description: data.error || 'Please check the schedule again.', status: 'error', duration: 8000, isClosable: true });
@@ -416,8 +431,8 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       setOutcome({ status: data.status, effectivityDate: data.effectivityDate, counts: data.counts });
       callbacksRef.current.onDone?.(data.status);
       if (data.status === 'ACTIVE') callbacksRef.current.onApplied?.();
-    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
-    finally { setConfirming(false); }
+    } catch { if (generation === draftGenerationRef.current) toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
+    finally { if (generation === draftGenerationRef.current) setConfirming(false); }
   };
 
   // ── bulk: add files ──
