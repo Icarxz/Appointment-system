@@ -7,13 +7,15 @@ import StudentDashboard from './components/StudentDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import VerifyEmail from './components/VerifyEmail';
 import ResetPassword from './components/ResetPassword';
+import ImportSessionProvider from './context/ImportSessionContext';
 // import StudentCheckIn from './components/StudentCheckIn';
 
 
 export default function App() {
   return (
     <Router>
-      <Routes>
+      <ImportSessionProvider>
+        <Routes>
         {/* Public Login */}
         <Route path="/" element={<LandingPage />} />
         
@@ -65,7 +67,8 @@ export default function App() {
 
         {/* Catch-all: If they type a weird URL or try to bypass, send them to login */}
         <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+        </Routes>
+      </ImportSessionProvider>
     </Router>
   );
 }
