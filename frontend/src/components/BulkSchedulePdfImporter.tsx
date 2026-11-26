@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react';
 import {
-  Alert, AlertIcon, Badge, Button, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader,
+  Alert, AlertIcon, Badge, Button, Checkbox, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader,
   ModalOverlay, Select, Spinner, Table, TableContainer, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue,
 } from '@chakra-ui/react';
 import { DeleteIcon } from '@chakra-ui/icons';
@@ -8,7 +8,6 @@ import ConfirmAction from './ConfirmAction';
 import type { ConfirmConfig } from './ConfirmAction';
 import type { ImportFile } from '../context/ImportSessionContext';
 import { useImportSession } from '../context/ImportSessionContextCore';
-import { IMPORT_BLOCKING_ACTION, IMPORT_WARNING_ACTION } from '../utils/scheduleImportMessages';
 
 const MAX_FILES = 10;
 
@@ -18,6 +17,8 @@ export default function BulkSchedulePdfImporter() {
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
   const nameOf = (facultyId: string) => facultyList.find(f => f._id === facultyId)?.name || '';
+  const batchReadyCount = items.filter(i => i.importState === 'pending' && i.batchCheck?.status === 'ready').length;
+  const batchBusy = state.bulkChecking || state.bulkSubmitting;
 
   const flags = useMemo(() => {
     const firstByHash: Record<string, string> = {};
@@ -33,7 +34,8 @@ export default function BulkSchedulePdfImporter() {
     const imported = items.filter(i => i.importState === 'imported').length;
     const scheduled = items.filter(i => i.importState === 'scheduled').length;
     const pending = items.filter(i => i.importState === 'pending');
-    const attention = pending.filter(i => !i.facultyId || i.ocr === 'failed' || i.identity === 'mismatch').length;
+    const attention = pending.filter(i => !i.facultyId || i.ocr === 'failed' || i.identity === 'mismatch'
+      || i.batchCheck?.status === 'blocked' || i.batchCheck?.status === 'failed' || i.batchCheck?.status === 'submitFailed').length;
     const busyNow = pending.filter(i => i.facultyId && i.ocr !== 'failed' && i.identity !== 'mismatch'
       && (i.ocr === 'queued' || i.ocr === 'reading' || i.identity === 'checking')).length;
     return { imported, scheduled, attention, busyNow, ready: pending.length - attention - busyNow };
@@ -45,25 +47,61 @@ export default function BulkSchedulePdfImporter() {
   const statusCell = (i: ImportFile) => {
     if (i.importState === 'imported') return <Badge colorScheme="green">Imported</Badge>;
     if (i.importState === 'scheduled') return <Badge colorScheme="blue">Scheduled</Badge>;
-    if (!i.facultyId) return <Badge colorScheme="orange">Choose faculty</Badge>;
-    if (i.ocr === 'failed') return <Badge colorScheme="red">Failed</Badge>;
+    if (i.batchCheck?.status === 'checking') return <Badge colorScheme="blue">Checking</Badge>;
+    if (i.batchCheck?.status === 'submitting') return <Badge colorScheme="blue">Submitting</Badge>;
+    if (i.batchCheck?.status === 'ready') return <Badge colorScheme="green">Ready to submit</Badge>;
+    if (i.batchCheck?.status === 'blocked' || i.batchCheck?.status === 'failed' || i.batchCheck?.status === 'submitFailed') return <Badge colorScheme="red">Needs review</Badge>;
+    if (!i.facultyId) return <Badge colorScheme="red">Needs faculty</Badge>;
+    if (i.ocr === 'failed') return <Badge colorScheme="red">Unreadable</Badge>;
     if (i.ocr !== 'done' || i.identity === 'checking') return <Badge>{i.ocr === 'queued' ? 'Waiting' : 'Reading'}</Badge>;
-    if (i.identity === 'mismatch') return <Badge colorScheme="red">Name differs</Badge>;
-    if (i.alreadyImported || (i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name)) return <Badge colorScheme="orange">Duplicate</Badge>;
+    if (i.identity === 'mismatch') return <Badge colorScheme="red">Mismatch</Badge>;
+    if (i.identity === 'unreadable' && !i.ownershipConfirmed) return <Badge colorScheme="orange">Confirm owner</Badge>;
+    if (i.alreadyImported || (i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name)) return <Badge colorScheme="orange">Double-check</Badge>;
     return <Badge colorScheme="green">Ready to review</Badge>;
   };
 
-  const notes = (i: ImportFile): { text: string; bad?: boolean }[] => {
-    const out: { text: string; bad?: boolean }[] = [];
-    if (i.match.status === 'ambiguous' && !i.facultyId) out.push({ text: 'More than one faculty account fits this file name. Choose the correct faculty member.', bad: true });
-    if (i.match.status === 'unmatched' && !i.facultyId) out.push({ text: 'Choose the faculty member this schedule belongs to.', bad: true });
-    if (i.ocr === 'failed') out.push({ text: 'This PDF could not be read. Retry it or remove it from the list.', bad: true });
-    if (i.identity === 'mismatch') out.push({ text: 'This document does not match the selected faculty account. Choose the correct account or remove this PDF.', bad: true });
-    if (i.identity === 'unreadable' && i.ocr === 'done') out.push({ text: 'Confirm that the document belongs to the selected faculty member in the review step.' });
-    if (i.alreadyImported) out.push({ text: i.alreadyImported });
-    if (i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name) out.push({ text: `Same file as ${flags.firstByHash[i.fileHash]} in this batch.` });
-    if (i.facultyId && i.importState === 'pending' && flags.perFaculty[i.facultyId] > 1) out.push({ text: `Another file in this batch is also for ${nameOf(i.facultyId)}. Importing both would replace the first with the second.` });
-    return out;
+  const notice = (i: ImportFile): { status: 'error' | 'warning'; message: string } | null => {
+    if (!i.facultyId) {
+      return i.match.status === 'unmatched'
+        ? { status: 'error', message: 'No faculty member matches this PDF name. Choose the right faculty member.' }
+        : { status: 'error', message: 'Choose a faculty member for this PDF.' };
+    }
+    if (i.ocr === 'failed') return { status: 'error', message: 'We could not read this PDF. Retry it or remove it.' };
+    if (i.identity === 'mismatch') {
+      return { status: 'error', message: 'This PDF does not seem to belong to the selected faculty member. Choose another faculty member or a different PDF.' };
+    }
+    if (i.identity === 'unreadable' && !i.ownershipConfirmed) {
+      return { status: 'error', message: `Check the box to confirm this PDF belongs to ${nameOf(i.facultyId)}.` };
+    }
+    if (!i.ownershipConfirmed && i.batchCheck?.report?.errors.some(issue => issue.code === 'IDENTITY_NOT_CONFIRMED')) {
+      return { status: 'error', message: `Check the box to confirm this PDF belongs to ${nameOf(i.facultyId)}.` };
+    }
+    if (i.batchCheck?.report?.errors.length) {
+      return { status: 'error', message: 'Fix the schedule issues in Review before submitting this PDF.' };
+    }
+    if (i.batchCheck?.status === 'blocked' || i.batchCheck?.status === 'failed' || i.batchCheck?.status === 'submitFailed') {
+      if (i.batchCheck.message?.toLowerCase().includes('more than one pdf')) {
+        return { status: 'error', message: `Only one PDF for ${nameOf(i.facultyId)} can be batch-submitted at a time.` };
+      }
+      if (i.batchCheck.message?.toLowerCase().includes('effectivity date')) {
+        return { status: 'error', message: 'Add an effectivity date in Review before submitting this PDF.' };
+      }
+      return { status: 'error', message: 'We could not check or submit this PDF. Open Review and try again.' };
+    }
+    if (i.alreadyImported || (i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name)) {
+      return { status: 'warning', message: 'This PDF may be a duplicate. Double-check it before submitting.' };
+    }
+    if (i.facultyId && i.importState === 'pending' && flags.perFaculty[i.facultyId] > 1) {
+      return { status: 'warning', message: `Several PDFs are assigned to ${nameOf(i.facultyId)}. Review them before submitting.` };
+    }
+    const hasReviewFlags = !!i.data && [
+      ...i.data.classes,
+      ...i.data.consultationHours,
+    ].some(row => row.needsReview);
+    if (i.data?.warnings.length || hasReviewFlags || i.batchCheck?.report?.warnings.length) {
+      return { status: 'warning', message: 'Some schedule details need a double-check before submitting.' };
+    }
+    return null;
   };
 
   const discard = () => setConfirmCfg({
@@ -73,6 +111,15 @@ export default function BulkSchedulePdfImporter() {
     run: actions.clear,
   });
   const close = actions.minimize;
+  const askBatchSubmit = () => {
+    if (!batchReadyCount) return;
+    setConfirmCfg({
+      title: `Submit ${batchReadyCount} schedules?`,
+      body: <>Each schedule is checked and saved separately. Green and yellow files are eligible; red files will not be saved.</>,
+      confirmLabel: `Submit ${batchReadyCount} schedules`,
+      run: () => { void actions.submitBulk(); },
+    });
+  };
 
   return (
     <>
@@ -84,19 +131,16 @@ export default function BulkSchedulePdfImporter() {
           <ModalBody pb={6}>
             <VStack align="stretch" spacing={4}>
               <Alert status="info" borderRadius="md"><AlertIcon />
-                <Text fontSize="sm">Choose up to {MAX_FILES} Faculty Individual Load PDFs (10 MB each) named after the faculty member, for example <b>Carl Spence.pdf</b> or <b>CARL_SPENCE.pdf</b>. Each file is matched to an account by its name and read one after another. Nothing is saved until you press Review and confirm that file.</Text>
+                <Text fontSize="sm">Choose up to {MAX_FILES} Faculty Individual Load PDFs (10 MB each) named after the faculty member, for example <b>Carl Spence.pdf</b> or <b>CARL_SPENCE.pdf</b>. Each file is matched to an account by its name and read one after another. Review files individually or pre-check and submit eligible files together; nothing is saved until you confirm submission.</Text>
               </Alert>
-              <Input type="file" multiple accept="application/pdf,.pdf" pt={1} aria-label="Schedule PDFs"
+              <Input type="file" multiple accept="application/pdf,.pdf" pt={1} aria-label="Schedule PDFs" isDisabled={batchBusy}
                 onChange={e => { void actions.addFiles(Array.from(e.target.files || [])); e.target.value = ''; }} />
-              {problems.map((problem, index) => (
-                <Alert key={index} status="warning" borderRadius="md" py={1}>
+              {problems.length > 0 && (
+                <Alert status="warning" borderRadius="md" py={2}>
                   <AlertIcon />
-                  <VStack align="start" spacing={0}>
-                    <Text fontSize="sm" fontWeight="700">{IMPORT_WARNING_ACTION}</Text>
-                    <Text fontSize="sm">{problem}</Text>
-                  </VStack>
+                  <Text fontSize="sm">Some selected files could not be added: {problems.join(' ')}</Text>
                 </Alert>
-              ))}
+              )}
 
               {items.length > 0 && (
                 <HStack spacing={2} wrap="wrap" fontSize="sm">
@@ -116,16 +160,24 @@ export default function BulkSchedulePdfImporter() {
                     <Tbody>
                       {items.map(i => {
                         const options = i.match.status === 'ambiguous' ? i.match.candidates : facultyList;
-                        const itemNotes = notes(i);
+                        const itemNotice = notice(i);
                         return (
                           <Fragment key={i.id}>
                             <Tr>
                               <Td maxW="220px" whiteSpace="normal" wordBreak="break-all" fontSize="xs">{i.file.name}</Td>
                               <Td>
-                                <Select size="sm" minW="200px" value={i.facultyId} aria-label={`Faculty for ${i.file.name}`} placeholder="Choose faculty..."
-                                  isDisabled={i.importState !== 'pending' || i.ocr === 'reading'} onChange={e => actions.assignFaculty(i.id, e.target.value)}>
-                                  {options.map(f => <option key={f._id} value={f._id}>{f.name}</option>)}
-                                </Select>
+                                <VStack align="stretch" spacing={2}>
+                                  <Select size="sm" minW="200px" value={i.facultyId} aria-label={`Faculty for ${i.file.name}`} placeholder="Choose faculty..."
+                                    isDisabled={batchBusy || i.importState !== 'pending' || i.ocr === 'reading'} onChange={e => actions.assignFaculty(i.id, e.target.value)}>
+                                    {options.map(f => <option key={f._id} value={f._id}>{f.name}</option>)}
+                                  </Select>
+                                  {i.identity === 'unreadable' && i.facultyId && (
+                                    <Checkbox size="sm" isChecked={i.ownershipConfirmed} isDisabled={batchBusy || i.importState !== 'pending'}
+                                      onChange={e => actions.setFileOwnership(i.id, e.target.checked)}>
+                                      This document belongs to <b>{nameOf(i.facultyId)}</b>
+                                    </Checkbox>
+                                  )}
+                                </VStack>
                               </Td>
                               <Td>{statusCell(i)}</Td>
                               <Td fontSize="xs" color={muted} whiteSpace="normal">
@@ -134,24 +186,20 @@ export default function BulkSchedulePdfImporter() {
                               </Td>
                               <Td>
                                 <HStack spacing={1} justify="flex-end">
-                                  {i.ocr === 'failed' && <Button size="xs" variant="outline" onClick={() => actions.retryFile(i.id)}>Retry</Button>}
-                                  {i.importState === 'pending' && <Button size="xs" colorScheme="blue" isDisabled={!canReview(i)}
+                                  {i.ocr === 'failed' && <Button size="xs" variant="outline" isDisabled={batchBusy} onClick={() => actions.retryFile(i.id)}>Retry</Button>}
+                                  {i.importState === 'pending' && <Button size="xs" colorScheme="blue" isDisabled={batchBusy || !canReview(i)}
                                     onClick={() => { if (!reviewId) actions.openReview(i.id); }}>{i.alreadyImported ? 'Review anyway' : 'Review'}</Button>}
                                   {i.importState === 'pending' && <IconButton size="xs" variant="ghost" aria-label={`Remove ${i.file.name}`}
-                                    icon={<DeleteIcon />} isDisabled={i.ocr === 'reading' || reviewId === i.id} onClick={() => actions.removeFile(i.id)} />}
+                                    icon={<DeleteIcon />} isDisabled={batchBusy || i.ocr === 'reading' || reviewId === i.id} onClick={() => actions.removeFile(i.id)} />}
                                 </HStack>
                               </Td>
                             </Tr>
-                            {itemNotes.length > 0 && (
-                              <Tr><Td colSpan={5} py={1} borderTop="none">
-                                {itemNotes.map((note, noteIndex) => (
-                                  <VStack key={noteIndex} align="start" spacing={0} mb={1}>
-                                    <Text fontSize="xs" fontWeight={700} color={note.bad ? 'red.500' : 'orange.500'}>
-                                      {note.bad ? IMPORT_BLOCKING_ACTION : IMPORT_WARNING_ACTION}
-                                    </Text>
-                                    <Text fontSize="xs" color={note.bad ? 'red.500' : muted} whiteSpace="normal">{note.text}</Text>
-                                  </VStack>
-                                ))}
+                            {itemNotice && (
+                              <Tr><Td colSpan={5} py={2} borderTop="none">
+                                <Alert status={itemNotice.status} borderRadius="md" py={2}>
+                                  <AlertIcon />
+                                  <Text fontSize="sm">{itemNotice.message}</Text>
+                                </Alert>
                               </Td></Tr>
                             )}
                           </Fragment>
@@ -167,11 +215,28 @@ export default function BulkSchedulePdfImporter() {
                   <Text fontSize="sm"><b>All files handled.</b> {counts.imported} imported, {counts.scheduled} scheduled{skipped ? `, ${skipped} skipped` : ''}.</Text>
                 </Alert>
               )}
+              {items.some(i => i.importState === 'pending') && (
+                <VStack align="stretch" spacing={2} borderWidth="1px" borderRadius="md" p={3}>
+                  <Text fontSize="sm" color={muted}>Pre-check pending PDFs, then submit the files that pass server validation. Yellow warnings are allowed; files with blocking issues stay here for review.</Text>
+                  <HStack justify="flex-end">
+                    <Button variant="outline" onClick={() => { void actions.prepareBulkSubmit(); }}
+                      isLoading={state.bulkChecking} isDisabled={batchBusy || !!reviewId}>
+                      Check files for batch submit
+                    </Button>
+                    <Button colorScheme="green" onClick={askBatchSubmit}
+                      isDisabled={!batchReadyCount || batchBusy || !!reviewId}>
+                      Submit {batchReadyCount} eligible
+                    </Button>
+                  </HStack>
+                </VStack>
+              )}
               <HStack justify="space-between">
-                <Button variant="ghost" onClick={actions.resetBulk} isDisabled={items.length === 0}>Clear list</Button>
+                <Button variant="ghost" onClick={actions.resetBulk} isDisabled={items.length === 0 || batchBusy}>Clear list</Button>
                 <HStack>
-                  <Button variant="ghost" onClick={discard}>Cancel / Discard</Button>
-                  <Button onClick={close}>Minimize</Button>
+                  {items.length > 0 && <Button variant="ghost" onClick={discard} isDisabled={state.bulkSubmitting}>Cancel / Discard</Button>}
+                  {items.length > 0
+                    ? <Button onClick={close}>Minimize</Button>
+                    : <Button onClick={actions.clear}>Close</Button>}
                 </HStack>
               </HStack>
             </VStack>

@@ -28,6 +28,8 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
   const toast = useToast();
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const { parsed, classes, hours, identity, report, busy, reading, uploadError, fileHash, effDate, outcome, confirming } = state;
+  const bulkFile = state.reviewId ? state.files.find(file => file.id === state.reviewId) : undefined;
+  const bulkOwnershipRequired = state.kind === 'bulk' && bulkFile?.identity === 'unreadable' && !identity;
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
   const [history, setHistory] = useState<HistoryItem[] | null>(null);
 
@@ -169,11 +171,17 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                     <Text fontSize="sm" color="red.500" fontWeight={700}>{IMPORT_BLOCKING_ACTION}</Text>
                     <Text fontSize="sm">This document does not match the selected faculty account. Choose the correct account or a different PDF.</Text>
                   </VStack>
-                ) : report?.identity?.status === 'match' ? (
+                ) : report?.identity?.status === 'match' || bulkFile?.identity === 'match' ? (
                   <Text fontSize="sm" color="green.500" fontWeight={600}>The document matches the selected faculty account.</Text>
+                ) : state.kind === 'bulk' ? (
+                  <Text fontSize="sm" color={identity ? 'green.500' : 'orange.500'} fontWeight={600}>
+                    {identity
+                      ? `Ownership confirmed for ${facultyName} in the bulk list.`
+                      : `Go back to the list and check that this document belongs to ${facultyName}.`}
+                  </Text>
                 ) : (
                   <Checkbox isChecked={identity} onChange={e => actions.setIdentity(e.target.checked)}>
-                    {mode === 'faculty' ? 'This document really belongs to me' : <>This document belongs to <b>{facultyName}</b></>}
+                    {mode === 'faculty' ? 'This document belongs to me' : <>This document belongs to <b>{facultyName}</b></>}
                   </Checkbox>
                 )}
               </Box>
@@ -222,7 +230,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                   <Button variant="ghost" onClick={close}>Minimize</Button>
                   {state.kind === 'single' && <Button variant="ghost" onClick={reset} title={fileHash ? `File fingerprint ${fileHash.slice(0, 12)}` : undefined}>Choose another file</Button>}
                 </HStack>
-                <Button colorScheme="blue" onClick={check} isLoading={busy}>Check schedule</Button>
+                <Button colorScheme="blue" onClick={check} isLoading={busy} isDisabled={bulkOwnershipRequired}>Check schedule</Button>
               </HStack>
             </VStack>
           )}
