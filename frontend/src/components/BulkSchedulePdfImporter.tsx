@@ -5,10 +5,10 @@ import {
 } from '@chakra-ui/react';
 import { DeleteIcon } from '@chakra-ui/icons';
 import { authFetch } from './authFetch';
-import SchedulePdfImporter from './SchedulePdfImporter';
 import type { Parsed } from './SchedulePdfImporter';
 import { matchFacultyByFilename } from '../utils/facultyMatch';
 import type { FacultyLite, FileMatch } from '../utils/facultyMatch';
+import { useImportSession } from '../context/ImportSessionContextCore';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -33,6 +33,7 @@ interface Item {
 interface Props { isOpen: boolean; onClose: () => void; facultyList: FacultyLite[]; onApplied?: () => void }
 
 export default function BulkSchedulePdfImporter({ isOpen, onClose, facultyList, onApplied }: Props) {
+  const { state: importState, actions: importActions } = useImportSession();
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const [items, setItems] = useState<Item[]>([]);
   const [problems, setProblems] = useState<string[]>([]);
@@ -46,6 +47,26 @@ export default function BulkSchedulePdfImporter({ isOpen, onClose, facultyList, 
   const setAll = (next: Item[]) => { itemsRef.current = next; setItems(next); };
   const patch = (id: string, p: Partial<Item>) => setAll(itemsRef.current.map(i => (i.id === id ? { ...i, ...p } : i)));
   const nameOf = (facultyId: string) => facultyList.find(f => f._id === facultyId)?.name || '';
+  const openReview = (item: Item) => {
+    if (importState.active) {
+      if (reviewId === item.id && importState.minimized) importActions.restore();
+      return;
+    }
+    if (!item.data) return;
+    const started = importActions.begin('single', 'admin', item.facultyId, nameOf(item.facultyId), {
+      initial: { data: item.data, fileHash: item.fileHash },
+      callbacks: {
+        onApplied: () => onApplied?.(),
+        onDone: status => {
+          delete histories.current[item.facultyId];
+          patch(item.id, { importState: status === 'ACTIVE' ? 'imported' : 'scheduled' });
+          setReviewId(null);
+        },
+        onCancel: () => setReviewId(null),
+      },
+    });
+    if (started) setReviewId(item.id);
+  };
 
   const loadHistory = (facultyId: string): Promise<HistoryRow[]> => {
     if (!histories.current[facultyId]) {
@@ -146,7 +167,6 @@ export default function BulkSchedulePdfImporter({ isOpen, onClose, facultyList, 
     return { imported, scheduled, attention, busyNow, ready: pending.length - attention - busyNow };
   }, [items]);
 
-  const reviewItem = items.find(i => i.id === reviewId) || null;
   const canReview = (i: Item) => i.importState === 'pending' && i.ocr === 'done' && !!i.data && !!i.facultyId && i.identity !== 'mismatch' && i.identity !== 'checking';
 
   const statusCell = (i: Item) => {
@@ -225,7 +245,7 @@ export default function BulkSchedulePdfImporter({ isOpen, onClose, facultyList, 
                               <Td>
                                 <HStack spacing={1} justify="flex-end">
                                   {i.ocr === 'failed' && <Button size="xs" variant="outline" onClick={() => retry(i.id)}>Retry</Button>}
-                                  {i.importState === 'pending' && <Button size="xs" colorScheme="blue" isDisabled={!canReview(i)} onClick={() => setReviewId(i.id)}>{i.alreadyImported ? 'Review anyway' : 'Review'}</Button>}
+                                  {i.importState === 'pending' && <Button size="xs" colorScheme="blue" isDisabled={!canReview(i)} onClick={() => openReview(i)}>{i.alreadyImported ? 'Review anyway' : 'Review'}</Button>}
                                   {i.importState === 'pending' && <IconButton size="xs" variant="ghost" aria-label={`Remove ${i.file.name}`} icon={<DeleteIcon />} isDisabled={i.ocr === 'reading'} onClick={() => remove(i.id)} />}
                                 </HStack>
                               </Td>
@@ -257,13 +277,6 @@ export default function BulkSchedulePdfImporter({ isOpen, onClose, facultyList, 
         </ModalContent>
       </Modal>
 
-      {reviewItem && reviewItem.data && (
-        <SchedulePdfImporter key={reviewItem.id} mode="admin" facultyId={reviewItem.facultyId} facultyName={nameOf(reviewItem.facultyId)} isOpen
-          initial={{ data: reviewItem.data, fileHash: reviewItem.fileHash }}
-          onClose={() => setReviewId(null)}
-          onApplied={() => onApplied?.()}
-          onDone={status => { delete histories.current[reviewItem.facultyId]; patch(reviewItem.id, { importState: status === 'ACTIVE' ? 'imported' : 'scheduled' }); }} />
-      )}
     </>
   );
 }

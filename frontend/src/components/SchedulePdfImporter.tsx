@@ -8,6 +8,7 @@ import ConfirmAction from './ConfirmAction';
 import type { ConfirmConfig } from './ConfirmAction';
 import { authFetch } from './authFetch';
 import { DAY_LONG, CONSULTATION_DAYS, CLASS_DAYS } from '../utils/daySettings';
+import { useImportSession } from '../context/ImportSessionContextCore';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -19,7 +20,6 @@ const API = import.meta.env.VITE_API_URL;
 interface Row { id: string; dayOfWeek: number; startTime: string; endTime: string; needsReview: boolean; reviewReasons: string[]; rawText?: string;
   subject?: string; section?: string; room?: string; label?: string }
 interface Issue { code: string; message: string; ref: { type: 'class' | 'consult'; id: string } | null }
-interface Report { scheduleFingerprint?: string; ok: boolean; errors: Issue[]; warnings: Issue[]; summary: { weeklyConsultationMinutes: number }; identity?: { status: 'match' | 'mismatch' | 'unreadable'; read: string } }
 export interface Parsed { metadata: { term: string; academicYear: string; effectivityDate: string; facultyName: string; facultyNameConfidence: number | null; facultyNameNeedsReview: boolean };
   workload: { lectureHours: number | null; laboratoryHours: number | null };
   classes: Row[]; consultationHours: Row[]; warnings: Issue[]; excludedWeekendConsultations: number }
@@ -28,103 +28,33 @@ export interface Parsed { metadata: { term: string; academicYear: string; effect
 const TIMES = Array.from({ length: 25 }, (_, i) => { const m = 420 + i * 30; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; });
 const t12 = (t: string) => { const [h, m] = t.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
-interface Outcome { status: 'ACTIVE' | 'SCHEDULED'; effectivityDate: string; counts?: { classes: number; hours: number } }
 interface HistoryItem { id: string; status: string; effectivityDate: string; term: string; academicYear: string; confirmedAt: string; failureReason: string; classBlocks: number; consultationBlocks: number }
 
 interface Props { facultyId: string; facultyName: string; mode: 'admin' | 'faculty'; isOpen: boolean; onClose: () => void; onApplied?: () => void;
   initial?: { data: Parsed; fileHash: string }; onDone?: (status: 'ACTIVE' | 'SCHEDULED') => void }
-const MAX_BYTES = 10 * 1024 * 1024;
 
-export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOpen, onClose, onApplied, initial, onDone }: Props) {
+export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOpen }: Props) {
+  const { state, actions } = useImportSession();
   const toast = useToast();
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const errBg = useColorModeValue('#fee2e2', '#4c1d1d');
   const warnBg = useColorModeValue('#fef3c7', '#4a3a12');
-  const [parsed, setParsed] = useState<Parsed | null>(() => initial?.data || null);
-  const [classes, setClasses] = useState<Row[]>(() => initial?.data.classes || []);
-  const [hours, setHours] = useState<Row[]>(() => initial?.data.consultationHours || []);
-  const [identity, setIdentity] = useState(false);
-  const [report, setReport] = useState<Report | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [nextId, setNextId] = useState(1);
-  const [reading, setReading] = useState(false);
-  const [uploadError, setUploadError] = useState('');
-  const [fileHash, setFileHash] = useState(() => initial?.fileHash || '');
-  const [effDate, setEffDate] = useState(() => initial?.data.metadata?.effectivityDate || '');
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const { parsed, classes, hours, identity, report, busy, reading, uploadError, fileHash, effDate, outcome, confirming } = state;
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
-  const [confirming, setConfirming] = useState(false);
   const [history, setHistory] = useState<HistoryItem[] | null>(null);
 
-  const reset = () => { setOutcome(null); setEffDate(''); setParsed(null); setClasses([]); setHours([]); setIdentity(false); setReport(null); setUploadError(''); setFileHash(''); };
-  const close = () => { reset(); onClose(); };
+  const reset = actions.resetDraft;
+  const close = actions.minimize;
 
   // Step 1a: upload the scanned PDF; the server reads it with OCR and sends back editable rows
-  const uploadPdf = async (file: File | undefined) => {
-    if (!file) return;
-    setUploadError('');
-    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') { setUploadError('Choose a PDF file.'); return; }
-    if (file.size > MAX_BYTES) { setUploadError('That PDF is larger than 10 MB.'); return; }
-    setReading(true);
-    try {
-      const res = await authFetch(`${API}/api/schedule-import/preview?facultyId=${encodeURIComponent(facultyId)}`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: file });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setUploadError(data.error || 'Could not read that PDF.'); return; }
-      setParsed(data); setClasses(data.classes); setHours(data.consultationHours); setReport(null); setIdentity(false); setFileHash(data.fileHash || ''); setEffDate(data.metadata?.effectivityDate || '');
-    } catch { setUploadError('Could not reach the server.'); }
-    finally { setReading(false); }
-  };
-
-  // Step 1b (admin fallback): read the draft file and let the server clean it up (weekend consultations are left out with a warning)
-  const loadFile = async (file: File | undefined) => {
-    if (!file) return;
-    try {
-      const draft = JSON.parse(await file.text());
-      const res = await authFetch(`${API}/api/schedule-import/parse`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft }) });
-      const data = await res.json();
-      if (!res.ok) { toast({ title: 'Could not read the draft', description: data.error, status: 'error', duration: 5000 }); return; }
-      setParsed(data); setClasses(data.classes); setHours(data.consultationHours); setReport(null); setIdentity(false); setFileHash(''); setEffDate(data.metadata?.effectivityDate || '');
-    } catch { toast({ title: 'That file is not a schedule draft', description: 'Choose the JSON file the OCR program wrote.', status: 'error', duration: 5000 }); }
-  };
-
-  // Any edit makes the last check out of date
-  const editClass = (id: string, patch: Partial<Row>) => { setClasses(rs => rs.map(r => (r.id === id ? { ...r, ...patch } : r))); setReport(null); };
-  const editHour = (id: string, patch: Partial<Row>) => { setHours(rs => rs.map(r => (r.id === id ? { ...r, ...patch } : r))); setReport(null); };
-  const addClass = () => { setClasses(rs => [...rs, { id: `n${nextId}`, dayOfWeek: 1, startTime: '08:00', endTime: '09:00', subject: '', section: '', room: '', needsReview: false, reviewReasons: [] }]); setNextId(n => n + 1); setReport(null); };
-  const addHour = () => { setHours(rs => [...rs, { id: `n${nextId}`, dayOfWeek: 1, startTime: '09:00', endTime: '10:00', label: 'CONSULTATION HOURS', needsReview: false, reviewReasons: [] }]); setNextId(n => n + 1); setReport(null); };
-
-  // Step 2: the server re-checks everything (it never trusts what the browser says)
-  const check = async () => {
-    setBusy(true);
-    try {
-      const res = await authFetch(`${API}/api/schedule-import/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ facultyId, classes, consultationHours: hours, metadata: parsed?.metadata, workload: parsed?.workload, identityConfirmed: identity }) });
-      const data = await res.json();
-      if (!res.ok) { toast({ title: 'Could not check the schedule', description: data.error, status: 'error', duration: 5000 }); return; }
-      setReport(data);
-    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
-    finally { setBusy(false); }
-  };
-
-  // Step 3: confirm. The server validates everything again and refuses if the faculty's schedule changed since the check.
-  const confirm = async () => {
-    setConfirming(true);
-    try {
-      const res = await authFetch(`${API}/api/schedule-import/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ facultyId, classes, consultationHours: hours, metadata: parsed?.metadata, workload: parsed?.workload, identityConfirmed: identity,
-          effectivityDate: effDate, scheduleFingerprint: report?.scheduleFingerprint, fileHash }) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setReport(null);   // the screen is out of date (stale or new problems): check again before trying again
-        toast({ title: 'The schedule was not applied', description: data.error || 'Please check the schedule again.', status: 'error', duration: 8000, isClosable: true });
-        return;
-      }
-      setOutcome({ status: data.status, effectivityDate: data.effectivityDate, counts: data.counts });
-      onDone?.(data.status);
-      if (data.status === 'ACTIVE') onApplied?.();
-    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
-    finally { setConfirming(false); }
-  };
+  const uploadPdf = actions.uploadPdf;
+  const loadFile = actions.loadFile;
+  const editClass = actions.editClass;
+  const editHour = actions.editHour;
+  const addClass = actions.addClass;
+  const addHour = actions.addHour;
+  const check = actions.check;
+  const confirm = actions.confirm;
   const askConfirm = () => {
     const future = /^\d{4}-\d{2}-\d{2}$/.test(effDate) && effDate > new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     setConfirmCfg({
@@ -149,7 +79,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast({ title: what === 'rollback' ? 'Could not undo' : 'Could not cancel', description: data.error, status: 'error', duration: 7000, isClosable: true }); return; }
       toast({ title: what === 'rollback' ? 'Previous schedule restored' : 'Scheduled import cancelled', status: 'success', duration: 3000 });
-      if (what === 'rollback') onApplied?.();
+      if (what === 'rollback') actions.notifyApplied();
       loadHistory();
     } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
   };
@@ -179,6 +109,12 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
       </Td></Tr>
     ) : null;
   };
+  const discard = () => setConfirmCfg({
+    title: 'Discard this schedule import?',
+    body: <>The PDF, edits, and check results in this import session will be cleared.</>,
+    confirmLabel: 'Discard import',
+    run: actions.clear,
+  });
   const liveMinutes = hours.reduce((s, h) => { const [a, b] = [h.startTime, h.endTime].map(t => { const [x, y] = t.split(':').map(Number); return x * 60 + y; }); return s + Math.max(0, b - a); }, 0);
   const dayOptions = (days: readonly number[]) => [...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(d => <option key={d} value={d}>{DAY_LONG[d]}</option>);
   const timeOptions = TIMES.map(t => <option key={t} value={t}>{t12(t)}</option>);
@@ -199,7 +135,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                   ? <><b>Schedule applied.</b> {facultyName}'s class schedule and official consultation hours were replaced{outcome.counts ? ` (${outcome.counts.classes} class(es), ${outcome.counts.hours} consultation block(s))` : ''}. The previous schedule is in the import history.</>
                   : <><b>Schedule scheduled.</b> It will be applied on {outcome.effectivityDate} after one more check. The current schedule stays until then.</>}</Text>
               </Alert>
-              <HStack justify="flex-end"><Button colorScheme="blue" onClick={close}>Done</Button></HStack>
+              <HStack justify="flex-end"><Button colorScheme="blue" onClick={actions.clear}>Done</Button></HStack>
             </VStack>
           ) : !parsed ? (
             <VStack align="stretch" spacing={3}>
@@ -250,7 +186,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                       <Td>
                         <HStack spacing={1}>
                           {c.needsReview && <Button size="xs" onClick={() => editClass(c.id, { needsReview: false })} title="I checked this row against the scan">Reviewed</Button>}
-                          <IconButton size="xs" variant="ghost" aria-label="Delete class" icon={<DeleteIcon />} onClick={() => { setClasses(rs => rs.filter(r => r.id !== c.id)); setReport(null); }} />
+                          <IconButton size="xs" variant="ghost" aria-label="Delete class" icon={<DeleteIcon />} onClick={() => actions.removeRow('class', c.id)} />
                         </HStack>
                       </Td>
                     </Tr>
@@ -273,7 +209,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                       <Td>
                         <HStack spacing={1}>
                           {h.needsReview && <Button size="xs" onClick={() => editHour(h.id, { needsReview: false })}>Reviewed</Button>}
-                          <IconButton size="xs" variant="ghost" aria-label="Delete block" icon={<DeleteIcon />} onClick={() => { setHours(rs => rs.filter(r => r.id !== h.id)); setReport(null); }} />
+                          <IconButton size="xs" variant="ghost" aria-label="Delete block" icon={<DeleteIcon />} onClick={() => actions.removeRow('consult', h.id)} />
                         </HStack>
                       </Td>
                     </Tr>
@@ -289,7 +225,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                   <Text fontSize="sm" color="green.500" fontWeight={600}>The name printed on the sheet matches {facultyName}.</Text>
                 ) : (
                   <>
-                    <Checkbox isChecked={identity} onChange={e => { setIdentity(e.target.checked); setReport(null); }}>
+                    <Checkbox isChecked={identity} onChange={e => actions.setIdentity(e.target.checked)}>
                       This document belongs to <b>{facultyName}</b>
                     </Checkbox>
                     <Text fontSize="xs" color={muted} mt={1} ml={6}>
@@ -313,7 +249,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                 <HStack borderWidth="1px" borderRadius="md" p={3} spacing={3} align="end" wrap="wrap">
                   <Box>
                     <Text fontSize="sm" fontWeight={600} mb={1}>Effectivity date</Text>
-                    <Input type="date" size="sm" value={effDate} onChange={e => setEffDate(e.target.value)} aria-label="Effectivity date" maxW="190px" />
+                    <Input type="date" size="sm" value={effDate} onChange={e => actions.setEffDate(e.target.value)} aria-label="Effectivity date" maxW="190px" />
                   </Box>
                   <Text fontSize="xs" color={muted} flex="1" minW="220px">Today or earlier: applied right away. A later date: kept until that day, then checked again and applied.{!parsed?.metadata.effectivityDate && ' The date was not read from the document: enter it.'}</Text>
                   <Button colorScheme="green" onClick={askConfirm} isDisabled={!effDate} isLoading={confirming}>Confirm schedule</Button>
@@ -321,8 +257,12 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
               )}
 
               <HStack justify="space-between">
-                <Button variant="ghost" onClick={reset} title={fileHash ? `File fingerprint ${fileHash.slice(0, 12)}` : undefined}>Choose another file</Button>
-                <HStack><Button variant="ghost" onClick={close}>Close</Button><Button colorScheme="blue" onClick={check} isLoading={busy}>Check schedule</Button></HStack>
+                <HStack>
+                  <Button variant="ghost" onClick={discard}>Cancel / Discard</Button>
+                  <Button variant="ghost" onClick={close}>Minimize</Button>
+                  <Button variant="ghost" onClick={reset} title={fileHash ? `File fingerprint ${fileHash.slice(0, 12)}` : undefined}>Choose another file</Button>
+                </HStack>
+                <Button colorScheme="blue" onClick={check} isLoading={busy}>Check schedule</Button>
               </HStack>
             </VStack>
           )}

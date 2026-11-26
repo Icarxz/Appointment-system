@@ -32,7 +32,7 @@ import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { visibleDays } from '../utils/daySettings';
 import ExportBar from './ExportBar';
 import SearchableSelect from './SearchableSelect';
-import SchedulePdfImporter from './SchedulePdfImporter';
+import { useImportSession } from '../context/ImportSessionContextCore';
 import ClassGridEditor from './ClassGridEditor';
 import { cohortConfig } from '../data/cohortConfig';
 import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
@@ -181,6 +181,7 @@ const EmbeddedFrame = ({ children }: { children?: React.ReactNode } & Record<str
 interface FacultyDashboardProps { embeddedPage?: Page; role?: 'FACULTY' | 'DEAN'; canImportSchedule?: boolean }
 
 export default function FacultyDashboard({ embeddedPage, role = 'FACULTY', canImportSchedule = true }: FacultyDashboardProps = {}) {
+  const { actions: importActions } = useImportSession();
   const isDean = role === 'DEAN';
   const embedded = embeddedPage !== undefined;
   const Frame: React.ComponentType<any> = embedded ? EmbeddedFrame : DashboardShell;
@@ -196,7 +197,6 @@ export default function FacultyDashboard({ embeddedPage, role = 'FACULTY', canIm
   const { aptId, closeApt } = useDeepLink<Page>(embedded ? [] : ["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage); // embedded: the Dean dashboard handles links itself
   const [weekOffset, setWeekOffset] = useState(0);
   const [scheduleTab, setScheduleTab] = useState<'view' | 'edit'>('view'); // Master Schedule: weekly view or Edit Schedule
-  const [importOpen, setImportOpen] = useState(false); // Master Schedule: import my schedule from a scanned PDF
   const [showWeekend, setShowWeekend] = useState(false); // display preference: reveal empty Saturday / Sunday columns
   // Phones open on one day at a time; the 7-column week grid needs a wider screen.
   const [viewMode,   setViewMode]   = useState<ViewMode>(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "day" : "week"));
@@ -1271,10 +1271,9 @@ const saveConsultationHours = async () => {
                   <Heading size="md" color={textColor}>Edit Schedule</Heading>
                   <Text fontSize="sm" color={mutedText}>Add, change or delete your classes, or import them from your scanned Faculty Load PDF. Your weekly view updates after you save.</Text>
                 </Box>
-                <ChakraButton size="sm" variant="outline" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule.">Import Schedule PDF</ChakraButton>
+                <ChakraButton size="sm" variant="outline" onClick={() => importActions.begin('single', 'faculty', userId, userName || '', { callbacks: { onApplied: fetchData } })} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule.">Import Schedule PDF</ChakraButton>
               </Flex>
               <ClassGridEditor facultyId={userId} facultyName={userName || ''} />
-              <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} onApplied={fetchData} />
             </Box>
           </Box>
         )}

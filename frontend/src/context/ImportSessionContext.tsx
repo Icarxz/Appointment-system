@@ -64,6 +64,19 @@ export interface ImportOutcome {
   counts?: { classes: number; hours: number };
 }
 
+export interface ImportSessionCallbacks {
+  onApplied?: () => void;
+  onDone?: (status: ImportOutcome['status']) => void;
+  onCancel?: () => void;
+}
+
+export interface ImportSessionStartOptions {
+  files?: File[];
+  facultyList?: FacultyLite[];
+  initial?: { data: ImportParsed; fileHash: string };
+  callbacks?: ImportSessionCallbacks;
+}
+
 export interface ImportFile {
   id: string;
   file: File;
@@ -95,6 +108,7 @@ export interface ImportSessionState {
   reading: boolean;
   nextId: number;
   outcome: ImportOutcome | null;
+  fileHash: string;
   effDate: string;
   identity: boolean;
   uploadError: string;
@@ -106,7 +120,7 @@ export interface ImportSessionState {
 }
 
 interface ImportSessionActions {
-  begin: (kind: 'single' | 'bulk', mode: 'admin' | 'faculty', facultyId: string, facultyName: string, files?: File[]) => boolean;
+  begin: (kind: 'single' | 'bulk', mode: 'admin' | 'faculty', facultyId: string, facultyName: string, options?: ImportSessionStartOptions) => boolean;
   minimize: () => void;
   restore: () => void;
   clear: () => void;
@@ -119,6 +133,7 @@ interface ImportSessionActions {
   addClass: () => void;
   addHour: () => void;
   removeRow: (type: 'class' | 'consult', id: string) => void;
+  notifyApplied: () => void;
   setIdentity: (checked: boolean) => void;
   setEffDate: (date: string) => void;
   resetDraft: () => void;
@@ -157,6 +172,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   const [reading, setReading] = useState(false);
   const [nextId, setNextId] = useState(1);
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
+  const [fileHash, setFileHash] = useState('');
   const [effDate, setEffDateState] = useState<string>('');
   const [identity, setIdentityState] = useState(false);
   const [uploadError, setUploadErrorState] = useState<string>('');
@@ -173,6 +189,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   const pumping = useRef(false);
   const counter = useRef(1);
   const histories = useRef<Record<string, Promise<{ status: string; effectivityDate: string }[]>>>({});
+  const callbacksRef = useRef<ImportSessionCallbacks>({});
 
   const MAX_BYTES = 10 * 1024 * 1024;
   const MAX_FILES = 10;
@@ -200,6 +217,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     if (values.reading !== undefined) setReading(values.reading);
     if (values.nextId !== undefined) setNextId(values.nextId);
     if (values.outcome !== undefined) setOutcome(values.outcome);
+    if (values.fileHash !== undefined) setFileHash(values.fileHash);
     if (values.effDate !== undefined) setEffDateState(values.effDate);
     if (values.identity !== undefined) setIdentityState(values.identity);
     if (values.uploadError !== undefined) setUploadErrorState(values.uploadError);
@@ -216,6 +234,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     setHours([]);
     setReport(null);
     setOutcome(null);
+    setFileHash('');
     setNextId(1);
     setEffDateState('');
     setIdentityState(false);
@@ -223,6 +242,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   };
 
   const clear = () => {
+    if (outcome === null) callbacksRef.current.onCancel?.();
     setMinimized(false);
     setPendingOpen(false);
     setActive(false);
@@ -235,6 +255,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     pumping.current = false;
     counter.current = 1;
     histories.current = {};
+    callbacksRef.current = {};
   };
 
   const begin = (
@@ -242,22 +263,26 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     nextMode: 'admin' | 'faculty',
     nextFacultyId: string,
     nextFacultyName: string,
-    nextFiles?: File[],
+    options?: ImportSessionStartOptions,
   ): boolean => {
     if (active) return false;
+    const initial = options?.initial;
+    callbacksRef.current = options?.callbacks || {};
+    facultyListRef.current = options?.facultyList || [];
     setSession({
       kind: nextKind, mode: nextMode, facultyId: nextFacultyId, facultyName: nextFacultyName,
       active: true, minimized: false, pendingOpen: false,
-      parsed: null, classes: [], hours: [], report: null, busy: false, reading: false,
-      nextId: 1, outcome: null, effDate: '', identity: false, uploadError: '', confirming: false,
+      parsed: initial?.data || null, classes: initial?.data.classes || [], hours: initial?.data.consultationHours || [],
+      report: null, busy: false, reading: false, nextId: 1, outcome: null, fileHash: initial?.fileHash || '',
+      effDate: initial?.data.metadata?.effectivityDate || '', identity: false, uploadError: '', confirming: false,
       files: [], problems: [], skipped: 0, reviewId: null,
     });
     itemsRef.current = [];
     pumping.current = false;
     counter.current = 1;
     histories.current = {};
-    if (nextKind === 'bulk' && nextFiles) {
-      void addFiles(nextFiles);
+    if (nextKind === 'bulk' && options?.files) {
+      void addFiles(options.files);
     }
     return true;
   };
@@ -282,6 +307,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       setClasses(data.classes);
       setHours(data.consultationHours);
       setReport(null);
+      setFileHash(data.fileHash || '');
       setEffDateState(data.metadata?.effectivityDate || '');
     } catch { setUploadErrorState('Could not reach the server.'); }
     finally { setReading(false); }
@@ -303,6 +329,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       setClasses(data.classes);
       setHours(data.consultationHours);
       setReport(null);
+      setFileHash('');
       setEffDateState(data.metadata?.effectivityDate || '');
     } catch {
       toast({ title: 'That file is not a schedule draft', description: 'Choose the JSON file the OCR program wrote.', status: 'error', duration: 5000 });
@@ -332,6 +359,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     else setHours(rs => rs.filter(r => r.id !== id));
     setReport(null);
   };
+  const notifyApplied = () => callbacksRef.current.onApplied?.();
   const setIdentity = (checked: boolean) => { setIdentityState(checked); setReport(null); };
   const setEffDate = (date: string) => setEffDateState(date);
 
@@ -357,7 +385,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       const res = await authFetch(`${API}/api/schedule-import/confirm`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ facultyId, classes, consultationHours: hours, metadata: parsed?.metadata, workload: parsed?.workload, identityConfirmed: identity,
-          effectivityDate: effDate, scheduleFingerprint: report?.scheduleFingerprint, fileHash: '' }),
+            effectivityDate: effDate, scheduleFingerprint: report?.scheduleFingerprint, fileHash }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -366,6 +394,8 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
         return;
       }
       setOutcome({ status: data.status, effectivityDate: data.effectivityDate, counts: data.counts });
+      callbacksRef.current.onDone?.(data.status);
+      if (data.status === 'ACTIVE') callbacksRef.current.onApplied?.();
     } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
     finally { setConfirming(false); }
   };
@@ -499,17 +529,18 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     state: {
       active, kind, mode, facultyId, facultyName, minimized, pendingOpen,
       parsed, classes, hours, report, busy, reading, nextId, outcome, effDate, identity, uploadError, confirming,
-      files, problems, skipped, reviewId,
+      files, problems, skipped, reviewId, fileHash,
     },
     actions: {
       begin, minimize, restore, clear,
       uploadPdf, loadFile, check, confirm,
       editClass, editHour, addClass, addHour, removeRow,
+      notifyApplied,
       setIdentity, setEffDate, resetDraft,
       setReviewId,
       addFiles, assignFaculty, retryFile, removeFile, resetBulk,
     },
-  }), [active, kind, mode, facultyId, facultyName, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setEffDate, resetDraft, setReviewId, addFiles, assignFaculty, retryFile, removeFile, resetBulk]);
+  }), [active, kind, mode, facultyId, facultyName, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, fileHash, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setEffDate, resetDraft, setReviewId, addFiles, assignFaculty, retryFile, removeFile, resetBulk]);
 
   return (
     <ImportSessionContext.Provider value={value}>{children}</ImportSessionContext.Provider>
