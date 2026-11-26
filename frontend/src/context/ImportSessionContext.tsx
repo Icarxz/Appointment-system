@@ -64,6 +64,21 @@ export interface ImportOutcome {
   counts?: { classes: number; hours: number };
 }
 
+export interface ImportDraftSnapshot {
+  parsed: ImportParsed;
+  classes: ImportRow[];
+  hours: ImportRow[];
+  identity: boolean;
+  effDate: string;
+}
+
+export interface ImportFileBatchCheck {
+  status: 'checking' | 'ready' | 'blocked' | 'failed' | 'submitting' | 'submitFailed';
+  message?: string;
+  report?: ImportReport;
+  snapshot?: ImportDraftSnapshot;
+}
+
 export interface ImportSessionCallbacks {
   onApplied?: () => void;
   onDone?: (status: ImportOutcome['status']) => void;
@@ -87,15 +102,11 @@ export interface ImportFile {
   fileHash: string;
   identity: 'unchecked' | 'checking' | 'match' | 'mismatch' | 'unreadable';
   identityRead: string;
+  ownershipConfirmed: boolean;
   alreadyImported: string;
   importState: 'pending' | 'imported' | 'scheduled';
-  reviewDraft?: {
-    parsed: ImportParsed;
-    classes: ImportRow[];
-    hours: ImportRow[];
-    identity: boolean;
-    effDate: string;
-  };
+  reviewDraft?: ImportDraftSnapshot;
+  batchCheck?: ImportFileBatchCheck;
 }
 
 export interface ImportSessionState {
@@ -124,6 +135,8 @@ export interface ImportSessionState {
   problems: string[];
   skipped: number;
   reviewId: string | null;
+  bulkChecking: boolean;
+  bulkSubmitting: boolean;
 }
 
 interface ImportSessionActions {
@@ -142,6 +155,7 @@ interface ImportSessionActions {
   removeRow: (type: 'class' | 'consult', id: string) => void;
   notifyApplied: () => void;
   setIdentity: (checked: boolean) => void;
+  setFileOwnership: (id: string, checked: boolean) => void;
   setEffDate: (date: string) => void;
   resetDraft: () => void;
   setReviewId: (id: string | null) => void;
@@ -153,6 +167,8 @@ interface ImportSessionActions {
   retryFile: (id: string) => void;
   removeFile: (id: string) => void;
   resetBulk: () => void;
+  prepareBulkSubmit: () => Promise<void>;
+  submitBulk: () => Promise<void>;
 }
 
 export interface ImportSessionContextValue {
@@ -194,6 +210,8 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   const [problems, setProblems] = useState<string[]>([]);
   const [skipped, setSkipped] = useState(0);
   const [reviewId, setReviewId] = useState<string | null>(null);
+  const [bulkChecking, setBulkChecking] = useState(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
   // refs kept so the one-at-a-time OCR pump survives re-renders / minimisation
   const itemsRef = useRef<ImportFile[]>([]);
@@ -201,6 +219,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   const activeRef = useRef(false);
   const generationRef = useRef(0);
   const draftGenerationRef = useRef(0);
+  const bulkOperationRef = useRef(false);
   const counter = useRef(1);
   const histories = useRef<Record<string, Promise<{ status: string; effectivityDate: string }[]>>>({});
   const callbacksRef = useRef<ImportSessionCallbacks>({});
@@ -211,6 +230,11 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
 
   const setAll = (next: ImportFile[]) => { itemsRef.current = next; setFiles(next); };
   const patch = (id: string, p: Partial<ImportFile>) => setAll(itemsRef.current.map(i => (i.id === id ? { ...i, ...p } : i)));
+  const invalidateBulkChecks = () => {
+    if (itemsRef.current.some(item => item.batchCheck)) {
+      setAll(itemsRef.current.map(item => ({ ...item, batchCheck: undefined })));
+    }
+  };
 
   const facultyListRef = useRef<FacultyLite[]>([]);
 
@@ -241,6 +265,8 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     if (values.problems !== undefined) setProblems(values.problems);
     if (values.skipped !== undefined) setSkipped(values.skipped);
     if (values.reviewId !== undefined) setReviewId(values.reviewId);
+    if (values.bulkChecking !== undefined) setBulkChecking(values.bulkChecking);
+    if (values.bulkSubmitting !== undefined) setBulkSubmitting(values.bulkSubmitting);
   };
 
   const resetDraft = () => {
@@ -265,6 +291,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     activeRef.current = false;
     generationRef.current += 1;
     draftGenerationRef.current += 1;
+    bulkOperationRef.current = false;
     setMinimized(false);
     setPendingOpen(false);
     setActive(false);
@@ -274,6 +301,8 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     setProblems([]);
     setSkipped(0);
     setReviewId(null);
+    setBulkChecking(false);
+    setBulkSubmitting(false);
     itemsRef.current = [];
     counter.current = 1;
     histories.current = {};
@@ -295,6 +324,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     activeRef.current = true;
     generationRef.current += 1;
     draftGenerationRef.current += 1;
+    bulkOperationRef.current = false;
     callbacksRef.current = options?.callbacks || {};
     facultyListRef.current = options?.facultyList || [];
     setSession({
@@ -303,7 +333,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       active: true, minimized: false, pendingOpen: false,
       parsed: null, classes: [], hours: [], report: null, busy: false, reading: false, nextId: 1,
       outcome: null, fileHash: '', effDate: '', identity: false, uploadError: '', confirming: false,
-      files: [], problems: [], skipped: 0, reviewId: null,
+      files: [], problems: [], skipped: 0, reviewId: null, bulkChecking: false, bulkSubmitting: false,
     });
     itemsRef.current = [];
     counter.current = 1;
@@ -314,7 +344,17 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     return true;
   };
 
-  const minimize = () => { setMinimized(true); setPendingOpen(false); };
+  const minimize = () => {
+    const hasWork = kind === 'bulk'
+      ? itemsRef.current.length > 0
+      : parsed !== null || reading || classes.length > 0 || hours.length > 0 || outcome !== null;
+    if (!hasWork) {
+      clear();
+      return;
+    }
+    setMinimized(true);
+    setPendingOpen(false);
+  };
   const restore = () => { setMinimized(false); setPendingOpen(false); };
 
   // ── single: upload PDF ──
@@ -394,6 +434,14 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   };
   const notifyApplied = () => callbacksRef.current.onApplied?.();
   const setIdentity = (checked: boolean) => { setIdentityState(checked); setReport(null); };
+  const setFileOwnership = (id: string, checked: boolean) => {
+    invalidateBulkChecks();
+    const item = itemsRef.current.find(file => file.id === id);
+    patch(id, {
+      ownershipConfirmed: checked,
+      reviewDraft: item?.reviewDraft ? { ...item.reviewDraft, identity: checked } : undefined,
+    });
+  };
   const setEffDate = (date: string) => setEffDateState(date);
 
   // ── single: server re-check ──
@@ -442,7 +490,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
 
   // ── bulk: add files ──
   const addFiles = async (incoming: File[]) => {
-    const list = [...itemsRef.current];
+    const list: ImportFile[] = itemsRef.current.map(item => ({ ...item, batchCheck: undefined }));
     const issues: string[] = [];
     for (const file of incoming) {
       if (list.length >= MAX_FILES) { issues.push(`Only ${MAX_FILES} files at a time. The rest were left out.`); break; }
@@ -453,7 +501,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       const auto = match.status === 'matched';
       list.push({
         id: `f${counter.current++}`, file, match, facultyId: auto ? match.candidates[0]._id : '', ocr: auto ? 'queued' : 'waiting',
-        error: '', data: null, fileHash: '', identity: 'unchecked', identityRead: '', alreadyImported: '', importState: 'pending',
+        error: '', data: null, fileHash: '', identity: 'unchecked', identityRead: '', ownershipConfirmed: false, alreadyImported: '', importState: 'pending',
       });
     }
     setAll(list);
@@ -538,20 +586,234 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   };
 
   const assignFaculty = (id: string, fid: string) => {
+    invalidateBulkChecks();
     const it = itemsRef.current.find(i => i.id === id);
     if (!it) return;
     if (it.data) {
-      patch(id, { facultyId: fid, identity: fid ? 'checking' : 'unchecked', alreadyImported: '' });
+      patch(id, { facultyId: fid, identity: fid ? 'checking' : 'unchecked', ownershipConfirmed: false, reviewDraft: undefined, alreadyImported: '' });
       if (fid) void checkOne(id, generationRef.current);
     } else {
-      patch(id, { facultyId: fid, ocr: fid ? 'queued' : 'waiting' });
+      patch(id, { facultyId: fid, ocr: fid ? 'queued' : 'waiting', ownershipConfirmed: false, reviewDraft: undefined });
       if (fid) void pump();
     }
   };
-  const retryFile = (id: string) => { patch(id, { ocr: 'queued', error: '' }); void pump(); };
-  const removeFile = (id: string) => { setAll(itemsRef.current.filter(i => i.id !== id)); setSkipped(n => n + 1); };
-  const resetBulk = () => { resetDraft(); setAll([]); setProblems([]); setSkipped(0); setReviewId(null); histories.current = {}; };
+  const retryFile = (id: string) => { invalidateBulkChecks(); patch(id, { ocr: 'queued', error: '' }); void pump(); };
+  const removeFile = (id: string) => { invalidateBulkChecks(); setAll(itemsRef.current.filter(i => i.id !== id)); setSkipped(n => n + 1); };
+  const resetBulk = () => {
+    generationRef.current += 1;
+    bulkOperationRef.current = false;
+    resetDraft();
+    setAll([]);
+    setProblems([]);
+    setSkipped(0);
+    setReviewId(null);
+    setBulkChecking(false);
+    setBulkSubmitting(false);
+    histories.current = {};
+  };
+
+  const prepareBulkSubmit = async () => {
+    if (kind !== 'bulk' || bulkChecking || bulkSubmitting || bulkOperationRef.current) return;
+    bulkOperationRef.current = true;
+    const generation = generationRef.current;
+    const pending = itemsRef.current.filter(item => item.importState === 'pending');
+    const facultyCounts = new Map<string, number>();
+    pending.forEach(item => {
+      if (item.facultyId && item.ocr === 'done' && item.data && item.identity !== 'mismatch') {
+        facultyCounts.set(item.facultyId, (facultyCounts.get(item.facultyId) || 0) + 1);
+      }
+    });
+
+    invalidateBulkChecks();
+    setBulkChecking(true);
+    try {
+      for (const item of pending) {
+        if (generation !== generationRef.current) return;
+        const current = itemsRef.current.find(file => file.id === item.id);
+        if (!current || current.importState !== 'pending') continue;
+
+        let blocker = '';
+        if (!current.facultyId) blocker = 'Choose a faculty member before batch submission.';
+        else if (current.ocr !== 'done' || !current.data) blocker = 'Wait for this PDF to finish reading, or retry it before batch submission.';
+        else if (current.identity === 'checking') blocker = 'Wait for the faculty account check to finish.';
+        else if (current.identity === 'mismatch') blocker = 'Choose the correct faculty account or remove this PDF.';
+        else if ((facultyCounts.get(current.facultyId) || 0) > 1) blocker = 'More than one PDF is assigned to this faculty member. Submit only one at a time to avoid replacing one schedule with another.';
+
+        if (blocker) {
+          patch(current.id, { batchCheck: { status: 'blocked', message: blocker } });
+          continue;
+        }
+
+        const source = current.reviewDraft || {
+          parsed: current.data!,
+          classes: current.data!.classes,
+          hours: current.data!.consultationHours,
+          identity: current.ownershipConfirmed,
+          effDate: current.data!.metadata.effectivityDate || '',
+        };
+        const snapshot: ImportDraftSnapshot = {
+          parsed: source.parsed,
+          classes: source.classes,
+          hours: source.hours,
+          identity: source.identity,
+          effDate: source.effDate,
+        };
+        patch(current.id, { batchCheck: { status: 'checking', snapshot } });
+
+        try {
+          const res = await authFetch(`${API}/api/schedule-import/validate`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              facultyId: current.facultyId,
+              classes: snapshot.classes,
+              consultationHours: snapshot.hours,
+              metadata: snapshot.parsed.metadata,
+              workload: snapshot.parsed.workload,
+              identityConfirmed: snapshot.identity,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (generation !== generationRef.current) return;
+          if (!res.ok) {
+            patch(current.id, { batchCheck: { status: 'failed', message: 'The server could not check this schedule. Try again or review it individually.', snapshot } });
+            continue;
+          }
+          if (typeof data.ok !== 'boolean' || !Array.isArray(data.errors) || !Array.isArray(data.warnings)) {
+            patch(current.id, { batchCheck: { status: 'failed', message: 'The server returned an incomplete check. Try again or review this file individually.', snapshot } });
+            continue;
+          }
+
+          const report = data as ImportReport;
+          if (!report.ok) {
+            patch(current.id, { batchCheck: { status: 'blocked', report, snapshot } });
+            continue;
+          }
+          const date = snapshot.effDate;
+          const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : null;
+          if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) {
+            patch(current.id, { batchCheck: { status: 'blocked', message: 'Set a valid effectivity date in Review before batch submission.', report, snapshot } });
+            continue;
+          }
+          if (!report.scheduleFingerprint) {
+            patch(current.id, { batchCheck: { status: 'failed', message: 'The server did not provide a schedule check fingerprint. Check this file again.', report, snapshot } });
+            continue;
+          }
+          patch(current.id, { batchCheck: { status: 'ready', report, snapshot } });
+        } catch {
+          if (generation === generationRef.current) {
+            patch(current.id, { batchCheck: { status: 'failed', message: 'Could not reach the server to check this schedule.', snapshot } });
+          }
+        }
+      }
+
+      if (generation === generationRef.current) {
+        const ready = itemsRef.current.filter(item => item.importState === 'pending' && item.batchCheck?.status === 'ready').length;
+        const blocked = itemsRef.current.filter(item => item.importState === 'pending' && item.batchCheck?.status !== 'ready').length;
+        toast({
+          title: ready ? 'Batch check complete' : 'No files are ready to submit',
+          description: `${ready} file(s) passed the server check${blocked ? `; ${blocked} need review or another check` : ''}. Yellow warnings do not prevent submission.`,
+          status: ready ? 'success' : 'warning',
+          duration: 6000,
+          isClosable: true,
+        });
+      }
+    } finally {
+      if (generation === generationRef.current) {
+        setBulkChecking(false);
+        bulkOperationRef.current = false;
+      }
+    }
+  };
+
+  const submitBulk = async () => {
+    if (kind !== 'bulk' || bulkChecking || bulkSubmitting || bulkOperationRef.current) return;
+    const generation = generationRef.current;
+    const ready = itemsRef.current.filter(item => item.importState === 'pending'
+      && item.batchCheck?.status === 'ready' && item.batchCheck.snapshot && item.batchCheck.report);
+    if (!ready.length) return;
+
+    setBulkSubmitting(true);
+    bulkOperationRef.current = true;
+    let submitted = 0;
+    let failed = 0;
+    try {
+      for (const item of ready) {
+        if (generation !== generationRef.current) return;
+        const current = itemsRef.current.find(file => file.id === item.id);
+        const batchCheck = current?.batchCheck;
+        const snapshot = batchCheck?.snapshot;
+        const report = batchCheck?.report;
+        if (!current || !snapshot || !report || current.importState !== 'pending') continue;
+
+        patch(current.id, { batchCheck: { ...batchCheck, status: 'submitting' } });
+        try {
+          const res = await authFetch(`${API}/api/schedule-import/confirm`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              facultyId: current.facultyId,
+              classes: snapshot.classes,
+              consultationHours: snapshot.hours,
+              metadata: snapshot.parsed.metadata,
+              workload: snapshot.parsed.workload,
+              identityConfirmed: snapshot.identity,
+              effectivityDate: snapshot.effDate,
+              scheduleFingerprint: report.scheduleFingerprint,
+              fileHash: current.fileHash,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (generation !== generationRef.current) return;
+          if (!res.ok || (data.status !== 'ACTIVE' && data.status !== 'SCHEDULED')) {
+            const errors = Array.isArray(data.errors) ? data.errors as ImportIssue[] : report.errors;
+            patch(current.id, {
+              batchCheck: {
+                status: 'submitFailed',
+                message: data.error || 'The schedule was not submitted. Review it and check again.',
+                report: { ...report, ok: false, errors },
+                snapshot,
+              },
+            });
+            failed += 1;
+            continue;
+          }
+
+          const status: ImportOutcome['status'] = data.status;
+          patch(current.id, {
+            importState: status === 'ACTIVE' ? 'imported' : 'scheduled',
+            reviewDraft: undefined,
+            batchCheck: undefined,
+          });
+          callbacksRef.current.onDone?.(status);
+          if (status === 'ACTIVE') callbacksRef.current.onApplied?.();
+          submitted += 1;
+        } catch {
+          if (generation !== generationRef.current) return;
+          patch(current.id, {
+            batchCheck: { status: 'submitFailed', message: 'Could not reach the server. Review this file and try again.', report, snapshot },
+          });
+          failed += 1;
+        }
+      }
+
+      if (generation === generationRef.current) {
+        toast({
+          title: failed ? 'Batch submission finished with issues' : 'Batch submission complete',
+          description: `${submitted} submitted${failed ? `; ${failed} need attention` : ''}. Each schedule is saved separately, so a failed file does not undo successful ones.`,
+          status: failed ? 'warning' : 'success',
+          duration: 7000,
+          isClosable: true,
+        });
+      }
+    } finally {
+      if (generation === generationRef.current) {
+        setBulkSubmitting(false);
+        bulkOperationRef.current = false;
+      }
+    }
+  };
+
   const openReview = (id: string) => {
+    invalidateBulkChecks();
     const item = itemsRef.current.find(i => i.id === id);
     if (!item || !item.data || !item.facultyId) return;
     const draft = item.reviewDraft;
@@ -561,7 +823,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     setClasses(draft?.classes || item.data.classes);
     setHours(draft?.hours || item.data.consultationHours);
     setReport(null);
-    setIdentityState(draft?.identity || false);
+    setIdentityState(draft?.identity ?? item.ownershipConfirmed);
     setFileHash(item.fileHash);
     setEffDateState(draft ? draft.effDate : item.data.metadata.effectivityDate || '');
     setOutcome(null);
@@ -569,8 +831,10 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   };
   const backToList = () => {
     if (kind !== 'bulk' || !reviewId || !parsed) return;
+    invalidateBulkChecks();
     patch(reviewId, {
       reviewDraft: { parsed, classes, hours, identity, effDate },
+      ownershipConfirmed: identity,
       importState: 'pending',
     });
     setReport(null);
@@ -608,19 +872,20 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     state: {
       active, kind, mode, facultyId, facultyName, facultyList, minimized, pendingOpen,
       parsed, classes, hours, report, busy, reading, nextId, outcome, effDate, identity, uploadError, confirming,
-      files, problems, skipped, reviewId, fileHash,
+      files, problems, skipped, reviewId, fileHash, bulkChecking, bulkSubmitting,
     },
     actions: {
       begin, minimize, restore, clear,
       uploadPdf, loadFile, check, confirm,
       editClass, editHour, addClass, addHour, removeRow,
       notifyApplied,
-      setIdentity, setEffDate, resetDraft,
+      setIdentity, setFileOwnership, setEffDate, resetDraft,
       setReviewId,
       openReview, backToList, closeReview,
       addFiles, assignFaculty, retryFile, removeFile, resetBulk,
+      prepareBulkSubmit, submitBulk,
     },
-  }), [active, kind, mode, facultyId, facultyName, facultyList, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, fileHash, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setEffDate, resetDraft, setReviewId, openReview, backToList, closeReview, addFiles, assignFaculty, retryFile, removeFile, resetBulk]);
+  }), [active, kind, mode, facultyId, facultyName, facultyList, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, fileHash, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, bulkChecking, bulkSubmitting, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setFileOwnership, setEffDate, resetDraft, setReviewId, openReview, backToList, closeReview, addFiles, assignFaculty, retryFile, removeFile, resetBulk, prepareBulkSubmit, submitBulk]);
 
   return (
     <ImportSessionContext.Provider value={value}>{children}</ImportSessionContext.Provider>

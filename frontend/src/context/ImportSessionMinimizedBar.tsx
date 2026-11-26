@@ -17,16 +17,31 @@ export default function ImportSessionMinimizedBar() {
   if (state.kind === 'bulk') {
     const total = state.files.length;
     const pending = state.files.filter(i => i.importState === 'pending');
-    const attention = pending.filter(i => !i.facultyId || i.ocr === 'failed' || i.identity === 'mismatch').length;
+    const checked = state.files.filter(i => i.importState !== 'pending'
+      || (i.batchCheck && i.batchCheck.status !== 'checking')).length;
+    const submitted = state.files.filter(i => i.importState !== 'pending'
+      || i.batchCheck?.status === 'submitFailed').length;
+    const attention = pending.filter(i => !i.facultyId || i.ocr === 'failed' || i.identity === 'mismatch'
+      || i.batchCheck?.status === 'blocked' || i.batchCheck?.status === 'failed' || i.batchCheck?.status === 'submitFailed').length;
     const busy = pending.filter(i => i.facultyId && i.ocr !== 'failed' && i.identity !== 'mismatch'
       && (i.ocr === 'queued' || i.ocr === 'reading' || i.identity === 'checking')).length;
     const ready = pending.length - attention - busy;
     const processed = state.files.filter(i => i.importState !== 'pending' || i.ocr === 'done' || i.ocr === 'failed').length;
-    status = total
-      ? `Bulk import: ${ready} of ${total} ready, ${attention} need attention`
-      : 'Bulk import: choose PDFs to begin';
-    progress = total ? Math.round(processed / total * 100) : 0;
-    progressLabel = `${processed} of ${total} read`;
+    if (state.bulkSubmitting) {
+      status = `Bulk import: submitting ${submitted} of ${total}; ${pending.length - submitted} remain`;
+      progress = total ? Math.round(submitted / total * 100) : 0;
+      progressLabel = `${submitted} of ${total} submitted or failed`;
+    } else if (state.bulkChecking) {
+      status = `Bulk import: checking ${checked} of ${total}`;
+      progress = total ? Math.round(checked / total * 100) : 0;
+      progressLabel = `${checked} of ${total} checked`;
+    } else {
+      status = total
+        ? `Bulk import: ${ready} of ${total} ready, ${attention} need attention`
+        : 'Bulk import: choose PDFs to begin';
+      progress = total ? Math.round(processed / total * 100) : 0;
+      progressLabel = `${processed} of ${total} read`;
+    }
   } else {
     status = state.reading ? 'Schedule import: reading PDF'
       : state.outcome ? 'Schedule import: complete'
@@ -47,7 +62,7 @@ export default function ImportSessionMinimizedBar() {
             <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">{progressLabel}</Text>
           </HStack>
           <HStack justify="flex-end">
-            <Button size="sm" variant="ghost" onClick={() => setConfirmCfg({
+            <Button size="sm" variant="ghost" isDisabled={state.bulkSubmitting} onClick={() => setConfirmCfg({
               title: 'Discard this import?',
               body: <>The PDFs, edits, and check results in this import session will be cleared.</>,
               confirmLabel: 'Discard import',
