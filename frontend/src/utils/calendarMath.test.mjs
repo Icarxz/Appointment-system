@@ -31,6 +31,7 @@ test('overlap math marks both events for an actual same-day clash', () => {
 test('calendar event positions clip to the visible day and reject invalid ranges', () => {
   assert.deepEqual(calendarEventPosition('07:00', '07:30', 24), { top: 0, height: 22 });
   assert.deepEqual(calendarEventPosition('18:30', '19:30', 24), { top: 552, height: 22 });
-  assert.equal(calendarEventPosition('06:00', '06:30', 24), null);
+  assert.deepEqual(calendarEventPosition('06:00', '06:30', 24), { top: 0, height: 22 });
+  assert.deepEqual(calendarEventPosition('19:00', '20:00', 24), { top: 552, height: 22 });
   assert.equal(calendarEventPosition('12:00', '11:30', 24), null);
 });

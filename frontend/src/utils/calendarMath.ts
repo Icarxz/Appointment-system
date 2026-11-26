@@ -26,7 +26,7 @@ export function intervalsOverlap(a: CalendarInterval, b: CalendarInterval): bool
   const aEnd = timeToMinutes(a.endTime);
   const bStart = timeToMinutes(b.startTime);
   const bEnd = timeToMinutes(b.endTime);
-  return Number.isInteger(a.dayOfWeek)
+  return Number.isInteger(a.dayOfWeek) && a.dayOfWeek >= 0 && a.dayOfWeek <= 6
     && a.dayOfWeek === b.dayOfWeek
     && aStart !== null && aEnd !== null && bStart !== null && bEnd !== null
     && aEnd > aStart && bEnd > bStart
@@ -54,6 +54,15 @@ export function calendarEventPosition(
   const start = timeToMinutes(startTime);
   const end = timeToMinutes(endTime);
   if (start === null || end === null || end <= start || !Number.isFinite(slotHeight) || slotHeight <= 0) return null;
+
+  const visibleHeight = Math.max(14, slotHeight - 2);
+  if (end <= CALENDAR_START_MINUTES) return { top: 0, height: visibleHeight };
+  if (start >= CALENDAR_END_MINUTES) {
+    return {
+      top: ((CALENDAR_END_MINUTES - CALENDAR_START_MINUTES) / CALENDAR_STEP_MINUTES - 1) * slotHeight,
+      height: visibleHeight,
+    };
+  }
 
   const clippedStart = Math.max(start, CALENDAR_START_MINUTES);
   const clippedEnd = Math.min(end, CALENDAR_END_MINUTES);

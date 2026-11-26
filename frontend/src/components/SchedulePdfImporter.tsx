@@ -1,14 +1,12 @@
-import { Fragment, useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
-  Alert, AlertIcon, Badge, Box, Button, Checkbox, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent,
-  ModalHeader, ModalOverlay, Select, Spinner, Table, TableContainer, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useToast,
+  Alert, AlertIcon, Badge, Box, Button, Checkbox, HStack, Input, Modal, ModalBody, ModalCloseButton, ModalContent,
+  ModalHeader, ModalOverlay, Spinner, Table, TableContainer, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useToast,
 } from '@chakra-ui/react';
-import { DeleteIcon } from '@chakra-ui/icons';
 import ConfirmAction from './ConfirmAction';
 import type { ConfirmConfig } from './ConfirmAction';
+import ScheduleDraftCalendar from './ScheduleDraftCalendar';
 import { authFetch } from './authFetch';
-import { DAY_LONG, CONSULTATION_DAYS, CLASS_DAYS } from '../utils/daySettings';
-import type { ImportIssue } from '../context/ImportSessionContext';
 import { useImportSession } from '../context/ImportSessionContextCore';
 
 const API = import.meta.env.VITE_API_URL;
@@ -18,12 +16,6 @@ const API = import.meta.env.VITE_API_URL;
 // effectivity date. The server checks everything again; the previous schedule is kept in the import history and can be undone. Used from three places: Admin > Class Schedules, Admin > Provision Account
 // and Faculty > Master Schedule. Admins can also load a draft JSON written by ocr/schedule_ocr.py (fallback while OCR hosting is undecided).
 
-interface Row { id: string; dayOfWeek: number; startTime: string; endTime: string; needsReview: boolean; reviewReasons: string[]; rawText?: string;
-  subject?: string; section?: string; room?: string; label?: string }
-// 07:00 ... 19:00 in 30-minute steps: a list to pick from, so a misaligned time cannot be typed
-const TIMES = Array.from({ length: 25 }, (_, i) => { const m = 420 + i * 30; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; });
-const t12 = (t: string) => { const [h, m] = t.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
-
 interface HistoryItem { id: string; status: string; effectivityDate: string; term: string; academicYear: string; confirmedAt: string; failureReason: string; classBlocks: number; consultationBlocks: number }
 
 interface Props { facultyId: string; facultyName: string; mode: 'admin' | 'faculty'; isOpen: boolean }
@@ -32,8 +24,6 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
   const { state, actions } = useImportSession();
   const toast = useToast();
   const muted = useColorModeValue('#64748b', '#8fa6c4');
-  const errBg = useColorModeValue('#fee2e2', '#4c1d1d');
-  const warnBg = useColorModeValue('#fef3c7', '#4a3a12');
   const { parsed, classes, hours, identity, report, busy, reading, uploadError, fileHash, effDate, outcome, confirming } = state;
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
   const [history, setHistory] = useState<HistoryItem[] | null>(null);
@@ -44,10 +34,6 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
   // Step 1a: upload the scanned PDF; the server reads it with OCR and sends back editable rows
   const uploadPdf = actions.uploadPdf;
   const loadFile = actions.loadFile;
-  const editClass = actions.editClass;
-  const editHour = actions.editHour;
-  const addClass = actions.addClass;
-  const addHour = actions.addHour;
   const check = actions.check;
   const confirm = actions.confirm;
   const askConfirm = () => {
@@ -84,26 +70,6 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
     confirmLabel: what === 'rollback' ? 'Undo import' : 'Cancel import', run: () => act(it.id, what),
   });
 
-  const issuesOf = useMemo(() => {
-    const by = (list: ImportIssue[]) => { const m: Record<string, ImportIssue[]> = {}; list.forEach(i => { if (i.ref) (m[`${i.ref.type}:${i.ref.id}`] ||= []).push(i); }); return m; };
-    return { errors: by(report?.errors || []), warnings: by(report?.warnings || []) };
-  }, [report]);
-  const bg = (type: string, r: Row) => (issuesOf.errors[`${type}:${r.id}`] ? errBg : (r.needsReview || issuesOf.warnings[`${type}:${r.id}`]) ? warnBg : undefined);
-  // What to print under a row: its errors, then its warnings. Before the first check the OCR's own reasons stand in for the warnings.
-  const note = (type: string, r: Row): { message: string; error?: boolean }[] => [
-    ...(issuesOf.errors[`${type}:${r.id}`] || []).map(i => ({ message: i.message, error: true })),
-    ...(report ? (issuesOf.warnings[`${type}:${r.id}`] || []) : (r.needsReview ? r.reviewReasons.map(m => ({ message: m })) : [])),
-  ];
-
-  // The messages for one row, on their own full-width line under it (same colour as the row)
-  const noteRow = (type: string, r: Row, span: number) => {
-    const notes = note(type, r);
-    return notes.length ? (
-      <Tr bg={bg(type, r)}><Td colSpan={span} py={1} borderTop="none">
-        {notes.map((n, i) => <Text key={i} fontSize="xs" fontWeight={n.error ? 600 : 400} whiteSpace="normal">{n.message}</Text>)}
-      </Td></Tr>
-    ) : null;
-  };
   const discard = () => setConfirmCfg({
     title: state.kind === 'bulk' ? 'Cancel this schedule review?' : 'Discard this schedule import?',
     body: state.kind === 'bulk'
@@ -112,12 +78,6 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
     confirmLabel: state.kind === 'bulk' ? 'Cancel review' : 'Discard import',
     run: state.kind === 'bulk' ? actions.closeReview : actions.clear,
   });
-  const liveMinutes = hours.reduce((s, h) => { const [a, b] = [h.startTime, h.endTime].map(t => { const [x, y] = t.split(':').map(Number); return x * 60 + y; }); return s + Math.max(0, b - a); }, 0);
-  const dayOptions = (days: readonly number[]) => [...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(d => <option key={d} value={d}>{DAY_LONG[d]}</option>);
-  const timeOptions = TIMES.map(t => <option key={t} value={t}>{t12(t)}</option>);
-  const sel = (value: string | number, onChange: (v: string) => void, options: React.ReactNode, label: string) =>
-    <Select size="sm" value={value} onChange={e => onChange(e.target.value)} aria-label={label} minW={label === 'Day' ? '150px' : '125px'}>{options}</Select>;
-
   return (
     <Modal isOpen={isOpen} onClose={close} size="6xl" scrollBehavior="inside">
       <ModalOverlay />
@@ -173,52 +133,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
               </Box>
               {parsed.warnings.map((w, i) => <Alert key={i} status="warning" borderRadius="md" py={2}><AlertIcon /><Text fontSize="sm">{w.message}</Text></Alert>)}
 
-              <Box>
-                <HStack justify="space-between" mb={2}><Text fontWeight="700">Teaching classes ({classes.length})</Text><Button size="xs" variant="outline" onClick={addClass}>Add class</Button></HStack>
-                <TableContainer><Table size="sm"><Thead><Tr><Th>Day</Th><Th>Start</Th><Th>End</Th><Th>Subject</Th><Th>Section</Th><Th>Room</Th><Th /></Tr></Thead>
-                  <Tbody>{classes.map(c => (
-                    <Fragment key={c.id}>
-                    <Tr bg={bg('class', c)}>
-                      <Td>{sel(c.dayOfWeek, v => editClass(c.id, { dayOfWeek: Number(v) }), dayOptions(CLASS_DAYS), 'Day')}</Td>
-                      <Td>{sel(c.startTime, v => editClass(c.id, { startTime: v }), timeOptions, 'Start time')}</Td>
-                      <Td>{sel(c.endTime, v => editClass(c.id, { endTime: v }), timeOptions, 'End time')}</Td>
-                      <Td><Input size="sm" value={c.subject || ''} onChange={e => editClass(c.id, { subject: e.target.value })} aria-label="Subject" minW="150px" /></Td>
-                      <Td><Input size="sm" value={c.section || ''} onChange={e => editClass(c.id, { section: e.target.value })} aria-label="Section" minW="90px" /></Td>
-                      <Td><Input size="sm" value={c.room || ''} onChange={e => editClass(c.id, { room: e.target.value })} aria-label="Room" minW="90px" /></Td>
-                      <Td>
-                        <HStack spacing={1}>
-                          {c.needsReview && <Button size="xs" onClick={() => editClass(c.id, { needsReview: false })} title="I checked this row against the scan">Reviewed</Button>}
-                          <IconButton size="xs" variant="ghost" aria-label="Delete class" icon={<DeleteIcon />} onClick={() => actions.removeRow('class', c.id)} />
-                        </HStack>
-                      </Td>
-                    </Tr>
-                    {noteRow('class', c, 7)}
-                    </Fragment>))}</Tbody></Table></TableContainer>
-              </Box>
-
-              <Box>
-                <HStack justify="space-between" mb={2}>
-                  <Text fontWeight="700">Official consultation hours ({hours.length}) <Badge ml={2} colorScheme={liveMinutes === 240 ? 'green' : 'orange'}>{(liveMinutes / 60).toFixed(1)} of 4 hours</Badge></Text>
-                  <Button size="xs" variant="outline" onClick={addHour}>Add block</Button>
-                </HStack>
-                <TableContainer><Table size="sm"><Thead><Tr><Th>Day</Th><Th>Start</Th><Th>End</Th><Th /></Tr></Thead>
-                  <Tbody>{hours.map(h => (
-                    <Fragment key={h.id}>
-                    <Tr bg={bg('consult', h)}>
-                      <Td>{sel(h.dayOfWeek, v => editHour(h.id, { dayOfWeek: Number(v) }), dayOptions(CONSULTATION_DAYS), 'Day')}</Td>
-                      <Td>{sel(h.startTime, v => editHour(h.id, { startTime: v }), timeOptions, 'Start time')}</Td>
-                      <Td>{sel(h.endTime, v => editHour(h.id, { endTime: v }), timeOptions, 'End time')}</Td>
-                      <Td>
-                        <HStack spacing={1}>
-                          {h.needsReview && <Button size="xs" onClick={() => editHour(h.id, { needsReview: false })}>Reviewed</Button>}
-                          <IconButton size="xs" variant="ghost" aria-label="Delete block" icon={<DeleteIcon />} onClick={() => actions.removeRow('consult', h.id)} />
-                        </HStack>
-                      </Td>
-                    </Tr>
-                    {noteRow('consult', h, 4)}
-                    </Fragment>))}</Tbody></Table></TableContainer>
-                <Text fontSize="xs" color={muted} mt={1}>Consultation hours are Monday to Friday only.</Text>
-              </Box>
+              <ScheduleDraftCalendar />
 
               <Box borderWidth="1px" borderRadius="md" p={3}>
                 {report?.identity?.status === 'mismatch' ? (
