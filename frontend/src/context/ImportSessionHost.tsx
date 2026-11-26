@@ -1,6 +1,7 @@
 import { useImportSession } from './ImportSessionContextCore';
 import SchedulePdfImporter from '../components/SchedulePdfImporter';
 import BulkSchedulePdfImporter from '../components/BulkSchedulePdfImporter';
+import ImportSessionMinimizedBar from './ImportSessionMinimizedBar';
 
 export default function ImportSessionHost() {
   const { state, actions } = useImportSession();
@@ -8,6 +9,7 @@ export default function ImportSessionHost() {
   if (state.kind === 'bulk') {
     return (
       <>
+        <ImportSessionMinimizedBar />
         <BulkSchedulePdfImporter />
         {state.reviewId && (
           <SchedulePdfImporter
@@ -23,12 +25,15 @@ export default function ImportSessionHost() {
     );
   }
   return (
-    <SchedulePdfImporter
-      facultyId={state.facultyId}
-      facultyName={state.facultyName}
-      mode={state.mode}
-      isOpen={!state.minimized}
-      onClose={actions.minimize}
-    />
+    <>
+      <ImportSessionMinimizedBar />
+      <SchedulePdfImporter
+        facultyId={state.facultyId}
+        facultyName={state.facultyName}
+        mode={state.mode}
+        isOpen={!state.minimized}
+        onClose={actions.minimize}
+      />
+    </>
   );
 }
