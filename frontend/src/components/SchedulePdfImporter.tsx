@@ -110,10 +110,12 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
     ) : null;
   };
   const discard = () => setConfirmCfg({
-    title: 'Discard this schedule import?',
-    body: <>The PDF, edits, and check results in this import session will be cleared.</>,
-    confirmLabel: 'Discard import',
-    run: actions.clear,
+    title: state.kind === 'bulk' ? 'Cancel this schedule review?' : 'Discard this schedule import?',
+    body: state.kind === 'bulk'
+      ? <>The edits and check results for this PDF will be discarded. The rest of the bulk import will remain.</>
+      : <>The PDF, edits, and check results in this import session will be cleared.</>,
+    confirmLabel: state.kind === 'bulk' ? 'Cancel review' : 'Discard import',
+    run: state.kind === 'bulk' ? actions.closeReview : actions.clear,
   });
   const liveMinutes = hours.reduce((s, h) => { const [a, b] = [h.startTime, h.endTime].map(t => { const [x, y] = t.split(':').map(Number); return x * 60 + y; }); return s + Math.max(0, b - a); }, 0);
   const dayOptions = (days: readonly number[]) => [...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(d => <option key={d} value={d}>{DAY_LONG[d]}</option>);
@@ -135,7 +137,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                   ? <><b>Schedule applied.</b> {facultyName}'s class schedule and official consultation hours were replaced{outcome.counts ? ` (${outcome.counts.classes} class(es), ${outcome.counts.hours} consultation block(s))` : ''}. The previous schedule is in the import history.</>
                   : <><b>Schedule scheduled.</b> It will be applied on {outcome.effectivityDate} after one more check. The current schedule stays until then.</>}</Text>
               </Alert>
-              <HStack justify="flex-end"><Button colorScheme="blue" onClick={actions.clear}>Done</Button></HStack>
+              <HStack justify="flex-end"><Button colorScheme="blue" onClick={state.kind === 'bulk' ? actions.closeReview : actions.clear}>Done</Button></HStack>
             </VStack>
           ) : !parsed ? (
             <VStack align="stretch" spacing={3}>
@@ -260,7 +262,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                 <HStack>
                   <Button variant="ghost" onClick={discard}>Cancel / Discard</Button>
                   <Button variant="ghost" onClick={close}>Minimize</Button>
-                  <Button variant="ghost" onClick={reset} title={fileHash ? `File fingerprint ${fileHash.slice(0, 12)}` : undefined}>Choose another file</Button>
+                  {state.kind === 'single' && <Button variant="ghost" onClick={reset} title={fileHash ? `File fingerprint ${fileHash.slice(0, 12)}` : undefined}>Choose another file</Button>}
                 </HStack>
                 <Button colorScheme="blue" onClick={check} isLoading={busy}>Check schedule</Button>
               </HStack>

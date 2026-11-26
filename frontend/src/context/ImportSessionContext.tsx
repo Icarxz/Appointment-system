@@ -98,6 +98,7 @@ export interface ImportSessionState {
   mode: 'admin' | 'faculty';
   facultyId: string;
   facultyName: string;
+  facultyList: FacultyLite[];
   minimized: boolean;
   pendingOpen: boolean;
   parsed: ImportParsed | null;
@@ -138,6 +139,8 @@ interface ImportSessionActions {
   setEffDate: (date: string) => void;
   resetDraft: () => void;
   setReviewId: (id: string | null) => void;
+  openReview: (id: string) => void;
+  closeReview: () => void;
   addFiles: (files: File[]) => Promise<void>;
   assignFaculty: (id: string, facultyId: string) => void;
   retryFile: (id: string) => void;
@@ -160,6 +163,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   const [mode, setMode] = useState<'admin' | 'faculty'>('admin');
   const [facultyId, setFacultyId] = useState<string>('');
   const [facultyName, setFacultyName] = useState<string>('');
+  const [facultyList, setFacultyList] = useState<FacultyLite[]>([]);
   const [minimized, setMinimized] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
 
@@ -207,6 +211,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     if (values.mode !== undefined) setMode(values.mode);
     if (values.facultyId !== undefined) setFacultyId(values.facultyId);
     if (values.facultyName !== undefined) setFacultyName(values.facultyName);
+    if (values.facultyList !== undefined) setFacultyList(values.facultyList);
     if (values.minimized !== undefined) setMinimized(values.minimized);
     if (values.pendingOpen !== undefined) setPendingOpen(values.pendingOpen);
     if (values.parsed !== undefined) setParsed(values.parsed);
@@ -246,6 +251,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     setMinimized(false);
     setPendingOpen(false);
     setActive(false);
+    setFacultyList([]);
     resetDraft();
     setFiles([]);
     setProblems([]);
@@ -255,6 +261,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     pumping.current = false;
     counter.current = 1;
     histories.current = {};
+    facultyListRef.current = [];
     callbacksRef.current = {};
   };
 
@@ -271,6 +278,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     facultyListRef.current = options?.facultyList || [];
     setSession({
       kind: nextKind, mode: nextMode, facultyId: nextFacultyId, facultyName: nextFacultyName,
+      facultyList: options?.facultyList || [],
       active: true, minimized: false, pendingOpen: false,
       parsed: initial?.data || null, classes: initial?.data.classes || [], hours: initial?.data.consultationHours || [],
       report: null, busy: false, reading: false, nextId: 1, outcome: null, fileHash: initial?.fileHash || '',
@@ -393,6 +401,9 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
         toast({ title: 'The schedule was not applied', description: data.error || 'Please check the schedule again.', status: 'error', duration: 8000, isClosable: true });
         return;
       }
+      if (kind === 'bulk' && reviewId) {
+        patch(reviewId, { importState: data.status === 'ACTIVE' ? 'imported' : 'scheduled' });
+      }
       setOutcome({ status: data.status, effectivityDate: data.effectivityDate, counts: data.counts });
       callbacksRef.current.onDone?.(data.status);
       if (data.status === 'ACTIVE') callbacksRef.current.onApplied?.();
@@ -501,7 +512,26 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   };
   const retryFile = (id: string) => { patch(id, { ocr: 'queued', error: '' }); void pump(); };
   const removeFile = (id: string) => { setAll(itemsRef.current.filter(i => i.id !== id)); setSkipped(n => n + 1); };
-  const resetBulk = () => { setAll([]); setProblems([]); setSkipped(0); setReviewId(null); histories.current = {}; };
+  const resetBulk = () => { resetDraft(); setAll([]); setProblems([]); setSkipped(0); setReviewId(null); histories.current = {}; };
+  const openReview = (id: string) => {
+    const item = itemsRef.current.find(i => i.id === id);
+    if (!item || !item.data || !item.facultyId) return;
+    setFacultyId(item.facultyId);
+    setFacultyName(facultyListRef.current.find(f => f._id === item.facultyId)?.name || '');
+    setParsed(item.data);
+    setClasses(item.data.classes);
+    setHours(item.data.consultationHours);
+    setReport(null);
+    setIdentityState(false);
+    setFileHash(item.fileHash);
+    setEffDateState(item.data.metadata.effectivityDate || '');
+    setOutcome(null);
+    setReviewId(id);
+  };
+  const closeReview = () => {
+    resetDraft();
+    setReviewId(null);
+  };
 
   // ── beforeunload warning while there is unsaved work ──
   const hasWork = active
@@ -527,7 +557,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
 
   const value = useMemo(() => ({
     state: {
-      active, kind, mode, facultyId, facultyName, minimized, pendingOpen,
+      active, kind, mode, facultyId, facultyName, facultyList, minimized, pendingOpen,
       parsed, classes, hours, report, busy, reading, nextId, outcome, effDate, identity, uploadError, confirming,
       files, problems, skipped, reviewId, fileHash,
     },
@@ -538,9 +568,10 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       notifyApplied,
       setIdentity, setEffDate, resetDraft,
       setReviewId,
+      openReview, closeReview,
       addFiles, assignFaculty, retryFile, removeFile, resetBulk,
     },
-  }), [active, kind, mode, facultyId, facultyName, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, fileHash, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setEffDate, resetDraft, setReviewId, addFiles, assignFaculty, retryFile, removeFile, resetBulk]);
+  }), [active, kind, mode, facultyId, facultyName, facultyList, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, fileHash, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setEffDate, resetDraft, setReviewId, openReview, closeReview, addFiles, assignFaculty, retryFile, removeFile, resetBulk]);
 
   return (
     <ImportSessionContext.Provider value={value}>{children}</ImportSessionContext.Provider>

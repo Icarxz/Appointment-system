@@ -27,7 +27,6 @@ import RequestList from './RequestList';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import WelcomeHeader from './WelcomeHeader';
 import FacultyScheduleModal from './FacultyScheduleModal';
-import BulkSchedulePdfImporter from './BulkSchedulePdfImporter';
 import { useImportSession } from '../context/ImportSessionContextCore';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel, facultyStatusOf, facultyStatusUntil } from './appointmentStatus';
@@ -83,7 +82,6 @@ export default function AdminDashboard() {
   const [newFacultyName, setNewFacultyName] = useState('');
   const [newAccount, setNewAccount] = useState<{ id: string; role: string } | null>(null); // the account just created, so its class grid can open
 
-  const [bulkOpen, setBulkOpen] = useState(false); // Class Schedules: bulk import of several schedule PDFs
   const [gridKey, setGridKey] = useState(0); // bumped after an import so the class grid reloads
   const [scheduleOf, setScheduleOf] = useState<any | null>(null); // faculty whose schedule is open
   const [emailEdit, setEmailEdit] = useState<any | null>(null); // account being moved to a school email
@@ -403,8 +401,7 @@ export default function AdminDashboard() {
                 options={facultyList.map(f => ({ value: f._id, label: f.name }))} />
             </FormControl>
             <HStack mb={3} justify="flex-end">
-              <ChakraButton size="sm" colorScheme="blue" onClick={() => setBulkOpen(true)} title="Upload several faculty schedule PDFs at once. Each file name picks the faculty; you review and confirm each one.">Bulk Import PDFs</ChakraButton>
-              <BulkSchedulePdfImporter isOpen={bulkOpen} onClose={() => setBulkOpen(false)} facultyList={facultyList} onApplied={() => setGridKey(k => k + 1)} />
+              <ChakraButton size="sm" colorScheme="blue" onClick={() => importActions.begin('bulk', 'admin', '', '', { facultyList, callbacks: { onApplied: () => setGridKey(k => k + 1) } })} title="Upload several faculty schedule PDFs at once. Each file name picks the faculty; you review and confirm each one.">Bulk Import PDFs</ChakraButton>
             </HStack>
             {selectedFacultyId && (
               <HStack mb={3} justify="flex-end">
