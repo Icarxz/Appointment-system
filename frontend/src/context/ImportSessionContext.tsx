@@ -1,10 +1,11 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useToast } from '@chakra-ui/react';
 import { authFetch } from '../components/authFetch';
 import { matchFacultyByFilename, type FacultyLite, type FileMatch } from '../utils/facultyMatch';
+import { ImportSessionContext } from './ImportSessionContextCore';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -129,17 +130,9 @@ interface ImportSessionActions {
   resetBulk: () => void;
 }
 
-interface ImportSessionContextValue {
+export interface ImportSessionContextValue {
   state: ImportSessionState;
   actions: ImportSessionActions;
-}
-
-const ImportSessionContext = createContext<ImportSessionContextValue | null>(null);
-
-export function useImportSession(): ImportSessionContextValue {
-  const ctx = useContext(ImportSessionContext);
-  if (!ctx) throw new Error('useImportSession must be used within an ImportSessionProvider');
-  return ctx;
 }
 
 export default function ImportSessionProvider({ children }: { children: ReactNode }) {

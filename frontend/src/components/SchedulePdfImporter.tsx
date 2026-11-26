@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import {
   Alert, AlertIcon, Badge, Box, Button, Checkbox, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent,
   ModalHeader, ModalOverlay, Select, Spinner, Table, TableContainer, Tbody, Td, Text, Th, Thead, Tr, VStack, useColorModeValue, useToast,
@@ -40,27 +40,21 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const errBg = useColorModeValue('#fee2e2', '#4c1d1d');
   const warnBg = useColorModeValue('#fef3c7', '#4a3a12');
-  const [parsed, setParsed] = useState<Parsed | null>(null);
-  const [classes, setClasses] = useState<Row[]>([]);
-  const [hours, setHours] = useState<Row[]>([]);
+  const [parsed, setParsed] = useState<Parsed | null>(() => initial?.data || null);
+  const [classes, setClasses] = useState<Row[]>(() => initial?.data.classes || []);
+  const [hours, setHours] = useState<Row[]>(() => initial?.data.consultationHours || []);
   const [identity, setIdentity] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [busy, setBusy] = useState(false);
   const [nextId, setNextId] = useState(1);
   const [reading, setReading] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  const [fileHash, setFileHash] = useState('');
-  const [effDate, setEffDate] = useState('');
+  const [fileHash, setFileHash] = useState(() => initial?.fileHash || '');
+  const [effDate, setEffDate] = useState(() => initial?.data.metadata?.effectivityDate || '');
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [history, setHistory] = useState<HistoryItem[] | null>(null);
-
-  // Opened from the bulk importer with the PDF already read: show its rows straight away (no second OCR run)
-  useEffect(() => {
-    if (!isOpen || !initial) return;
-    setParsed(initial.data); setClasses(initial.data.classes); setHours(initial.data.consultationHours); setReport(null); setIdentity(false); setFileHash(initial.fileHash || ''); setEffDate(initial.data.metadata?.effectivityDate || '');
-  }, [isOpen, initial?.fileHash]);
 
   const reset = () => { setOutcome(null); setEffDate(''); setParsed(null); setClasses([]); setHours([]); setIdentity(false); setReport(null); setUploadError(''); setFileHash(''); };
   const close = () => { reset(); onClose(); };
