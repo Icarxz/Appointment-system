@@ -73,7 +73,6 @@ export interface ImportSessionCallbacks {
 export interface ImportSessionStartOptions {
   files?: File[];
   facultyList?: FacultyLite[];
-  initial?: { data: ImportParsed; fileHash: string };
   callbacks?: ImportSessionCallbacks;
 }
 
@@ -288,16 +287,14 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     activeRef.current = true;
     generationRef.current += 1;
     draftGenerationRef.current += 1;
-    const initial = options?.initial;
     callbacksRef.current = options?.callbacks || {};
     facultyListRef.current = options?.facultyList || [];
     setSession({
       kind: nextKind, mode: nextMode, facultyId: nextFacultyId, facultyName: nextFacultyName,
       facultyList: options?.facultyList || [],
       active: true, minimized: false, pendingOpen: false,
-      parsed: initial?.data || null, classes: initial?.data.classes || [], hours: initial?.data.consultationHours || [],
-      report: null, busy: false, reading: false, nextId: 1, outcome: null, fileHash: initial?.fileHash || '',
-      effDate: initial?.data.metadata?.effectivityDate || '', identity: false, uploadError: '', confirming: false,
+      parsed: null, classes: [], hours: [], report: null, busy: false, reading: false, nextId: 1,
+      outcome: null, fileHash: '', effDate: '', identity: false, uploadError: '', confirming: false,
       files: [], problems: [], skipped: 0, reviewId: null,
     });
     itemsRef.current = [];

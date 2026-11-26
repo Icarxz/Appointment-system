@@ -4,7 +4,7 @@ import BulkSchedulePdfImporter from '../components/BulkSchedulePdfImporter';
 import ImportSessionMinimizedBar from './ImportSessionMinimizedBar';
 
 export default function ImportSessionHost() {
-  const { state, actions } = useImportSession();
+  const { state } = useImportSession();
   if (!state.active) return null;
   if (state.kind === 'bulk') {
     return (
@@ -18,7 +18,6 @@ export default function ImportSessionHost() {
             facultyName={state.facultyName}
             mode={state.mode}
             isOpen={!state.minimized}
-            onClose={actions.minimize}
           />
         )}
       </>
@@ -32,7 +31,6 @@ export default function ImportSessionHost() {
         facultyName={state.facultyName}
         mode={state.mode}
         isOpen={!state.minimized}
-        onClose={actions.minimize}
       />
     </>
   );

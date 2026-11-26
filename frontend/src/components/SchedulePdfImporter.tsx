@@ -8,6 +8,7 @@ import ConfirmAction from './ConfirmAction';
 import type { ConfirmConfig } from './ConfirmAction';
 import { authFetch } from './authFetch';
 import { DAY_LONG, CONSULTATION_DAYS, CLASS_DAYS } from '../utils/daySettings';
+import type { ImportIssue } from '../context/ImportSessionContext';
 import { useImportSession } from '../context/ImportSessionContextCore';
 
 const API = import.meta.env.VITE_API_URL;
@@ -19,19 +20,13 @@ const API = import.meta.env.VITE_API_URL;
 
 interface Row { id: string; dayOfWeek: number; startTime: string; endTime: string; needsReview: boolean; reviewReasons: string[]; rawText?: string;
   subject?: string; section?: string; room?: string; label?: string }
-interface Issue { code: string; message: string; ref: { type: 'class' | 'consult'; id: string } | null }
-export interface Parsed { metadata: { term: string; academicYear: string; effectivityDate: string; facultyName: string; facultyNameConfidence: number | null; facultyNameNeedsReview: boolean };
-  workload: { lectureHours: number | null; laboratoryHours: number | null };
-  classes: Row[]; consultationHours: Row[]; warnings: Issue[]; excludedWeekendConsultations: number }
-
 // 07:00 ... 19:00 in 30-minute steps: a list to pick from, so a misaligned time cannot be typed
 const TIMES = Array.from({ length: 25 }, (_, i) => { const m = 420 + i * 30; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; });
 const t12 = (t: string) => { const [h, m] = t.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
 interface HistoryItem { id: string; status: string; effectivityDate: string; term: string; academicYear: string; confirmedAt: string; failureReason: string; classBlocks: number; consultationBlocks: number }
 
-interface Props { facultyId: string; facultyName: string; mode: 'admin' | 'faculty'; isOpen: boolean; onClose: () => void; onApplied?: () => void;
-  initial?: { data: Parsed; fileHash: string }; onDone?: (status: 'ACTIVE' | 'SCHEDULED') => void }
+interface Props { facultyId: string; facultyName: string; mode: 'admin' | 'faculty'; isOpen: boolean }
 
 export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOpen }: Props) {
   const { state, actions } = useImportSession();
@@ -90,7 +85,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
   });
 
   const issuesOf = useMemo(() => {
-    const by = (list: Issue[]) => { const m: Record<string, Issue[]> = {}; list.forEach(i => { if (i.ref) (m[`${i.ref.type}:${i.ref.id}`] ||= []).push(i); }); return m; };
+    const by = (list: ImportIssue[]) => { const m: Record<string, ImportIssue[]> = {}; list.forEach(i => { if (i.ref) (m[`${i.ref.type}:${i.ref.id}`] ||= []).push(i); }); return m; };
     return { errors: by(report?.errors || []), warnings: by(report?.warnings || []) };
   }, [report]);
   const bg = (type: string, r: Row) => (issuesOf.errors[`${type}:${r.id}`] ? errBg : (r.needsReview || issuesOf.warnings[`${type}:${r.id}`]) ? warnBg : undefined);
