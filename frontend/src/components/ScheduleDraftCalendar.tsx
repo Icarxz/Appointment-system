@@ -11,6 +11,9 @@ import {
   CALENDAR_SLOT_COUNT, CALENDAR_STEP_MINUTES, calendarEventPosition, calendarTimeAtSlot, findOverlappingIds, timeToMinutes,
 } from '../utils/calendarMath';
 import { CLASS_DAYS, CONSULTATION_DAYS, DAY_LONG, DAY_SHORT, visibleDays } from '../utils/daySettings';
+import {
+  acceptedIssueMessage, blockingIssueMessage, IMPORT_BLOCKING_ACTION, IMPORT_WARNING_ACTION,
+} from '../utils/scheduleImportMessages';
 
 const API = import.meta.env.VITE_API_URL;
 const SLOT_HEIGHT = 24;
@@ -166,12 +169,12 @@ export default function ScheduleDraftCalendar() {
   ], [classes, hours]);
   const overlapIds = useMemo(() => new Set(findOverlappingIds(imported)), [imported]);
   const issuesByRow = useMemo(() => {
-    const map = new Map<string, { errors: string[]; warnings: string[] }>();
+    const map = new Map<string, { errors: ImportIssue[]; warnings: ImportIssue[] }>();
     const add = (issue: ImportIssue, kind: 'errors' | 'warnings') => {
       if (!issue.ref) return;
       const key = `${issue.ref.type}:${issue.ref.id}`;
       const existing = map.get(key) || { errors: [], warnings: [] };
-      existing[kind].push(issue.message);
+      existing[kind].push(issue);
       map.set(key, existing);
     };
     report?.errors.forEach(issue => add(issue, 'errors'));
@@ -253,21 +256,36 @@ export default function ScheduleDraftCalendar() {
     setEditor(null);
   };
 
-  const eventIssues = (item: CalendarItem): { errors: string[]; warnings: string[] } =>
+  const eventIssues = (item: CalendarItem): { errors: ImportIssue[]; warnings: ImportIssue[] } =>
     issuesByRow.get(`${item.type}:${item.id}`) || { errors: [], warnings: [] };
+
+  const eventMessages = (item: CalendarItem): string[] => {
+    const issues = eventIssues(item);
+    const isOverlap = overlapIds.has(item.id);
+    const errors = [
+      ...(isOverlap
+        ? [`Move or remove this ${item.type === 'class' ? 'class' : 'consultation block'} at ${DAY_SHORT[item.dayOfWeek] || 'Unknown day'} ${item.startTime} to ${item.endTime}; it overlaps another imported schedule event.`]
+        : []),
+      ...issues.errors.map(issue => blockingIssueMessage(issue, item)),
+    ];
+    const warnings = [
+      ...(item.needsReview
+        ? [`Double check this ${item.type === 'class' ? 'class' : 'consultation block'}.`, ...item.reviewReasons]
+        : []),
+      ...issues.warnings.filter(issue => issue.code !== 'REVIEW_ROW').map(acceptedIssueMessage),
+    ];
+    return [
+      ...(errors.length ? [IMPORT_BLOCKING_ACTION, ...errors] : []),
+      ...(warnings.length && !errors.length ? [IMPORT_WARNING_ACTION] : []),
+      ...warnings,
+    ];
+  };
 
   const renderImported = (item: CalendarItem, split: boolean) => {
     const position = calendarEventPosition(item.startTime, item.endTime, SLOT_HEIGHT) || { top: 0, height: SLOT_HEIGHT - 2 };
-    const issues = eventIssues(item);
-    const localOverlap = overlapIds.has(item.id);
-    const messages = [
-      ...(item.needsReview ? (item.reviewReasons.length ? item.reviewReasons : ['Check this row against the scan.']) : []),
-      ...(localOverlap ? ['Overlaps another event in this imported draft.'] : []),
-      ...issues.errors,
-      ...issues.warnings,
-    ];
-    const hasError = issues.errors.length > 0;
-    const hasWarning = item.needsReview || localOverlap || issues.warnings.length > 0;
+    const messages = eventMessages(item);
+    const hasError = overlapIds.has(item.id) || eventIssues(item).errors.length > 0;
+    const hasWarning = !hasError && (item.needsReview || eventIssues(item).warnings.length > 0);
     return (
       <Tooltip key={`imported-${item.type}-${item.id}`} label={messages.length ? messages.join('\n') : `${eventName(item)}: ${formatClock(item.startTime)}–${formatClock(item.endTime)}`} hasArrow placement="top">
         <Button
@@ -343,12 +361,7 @@ export default function ScheduleDraftCalendar() {
   const editorRow = editor?.id
     ? imported.find(item => item.id === editor.id && item.type === editor.type)
     : undefined;
-  const editorMessages = editorRow ? [
-    ...(editorRow.needsReview ? (editorRow.reviewReasons.length ? editorRow.reviewReasons : ['Check this row against the scan.']) : []),
-    ...(overlapIds.has(editorRow.id) ? ['Overlaps another event in this imported draft.'] : []),
-    ...eventIssues(editorRow).errors,
-    ...eventIssues(editorRow).warnings,
-  ] : [];
+  const editorMessages = editorRow ? eventMessages(editorRow) : [];
 
   return (
     <VStack align="stretch" spacing={3}>
@@ -386,12 +399,21 @@ export default function ScheduleDraftCalendar() {
       )}
       {view !== 'imported' && !current && !currentError && <HStack><Spinner size="xs" /><Text fontSize="xs" color={muted}>Loading current schedule...</Text></HStack>}
       {view !== 'imported' && currentError && (
-        <Alert status="error" borderRadius="md" py={2}><AlertIcon /><Text fontSize="sm">Could not load the current schedule: {currentError}</Text></Alert>
-      )}
-      {overlapIds.size > 0 && (
         <Alert status="warning" borderRadius="md" py={2}>
           <AlertIcon />
-          <Text fontSize="sm">{overlapIds.size} draft event(s) overlap another imported event. Select a highlighted event for details.</Text>
+          <VStack align="start" spacing={0}>
+            <Text fontSize="sm" fontWeight="700">{IMPORT_WARNING_ACTION}</Text>
+            <Text fontSize="sm">Could not load the current schedule: {currentError}</Text>
+          </VStack>
+        </Alert>
+      )}
+      {overlapIds.size > 0 && (
+        <Alert status="error" borderRadius="md" py={2}>
+          <AlertIcon />
+          <VStack align="start" spacing={0}>
+            <Text fontSize="sm" fontWeight="700">{IMPORT_BLOCKING_ACTION}</Text>
+            <Text fontSize="sm">Move or remove the highlighted overlapping schedule events.</Text>
+          </VStack>
         </Alert>
       )}
 
@@ -486,7 +508,7 @@ export default function ScheduleDraftCalendar() {
       <HStack spacing={4} fontSize="xs" color={muted} wrap="wrap">
         <HStack><Box w="12px" h="12px" bg={classBg} borderRadius="sm" /><Text>Imported class</Text></HStack>
         <HStack><Box w="12px" h="12px" bg={consultBg} borderRadius="sm" /><Text>Imported consultation hours</Text></HStack>
-        <HStack><Box w="12px" h="12px" bg={warningBg} borderWidth="1px" borderStyle="dashed" borderColor="orange.500" borderRadius="sm" /><Text>Review / draft clash</Text></HStack>
+        <HStack><Box w="12px" h="12px" bg={warningBg} borderWidth="1px" borderStyle="dashed" borderColor="orange.500" borderRadius="sm" /><Text>Double check (you can still submit)</Text></HStack>
         <HStack><Box w="12px" h="12px" bg={currentClassBg} opacity={0.5} borderWidth="1px" borderColor={border} borderRadius="sm" /><Text>Current schedule (faint)</Text></HStack>
       </HStack>
       <Text fontSize="xs" color={muted}>Click an event to edit it. Click an empty 30-minute slot to add a class or consultation block.</Text>
@@ -501,7 +523,7 @@ export default function ScheduleDraftCalendar() {
               <ModalBody>
                 <VStack align="stretch" spacing={3}>
                   {editorMessages.length > 0 && (
-                    <Alert status={editorRow && eventIssues(editorRow).errors.length ? 'error' : 'warning'} borderRadius="md">
+                    <Alert status={editorRow && (eventIssues(editorRow).errors.length > 0 || overlapIds.has(editorRow.id)) ? 'error' : 'warning'} borderRadius="md">
                       <AlertIcon />
                       <VStack align="start" spacing={0}>
                         {editorMessages.map((message, index) => <Text key={index} fontSize="sm">{message}</Text>)}

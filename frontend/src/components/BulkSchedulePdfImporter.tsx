@@ -8,6 +8,7 @@ import ConfirmAction from './ConfirmAction';
 import type { ConfirmConfig } from './ConfirmAction';
 import type { ImportFile } from '../context/ImportSessionContext';
 import { useImportSession } from '../context/ImportSessionContextCore';
+import { IMPORT_BLOCKING_ACTION, IMPORT_WARNING_ACTION } from '../utils/scheduleImportMessages';
 
 const MAX_FILES = 10;
 
@@ -54,11 +55,11 @@ export default function BulkSchedulePdfImporter() {
 
   const notes = (i: ImportFile): { text: string; bad?: boolean }[] => {
     const out: { text: string; bad?: boolean }[] = [];
-    if (i.match.status === 'ambiguous' && !i.facultyId) out.push({ text: `More than one faculty account fits "${i.file.name}". Choose the right one.`, bad: true });
-    if (i.match.status === 'unmatched' && !i.facultyId) out.push({ text: 'No faculty account has this name. Choose the faculty to continue.', bad: true });
-    if (i.ocr === 'failed') out.push({ text: i.error, bad: true });
-    if (i.identity === 'mismatch') out.push({ text: `The name printed on the sheet ("${i.identityRead}") does not match ${nameOf(i.facultyId)}. Choose the right account or remove this file.`, bad: true });
-    if (i.identity === 'unreadable' && i.ocr === 'done') out.push({ text: 'The printed name could not be read reliably. You will confirm the owner yourself in the review step.' });
+    if (i.match.status === 'ambiguous' && !i.facultyId) out.push({ text: 'More than one faculty account fits this file name. Choose the correct faculty member.', bad: true });
+    if (i.match.status === 'unmatched' && !i.facultyId) out.push({ text: 'Choose the faculty member this schedule belongs to.', bad: true });
+    if (i.ocr === 'failed') out.push({ text: 'This PDF could not be read. Retry it or remove it from the list.', bad: true });
+    if (i.identity === 'mismatch') out.push({ text: 'This document does not match the selected faculty account. Choose the correct account or remove this PDF.', bad: true });
+    if (i.identity === 'unreadable' && i.ocr === 'done') out.push({ text: 'Confirm that the document belongs to the selected faculty member in the review step.' });
     if (i.alreadyImported) out.push({ text: i.alreadyImported });
     if (i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name) out.push({ text: `Same file as ${flags.firstByHash[i.fileHash]} in this batch.` });
     if (i.facultyId && i.importState === 'pending' && flags.perFaculty[i.facultyId] > 1) out.push({ text: `Another file in this batch is also for ${nameOf(i.facultyId)}. Importing both would replace the first with the second.` });
@@ -87,7 +88,15 @@ export default function BulkSchedulePdfImporter() {
               </Alert>
               <Input type="file" multiple accept="application/pdf,.pdf" pt={1} aria-label="Schedule PDFs"
                 onChange={e => { void actions.addFiles(Array.from(e.target.files || [])); e.target.value = ''; }} />
-              {problems.map((p, i) => <Alert key={i} status="warning" borderRadius="md" py={1}><AlertIcon /><Text fontSize="sm">{p}</Text></Alert>)}
+              {problems.map((problem, index) => (
+                <Alert key={index} status="warning" borderRadius="md" py={1}>
+                  <AlertIcon />
+                  <VStack align="start" spacing={0}>
+                    <Text fontSize="sm" fontWeight="700">{IMPORT_WARNING_ACTION}</Text>
+                    <Text fontSize="sm">{problem}</Text>
+                  </VStack>
+                </Alert>
+              ))}
 
               {items.length > 0 && (
                 <HStack spacing={2} wrap="wrap" fontSize="sm">
@@ -135,7 +144,14 @@ export default function BulkSchedulePdfImporter() {
                             </Tr>
                             {itemNotes.length > 0 && (
                               <Tr><Td colSpan={5} py={1} borderTop="none">
-                                {itemNotes.map((x, k) => <Text key={k} fontSize="xs" fontWeight={x.bad ? 600 : 400} color={x.bad ? 'red.500' : muted} whiteSpace="normal">{x.text}</Text>)}
+                                {itemNotes.map((note, noteIndex) => (
+                                  <VStack key={noteIndex} align="start" spacing={0} mb={1}>
+                                    <Text fontSize="xs" fontWeight={700} color={note.bad ? 'red.500' : 'orange.500'}>
+                                      {note.bad ? IMPORT_BLOCKING_ACTION : IMPORT_WARNING_ACTION}
+                                    </Text>
+                                    <Text fontSize="xs" color={note.bad ? 'red.500' : muted} whiteSpace="normal">{note.text}</Text>
+                                  </VStack>
+                                ))}
                               </Td></Tr>
                             )}
                           </Fragment>

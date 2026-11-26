@@ -8,6 +8,9 @@ import type { ConfirmConfig } from './ConfirmAction';
 import ScheduleDraftCalendar from './ScheduleDraftCalendar';
 import { authFetch } from './authFetch';
 import { useImportSession } from '../context/ImportSessionContextCore';
+import {
+  acceptedIssueMessage, blockingIssueMessage, IMPORT_BLOCKING_ACTION, IMPORT_WARNING_ACTION, parsedWarningDisplay,
+} from '../utils/scheduleImportMessages';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -82,7 +85,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
     <Modal isOpen={isOpen} onClose={close} size="6xl" scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>Import schedule PDF: {facultyName}</ModalHeader>
+        <ModalHeader>{mode === 'faculty' ? 'Import your schedule PDF' : `Import schedule PDF: ${facultyName}`}</ModalHeader>
         <ModalCloseButton />
         <ModalBody pb={6}>
           {outcome ? (
@@ -101,7 +104,15 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
               </Alert>
               <Input type="file" accept="application/pdf,.pdf" pt={1} isDisabled={reading} onChange={e => { uploadPdf(e.target.files?.[0]); e.target.value = ''; }} aria-label="Schedule PDF" />
               {reading && <HStack><Spinner size="sm" /><Text fontSize="sm" color={muted}>Reading the PDF. This can take up to a minute.</Text></HStack>}
-              {uploadError && <Alert status="error" borderRadius="md" role="alert"><AlertIcon /><Text fontSize="sm">{uploadError}</Text></Alert>}
+              {uploadError && (
+                <Alert status="error" borderRadius="md" role="alert">
+                  <AlertIcon />
+                  <VStack align="start" spacing={0}>
+                    <Text fontSize="sm" fontWeight="700">{IMPORT_BLOCKING_ACTION}</Text>
+                    <Text fontSize="sm">{uploadError}</Text>
+                  </VStack>
+                </Alert>
+              )}
               {mode === 'admin' && (
                 <Box borderTopWidth="1px" pt={3}>
                   <Text fontSize="xs" color={muted} mb={1}>Admin only: load a draft file (JSON) written by the OCR program instead.</Text>
@@ -131,24 +142,39 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
               <Box fontSize="sm" color={muted}>
                 {[parsed.metadata.term, parsed.metadata.academicYear && `AY ${parsed.metadata.academicYear}`, parsed.metadata.effectivityDate && `effective ${parsed.metadata.effectivityDate}`].filter(Boolean).join(' · ') || 'Term, year and effectivity date were not read: enter them when confirming.'}
               </Box>
-              {parsed.warnings.map((w, i) => <Alert key={i} status="warning" borderRadius="md" py={2}><AlertIcon /><Text fontSize="sm">{w.message}</Text></Alert>)}
+              {parsed.warnings.map((warning, index) => {
+                const display = parsedWarningDisplay(warning);
+                return (
+                  <Alert key={index} status="warning" borderRadius="md" py={2}>
+                    <AlertIcon />
+                    <VStack align="start" spacing={1}>
+                      <Text fontSize="sm" fontWeight="700">{IMPORT_WARNING_ACTION}</Text>
+                      <Text fontSize="sm">{display.message}</Text>
+                      {display.skippedDetails && (
+                        <details>
+                          <summary>Show what was skipped</summary>
+                          <Text fontSize="sm" mt={1}>{display.skippedDetails}</Text>
+                        </details>
+                      )}
+                    </VStack>
+                  </Alert>
+                );
+              })}
 
               <ScheduleDraftCalendar />
 
               <Box borderWidth="1px" borderRadius="md" p={3}>
                 {report?.identity?.status === 'mismatch' ? (
-                  <Text fontSize="sm" color="red.500" fontWeight={600}>The name printed on the sheet ("{report.identity.read}") does not match {facultyName}. Choose the right faculty account or a different document.</Text>
+                  <VStack align="start" spacing={0}>
+                    <Text fontSize="sm" color="red.500" fontWeight={700}>{IMPORT_BLOCKING_ACTION}</Text>
+                    <Text fontSize="sm">This document does not match the selected faculty account. Choose the correct account or a different PDF.</Text>
+                  </VStack>
                 ) : report?.identity?.status === 'match' ? (
-                  <Text fontSize="sm" color="green.500" fontWeight={600}>The name printed on the sheet matches {facultyName}.</Text>
+                  <Text fontSize="sm" color="green.500" fontWeight={600}>The document matches the selected faculty account.</Text>
                 ) : (
-                  <>
-                    <Checkbox isChecked={identity} onChange={e => actions.setIdentity(e.target.checked)}>
-                      This document belongs to <b>{facultyName}</b>
-                    </Checkbox>
-                    <Text fontSize="xs" color={muted} mt={1} ml={6}>
-                      The printed name could not be read reliably{parsed.metadata.facultyName ? ` (read: "${parsed.metadata.facultyName}"${parsed.metadata.facultyNameConfidence != null ? `, ${Math.round(parsed.metadata.facultyNameConfidence)}% sure` : ''})` : ''}, often because a signature covers it. Compare the scan with the selected account yourself.
-                    </Text>
-                  </>
+                  <Checkbox isChecked={identity} onChange={e => actions.setIdentity(e.target.checked)}>
+                    {mode === 'faculty' ? 'This document really belongs to me' : <>This document belongs to <b>{facultyName}</b></>}
+                  </Checkbox>
                 )}
               </Box>
 
@@ -156,9 +182,25 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
                 <VStack align="stretch" spacing={2}>
                   {report.ok
                     ? <Alert status="success" borderRadius="md"><AlertIcon /><Text fontSize="sm"><b>Ready to confirm.</b> No blocking problems{report.warnings.length ? `, ${report.warnings.length} warning(s) to look at` : ''}. Nothing has been changed yet: set the effectivity date and press Confirm.</Text></Alert>
-                    : <Alert status="error" borderRadius="md"><AlertIcon /><Text fontSize="sm"><b>{report.errors.length} problem(s) to fix</b> before this schedule could be confirmed.</Text></Alert>}
-                  {report.errors.filter(e => !e.ref).map((e, i) => <Alert key={i} status="error" variant="left-accent" py={2}><AlertIcon /><Text fontSize="sm">{e.message}</Text></Alert>)}
-                  {report.warnings.filter(w => !w.ref).map((w, i) => <Alert key={i} status="warning" variant="left-accent" py={2}><AlertIcon /><Text fontSize="sm">{w.message}</Text></Alert>)}
+                    : <Alert status="error" borderRadius="md"><AlertIcon /><VStack align="start" spacing={0}><Text fontSize="sm" fontWeight="700">{IMPORT_BLOCKING_ACTION}</Text><Text fontSize="sm">{report.errors.length} issue(s) need to be fixed before confirming.</Text></VStack></Alert>}
+                  {report.errors.filter(issue => !issue.ref).map((issue, index) => (
+                    <Alert key={index} status="error" variant="left-accent" py={2}>
+                      <AlertIcon />
+                      <VStack align="start" spacing={0}>
+                        <Text fontSize="sm" fontWeight="700">{IMPORT_BLOCKING_ACTION}</Text>
+                        <Text fontSize="sm">{blockingIssueMessage(issue)}</Text>
+                      </VStack>
+                    </Alert>
+                  ))}
+                  {report.warnings.filter(warning => !warning.ref).map((warning, index) => (
+                    <Alert key={index} status="warning" variant="left-accent" py={2}>
+                      <AlertIcon />
+                      <VStack align="start" spacing={0}>
+                        <Text fontSize="sm" fontWeight="700">{IMPORT_WARNING_ACTION}</Text>
+                        <Text fontSize="sm">{acceptedIssueMessage(warning)}</Text>
+                      </VStack>
+                    </Alert>
+                  ))}
                 </VStack>
               )}
 
