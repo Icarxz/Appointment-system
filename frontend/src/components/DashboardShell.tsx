@@ -187,7 +187,11 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
       </main>
 
       {extras}
-      <LogoutConfirm isOpen={logoutOpen} onClose={() => setLogoutOpen(false)} onConfirm={() => { localStorage.clear(); navigate('/'); }} />
+      <LogoutConfirm isOpen={logoutOpen} onClose={() => setLogoutOpen(false)} onConfirm={() => {
+        window.dispatchEvent(new Event('ccis-logout'));
+        localStorage.clear();
+        navigate('/');
+      }} />
     </div>
   );
 }

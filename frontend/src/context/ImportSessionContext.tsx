@@ -191,6 +191,8 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   // refs kept so the one-at-a-time OCR pump survives re-renders / minimisation
   const itemsRef = useRef<ImportFile[]>([]);
   const pumping = useRef(false);
+  const activeRef = useRef(false);
+  const generationRef = useRef(0);
   const counter = useRef(1);
   const histories = useRef<Record<string, Promise<{ status: string; effectivityDate: string }[]>>>({});
   const callbacksRef = useRef<ImportSessionCallbacks>({});
@@ -248,6 +250,8 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
 
   const clear = () => {
     if (outcome === null) callbacksRef.current.onCancel?.();
+    activeRef.current = false;
+    generationRef.current += 1;
     setMinimized(false);
     setPendingOpen(false);
     setActive(false);
@@ -272,7 +276,12 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     nextFacultyName: string,
     options?: ImportSessionStartOptions,
   ): boolean => {
-    if (active) return false;
+    if (activeRef.current) {
+      toast({ title: 'An import session is already active', description: 'Open or discard the current import before starting another.', status: 'warning', duration: 5000 });
+      return false;
+    }
+    activeRef.current = true;
+    generationRef.current += 1;
     const initial = options?.initial;
     callbacksRef.current = options?.callbacks || {};
     facultyListRef.current = options?.facultyList || [];
@@ -433,9 +442,9 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   };
 
   // ── bulk: check one file (identity + duplicate history) ──
-  const checkOne = async (id: string) => {
+  const checkOne = async (id: string, generation: number) => {
     const it = itemsRef.current.find(i => i.id === id);
-    if (!it || !it.data || !it.facultyId) return;
+    if (generation !== generationRef.current || !it || !it.data || !it.facultyId) return;
     patch(id, { identity: 'checking', alreadyImported: '' });
     let identity: ImportFile['identity'] = 'unreadable', read = '';
     try {
@@ -444,6 +453,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
         body: JSON.stringify({ facultyId: it.facultyId, classes: it.data.classes, consultationHours: it.data.consultationHours, metadata: it.data.metadata, workload: it.data.workload, identityConfirmed: false }),
       });
       const rep = await res.json().catch(() => ({}));
+      if (generation !== generationRef.current) return;
       if (res.ok && rep.identity && (rep.identity.status === 'match' || rep.identity.status === 'mismatch')) {
         identity = rep.identity.status; read = rep.identity.read || '';
       } else if (res.ok && rep.identity) { read = rep.identity.read || ''; }
@@ -451,10 +461,11 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     let already = '';
     if (it.fileHash) {
       const hist = await loadHistory(it.facultyId);
+      if (generation !== generationRef.current) return;
       const hit = hist.find(h => h.fileHash === it.fileHash && ['ACTIVE', 'SCHEDULED', 'SUPERSEDED'].includes(h.status));
       if (hit) already = `This exact PDF was already imported (effective ${hit.effectivityDate}).`;
     }
-    patch(id, { identity, identityRead: read, alreadyImported: already });
+    if (generation === generationRef.current) patch(id, { identity, identityRead: read, alreadyImported: already });
   };
 
   const loadHistory = (fid: string): Promise<{ status: string; effectivityDate: string; fileHash?: string }[]> => {
@@ -465,17 +476,19 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     return histories.current[fid];
   };
 
-  const readOne = async (it: ImportFile) => {
+  const readOne = async (it: ImportFile, generation: number) => {
     let message = 'Could not read that PDF.';
     for (let attempt = 0; attempt < 4; attempt++) {
+      if (generation !== generationRef.current) return;
       try {
         const res = await authFetch(`${API}/api/schedule-import/preview?facultyId=${encodeURIComponent(it.facultyId)}`, {
           method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: it.file,
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
+          if (generation !== generationRef.current) return;
           patch(it.id, { ocr: 'done', data, fileHash: data.fileHash || '', error: '' });
-          await checkOne(it.id);
+          await checkOne(it.id, generation);
           return;
         }
         message = data.error || message;
@@ -483,20 +496,25 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
         break;
       } catch { message = 'Could not reach the server.'; break; }
     }
-    patch(it.id, { ocr: 'failed', error: message });
+    if (generation === generationRef.current) patch(it.id, { ocr: 'failed', error: message });
   };
 
   const pump = async () => {
     if (pumping.current) return;
     pumping.current = true;
+    const generation = generationRef.current;
     try {
       for (;;) {
+        if (generation !== generationRef.current) break;
         const next = itemsRef.current.find(i => i.facultyId && i.ocr === 'queued');
         if (!next) break;
         patch(next.id, { ocr: 'reading' });
-        await readOne(next);
+        await readOne(next, generation);
       }
-    } finally { pumping.current = false; }
+    } finally {
+      pumping.current = false;
+      if (generation !== generationRef.current) void pump();
+    }
   };
 
   const assignFaculty = (id: string, fid: string) => {
@@ -504,7 +522,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     if (!it) return;
     if (it.data) {
       patch(id, { facultyId: fid, identity: fid ? 'checking' : 'unchecked', alreadyImported: '' });
-      if (fid) checkOne(id);
+      if (fid) void checkOne(id, generationRef.current);
     } else {
       patch(id, { facultyId: fid, ocr: fid ? 'queued' : 'waiting' });
       if (fid) void pump();
@@ -534,26 +552,25 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
   };
 
   // ── beforeunload warning while there is unsaved work ──
-  const hasWork = active
-    && outcome === null
-    && (kind === 'bulk'
-      ? files.some(i => i.importState === 'pending' && (i.ocr === 'done' || i.ocr === 'reading' || i.ocr === 'queued' || i.ocr === 'failed'))
-      : parsed !== null || classes.length > 0 || hours.length > 0 || reading || busy);
-
-  const beforeunloadRef = useRef<(e: BeforeUnloadEvent) => void>((e) => {
-    if (hasWork) { e.preventDefault(); e.returnValue = ''; }
-  });
+  const hasWork = active && (kind === 'bulk'
+    ? files.some(i => i.importState === 'pending')
+    : outcome === null && (parsed !== null || classes.length > 0 || hours.length > 0 || reading || busy));
   useEffect(() => {
-    window.addEventListener('beforeunload', beforeunloadRef.current);
-    return () => window.removeEventListener('beforeunload', beforeunloadRef.current);
+    if (!hasWork) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [hasWork]);
 
-  // clear session on logout (dashboards dispatch a 'ccis-logout' event)
+  // Clear a running import when a dashboard signs out.
   useEffect(() => {
     const onLogout = () => { clear(); };
     window.addEventListener('ccis-logout', onLogout);
     return () => window.removeEventListener('ccis-logout', onLogout);
-  }, []);
+  }, [clear]);
 
   const value = useMemo(() => ({
     state: {
