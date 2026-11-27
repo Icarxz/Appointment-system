@@ -240,6 +240,7 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY', 'DEAN']), async (req
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const body = req.body || {};
+    const previousPosition = user.programPosition || '';
     const { name, gender, idValue, avatar, program, employmentType, programPosition, year, section } = body;
     const reviewingCredentials = requiresCredentialConfirmation(user);
     const credentialFields = ['name', 'gender', 'idValue', 'program', 'employmentType', 'programPosition', 'year', 'section'];
@@ -322,12 +323,18 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY', 'DEAN']), async (req
     }
 
     await user.save({ validateModifiedOnly: true });
-    const changedFields = credentialFields.filter(field => body[field] !== undefined);
+    const changedFields = credentialFields.filter(field => body[field] !== undefined && field !== 'programPosition');
     if (avatar !== undefined) changedFields.push('avatar');
     if (changedFields.length) {
       await appendHistoryEvent({
         userId: user._id, eventType: 'PROFILE_UPDATED', actorId: user._id, actorRole: user.role,
         details: { fields: changedFields },
+      });
+    }
+    if (user.role !== 'STUDENT' && previousPosition !== (user.programPosition || '')) {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'POSITION_CHANGED', actorId: user._id, actorRole: user.role,
+        details: { fromPosition: previousPosition, toPosition: user.programPosition || '' },
       });
     }
     res.json({
