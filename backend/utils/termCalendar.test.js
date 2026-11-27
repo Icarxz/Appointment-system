@@ -30,7 +30,8 @@ test('invalid dates give no term', () => {
 test('validateTerm explains problems in plain words and rejects overlaps', () => {
   assert.equal(validateTerm({ name: '', academicYear: '2025-2026', startDate: '2026-05-01', endDate: '2026-07-01' }).ok, false);
   assert.match(validateTerm({ name: 'Summer', academicYear: '2025-26', startDate: '2026-05-01', endDate: '2026-07-01' }).error, /2025-2026/);
-  assert.match(validateTerm({ name: 'Summer', academicYear: '2025-2026', startDate: '2026-07-01', endDate: '2026-05-01' }).error, /before/);
+  assert.match(validateTerm({ name: 'Summer', academicYear: '2025-2026', startDate: '2026-07-01', endDate: '2026-05-01' }).error, /after/);
+  assert.match(validateTerm({ name: 'One day', academicYear: '2025-2026', startDate: '2026-06-01', endDate: '2026-06-01' }).error, /after/);
   const existing = [{ name: 'Summer', academicYear: '2025-2026', startDate: '2026-05-04', endDate: '2026-07-10' }];
   const overlap = validateTerm({ name: 'Midyear', academicYear: '2025-2026', startDate: '2026-07-01', endDate: '2026-07-31' }, existing);
   assert.equal(overlap.ok, false);

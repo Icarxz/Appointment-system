@@ -50,7 +50,7 @@ function validateTerm(term, existing = []) {
   if (!isValidDateString(term.startDate) || !isValidDateString(term.endDate)) {
     return { ok: false, error: 'Enter the start and end dates of the term.' };
   }
-  if (term.startDate > term.endDate) return { ok: false, error: 'The start date must be before the end date.' };
+  if (term.startDate >= term.endDate) return { ok: false, error: 'The end date must be after the start date.' };
   const clash = existing.find(t => term.startDate <= t.endDate && t.startDate <= term.endDate);
   if (clash) {
     return { ok: false, error: `These dates overlap "${clash.name} ${clash.academicYear}" (${clash.startDate} to ${clash.endDate}).` };
