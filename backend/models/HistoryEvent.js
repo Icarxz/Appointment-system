@@ -10,6 +10,7 @@ const HistoryEventSchema = new mongoose.Schema({
 }, { versionKey: false });
 
 HistoryEventSchema.index({ userId: 1, occurredAt: -1 });
+HistoryEventSchema.index({ occurredAt: -1, eventType: 1 });
 HistoryEventSchema.pre('save', function () {
   if (!this.isNew) throw new Error('History events are append-only.');
 });
