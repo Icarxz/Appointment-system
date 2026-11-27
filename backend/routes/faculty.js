@@ -1412,8 +1412,14 @@ router.delete('/status-entry/:id', requireAuth(['FACULTY', 'DEAN']), async (req,
     if (!entry || String(entry.facultyId) !== String(req.user.userId)) return res.status(404).json({ error: 'Status not found' });
     const now = new Date();
     if (entry.endAt <= now) return res.json({ ok: true });
-    if (entry.startAt > now) await entry.deleteOne();
+    const wasScheduled = entry.startAt > now;
+    const cleared = { type: entry.type, isNotice: !!entry.isNotice, startAt: entry.startAt, endAt: entry.endAt };
+    if (wasScheduled) await entry.deleteOne();
     else { entry.endAt = now; await entry.save(); }
+    await appendHistoryEvent({
+      userId: req.user.userId, eventType: entry.isNotice ? 'NOTICE_CANCELLED' : 'FACULTY_STATUS_CLEARED', ...appendActor(req),
+      details: { ...cleared, cancelledBeforeStart: wasScheduled },
+    });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Error clearing status' });
@@ -1441,6 +1447,10 @@ router.post('/notice-entry', requireAuth(['FACULTY', 'DEAN']), async (req, res) 
     const saved = await FacultyStatusEntry.create({
       ...entry, facultyId: req.user.userId, isNotice: true,
       makeUpInfo: String(b.makeUpInfo || '').trim().slice(0, 300),
+    });
+    await appendHistoryEvent({
+      userId: req.user.userId, eventType: 'NOTICE_POSTED', ...appendActor(req),
+      details: { type: saved.type, startAt: saved.startAt, endAt: saved.endAt, reason: saved.reason },
     });
     res.status(201).json(saved);
   } catch (err) {
