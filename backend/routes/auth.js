@@ -64,7 +64,16 @@ router.post('/google', googleLimiter, async (req, res) => {
       rosterRole: rosterEntry?.role || null,
       requireProvisionedAccounts: String(process.env.REQUIRE_PROVISIONED_ACCOUNTS || '').trim().toLowerCase() === 'true'
     });
-    if (decision.action === 'DENY') return res.status(403).json({ error: decision.error });
+    if (decision.action === 'DENY') {
+      if (existingUser && ['RESTRICTED', 'ARCHIVED'].includes(existingUser.accountStatus)) {
+        await appendHistoryEvent({
+          userId: existingUser._id, eventType: 'SIGN_IN_BLOCKED',
+          actorId: existingUser._id, actorRole: existingUser.role,
+          details: { accountStatus: existingUser.accountStatus },
+        });
+      }
+      return res.status(403).json({ error: decision.error });
+    }
     // Wrong tab? Stop before any account is created or changed.
     const resultingRole = decision.action === 'CREATE' ? decision.role : (decision.promoteTo || existingUser.role);
     const wrongTab = audienceMismatch(audience, resultingRole, decision.action === 'CREATE');
@@ -82,6 +91,10 @@ router.post('/google', googleLimiter, async (req, res) => {
         isVerified: true,
         accountStatus: 'ACTIVE',
         onboardingComplete: false
+      });
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ACCOUNT_PROVISIONED', actorId: user._id, actorRole: user.role,
+        details: { source: 'GOOGLE_SIGN_IN', role: user.role },
       });
       await appendHistoryEvent({
         userId: user._id, eventType: 'ACCOUNT_ACTIVATED', actorRole: 'SYSTEM',

@@ -42,7 +42,11 @@ async function activateDueImports() {
       try {
         await appendHistoryEvent({
           userId: imp.facultyId, eventType: 'SCHEDULE_IMPORT_ACTIVATED', actorRole: 'SYSTEM',
-          details: { importId: imp._id, effectivityDate: imp.effectivityDate, term: imp.term, academicYear: imp.academicYear, classBlocks: imp.classes.length, consultationBlocks: imp.consultationHours.length },
+          details: {
+            importId: imp._id, effectivityDate: imp.effectivityDate, term: imp.term, academicYear: imp.academicYear,
+            classBlocks: imp.classes.length, consultationBlocks: imp.consultationHours.length,
+            confirmedBy: imp.uploadedBy, confirmedByRole: imp.uploaderRole,
+          },
         });
       } catch (historyError) {
         console.error('Schedule import applied but its history event could not be recorded:', historyError.message);

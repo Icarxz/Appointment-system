@@ -145,7 +145,7 @@ router.post('/confirm', requireAuth(ALLOWED), async (req, res) => {
         const staged = await ScheduleImport.create({ ...record, status: 'SCHEDULED' });
         await appendHistoryEvent({
           userId: facultyId, eventType: 'SCHEDULE_IMPORT_STAGED', actorId: req.user.userId, actorRole: req.user.role,
-          details: { importId: staged._id, effectivityDate, term: record.term, academicYear: record.academicYear },
+          details: { importId: staged._id, effectivityDate, term: record.term, academicYear: record.academicYear, confirmedBy: req.user.userId, confirmedByRole: req.user.role },
         });
         await notify([facultyId], { type: 'SCHEDULE_IMPORT', title: 'Schedule scheduled', message: `A new class schedule will take effect on ${effectivityDate}.`, page: 'schedule' });
         return res.json({ status: 'SCHEDULED', importId: staged._id, effectivityDate, warnings: check.warnings });
@@ -165,7 +165,7 @@ router.post('/confirm', requireAuth(ALLOWED), async (req, res) => {
       const done = await ScheduleImport.create({ ...record, status: 'ACTIVE', previousSnapshot: { classes: toRows(applied.snapshot.classes), hours: toRows(applied.snapshot.hours) }, activatedAt: new Date() });
       await appendHistoryEvent({
         userId: facultyId, eventType: 'SCHEDULE_IMPORT_ACTIVATED', actorId: req.user.userId, actorRole: req.user.role,
-        details: { importId: done._id, effectivityDate, term: record.term, academicYear: record.academicYear, classBlocks: done.classes.length, consultationBlocks: done.consultationHours.length },
+        details: { importId: done._id, effectivityDate, term: record.term, academicYear: record.academicYear, classBlocks: done.classes.length, consultationBlocks: done.consultationHours.length, confirmedBy: req.user.userId, confirmedByRole: req.user.role },
       });
       if (String(req.user.userId) !== String(facultyId)) await notify([facultyId], { type: 'SCHEDULE_IMPORT', title: 'Class schedule updated', message: 'Your class schedule and official consultation hours were replaced from your Faculty Individual Load.', page: 'schedule' });
       return res.json({ status: 'ACTIVE', importId: done._id, effectivityDate, counts: applied.counts, warnings: check.warnings });

@@ -518,6 +518,10 @@ router.post('/add', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     const newUser = await User.create(account);
+    await appendHistoryEvent({
+      userId: newUser._id, eventType: 'ACCOUNT_PROVISIONED', ...appendActor(req),
+      details: { source: 'ADMIN', role: newUser.role },
+    });
     if (newUser.activatedAt) {
       await appendHistoryEvent({
         userId: newUser._id, eventType: 'ACCOUNT_ACTIVATED', actorId: req.user.userId, actorRole: req.user.role,
@@ -765,19 +769,23 @@ async function handleBulkConfirm(req, res) {
       }
       try {
         const user = await User.create(result.account);
-        if (user.activatedAt) {
-          try {
+        try {
+          await appendHistoryEvent({
+            userId: user._id, eventType: 'ACCOUNT_PROVISIONED', ...appendActor(req),
+            details: { source: 'BULK_IMPORT', role: user.role },
+          });
+          if (user.activatedAt) {
             await appendHistoryEvent({
-              userId: user._id, eventType: 'ACCOUNT_ACTIVATED', actorId: req.user.userId, actorRole: req.user.role,
+              userId: user._id, eventType: 'ACCOUNT_ACTIVATED', ...appendActor(req),
               details: { activatedAt: user.activatedAt },
             });
-          } catch (historyError) {
-            console.error('Provisioned account activation history failed:', historyError.message);
-            return res.status(500).json({
-              error: `Account row ${result.rowNumber} was created, but its activation history could not be recorded. Check User Management before retrying.`,
-              created,
-            });
           }
+        } catch (historyError) {
+          console.error('Provisioned account history failed:', historyError.message);
+          return res.status(500).json({
+            error: `Account row ${result.rowNumber} was created, but its history could not be recorded. Check User Management before retrying.`,
+            created,
+          });
         }
         created += 1;
       } catch (error) {
@@ -1219,6 +1227,7 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
       return res.status(400).json({ error: 'Only student, faculty and Dean accounts can be edited here.' });
     }
     const previousRole = user.role;
+    const previousPosition = user.programPosition || '';
     const previousRoleDetails = {
       schoolId: user.schoolId || '',
       facultyId: user.facultyId || '',
@@ -1298,11 +1307,18 @@ router.patch('/users/:id/profile', requireAuth(['ADMIN']), async (req, res) => {
     }
 
     await user.save({ validateModifiedOnly: true });
-    const changedProfileFields = Object.keys(req.body || {}).filter(field => field !== 'role');
+    const changedProfileFields = Object.keys(req.body || {}).filter(field => field !== 'role' && field !== 'programPosition');
     if (changedProfileFields.length) {
       await appendHistoryEvent({
         userId: user._id, eventType: 'PROFILE_UPDATED', ...appendActor(req),
         details: { fields: changedProfileFields },
+      });
+    }
+    const currentPosition = user.programPosition || '';
+    if (user.role !== 'STUDENT' && previousPosition !== currentPosition) {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'POSITION_CHANGED', ...appendActor(req),
+        details: { fromPosition: previousPosition, toPosition: currentPosition },
       });
     }
     if (previousRole !== user.role) {
