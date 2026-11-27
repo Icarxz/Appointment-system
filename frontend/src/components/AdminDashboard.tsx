@@ -34,6 +34,8 @@ import BulkSchedulePdfImporter from './BulkSchedulePdfImporter';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel, facultyStatusOf, facultyStatusUntil } from './appointmentStatus';
 import AnalyticsReport from './AnalyticsReport';
+import AdminHistoryPage from './AdminHistoryPage';
+import { usePersistentPage } from '../utils/usePersistentPage';
 // import { QRCodeSVG } from 'qrcode.react';
 
 const SCHOOL_DOMAIN = 'antiquespride.edu.ph';
@@ -60,7 +62,8 @@ export default function AdminDashboard() {
   const toast = useToast();
   const userName = localStorage.getItem('userName');
 
-  const [activePage, setActivePage] = useState('appointments');
+  const adminPages = ['appointments', 'home', 'provision', 'users', 'analytics', 'records', 'profile', 'history'] as const;
+  const [activePage, setActivePage] = usePersistentPage('admin-dashboard-page', adminPages, 'appointments');
   const [facultyList, setFacultyList] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [userTab, setUserTab] = useState<'faculty' | 'students' | 'disabled'>('faculty');
@@ -567,6 +570,7 @@ export default function AdminDashboard() {
         { key: 'disabled', section: 'People', icon: 'users', label: `Disabled (${disabledAccounts.length})`, active: activePage === 'users' && userTab === 'disabled', onClick: () => { setUserTab('disabled'); setActivePage('users'); } },
         { key: 'analytics', section: 'Reports', icon: 'chart', label: 'Reports & Analytics', active: activePage === 'analytics', onClick: () => setActivePage('analytics') },
         { key: 'records', section: 'Reports', icon: 'file', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
+        { key: 'history', section: 'Reports', icon: 'clock', label: 'History', active: activePage === 'history', onClick: () => setActivePage('history') },
         { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
       ]}
     >
@@ -579,10 +583,13 @@ export default function AdminDashboard() {
           {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : userTab === 'students' ? "Student Management" : "Disabled Accounts")}
           {activePage === 'appointments' && "Appointments"}
           {activePage === 'records' && "Consultation Records"}
+          {activePage === 'history' && "History"}
           {activePage === 'profile' && "My Profile"}
         </PageTitle>}
 
         <ConnectionBanner slow={slowLoad} onReconnect={fetchAllData} />
+
+        {activePage === 'history' && <AdminHistoryPage />}
 
         {needsData && dataStatus === 'loading' && (
           activePage === 'appointments' ? <CardListSkeleton count={4} /> : (
