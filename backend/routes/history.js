@@ -86,7 +86,6 @@ async function loadConsultations(userId, query) {
   const filters = consultationFilters(query);
   if (filters.error) return filters;
   const appointmentFilter = personalAppointmentFilter(userId);
-  if (filters.status) appointmentFilter.status = filters.status;
   if (filters.dates.from || filters.dates.to) {
     appointmentFilter.date = {
       ...(filters.dates.from ? { $gte: filters.dates.from } : {}),
@@ -96,12 +95,12 @@ async function loadConsultations(userId, query) {
   const [terms, appointments] = await Promise.all([
     Term.find().select('academicYear name startDate endDate').lean(),
     Appointment.find(appointmentFilter)
-      .select('studentId facultyId studentName studentSection date time requestedTime duration reason status cancelReason missedAt missedBy casePresented interventionTaken remarks completedAt createdAt updatedAt')
+      .select('studentId facultyId studentName studentSection date time requestedTime duration reason status cancelReason missReason missedAt missedBy casePresented interventionTaken remarks completedAt createdAt updatedAt')
       .populate('facultyId', 'name role')
       .populate('studentId', 'name role')
       .sort({ date: -1, time: -1, createdAt: -1 }).lean(),
   ]);
-  const records = appointments.map((appointment) => {
+  const termFiltered = appointments.map((appointment) => {
     const isStudent = String(appointment.studentId && appointment.studentId._id || appointment.studentId) === String(userId);
     const termInfo = termForDate(appointment.date, terms);
     return {
@@ -116,7 +115,15 @@ async function loadConsultations(userId, query) {
       : null,
     { academicYear: filters.academicYear, term: filters.term },
   ));
-  return { records };
+  const statusCounts = termFiltered.reduce((counts, appointment) => {
+    counts[appointment.status] = (counts[appointment.status] || 0) + 1;
+    return counts;
+  }, {});
+  const records = filters.status
+    ? termFiltered.filter((appointment) => appointment.status === filters.status)
+    : termFiltered;
+  const academicYears = [...new Set(termFiltered.map((appointment) => appointment.academicYear).filter(Boolean))].sort().reverse();
+  return { records, statusCounts, academicYears };
 }
 
 async function resolveUserIds(value) {
@@ -300,6 +307,8 @@ router.get('/consultations', requireAuth(ALL_ROLES), async (req, res) => {
       limit: pagination.limit,
       total: result.records.length,
       pages: Math.ceil(result.records.length / pagination.limit),
+      statusCounts: result.statusCounts,
+      academicYears: result.academicYears,
     });
   } catch (error) {
     console.error('Consultation history load failed:', error.message);

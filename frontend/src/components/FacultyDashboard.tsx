@@ -37,12 +37,14 @@ import ClassGridEditor from './ClassGridEditor';
 import { cohortConfig } from '../data/cohortConfig';
 import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
 import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
+import HistoryPage from './HistoryPage';
+import { usePersistentPage } from '../utils/usePersistentPage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours";
+type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours" | "history";
 type ViewMode  = "week" | "day";
 type EventType = "teaching" | "appointment" | "consultation" | "note";
 
@@ -192,9 +194,13 @@ export default function FacultyDashboard({ embeddedPage, role = 'FACULTY', canIm
   const credentialReviewRequired = !embedded && localStorage.getItem('credentialConfirmationRequired') === 'true';
 
   // ── UI State ─────────────────────────────────────────────────────────────────
-  const [activePage, setActivePage] = useState<Page>(embeddedPage ?? (credentialReviewRequired ? 'profile' : 'schedule'));
+  const facultyPages = ["status", "schedule", "requests", "log", "analytics", "profile", "hours", "history"] as const;
+  const [activePage, setActivePage] = usePersistentPage<Page>(
+    'faculty-dashboard-page', facultyPages, credentialReviewRequired ? 'profile' : 'schedule',
+    embeddedPage || (credentialReviewRequired ? 'profile' : undefined), !embedded,
+  );
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink<Page>(embedded ? [] : credentialReviewRequired ? ['profile'] : ["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage); // embedded: the Dean dashboard handles links itself
+  const { aptId, closeApt } = useDeepLink<Page>(embedded ? [] : credentialReviewRequired ? ['profile'] : facultyPages, setActivePage); // embedded: the Dean dashboard handles links itself
   useEffect(() => { if (credentialReviewRequired) closeApt(); }, [credentialReviewRequired, closeApt]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [scheduleTab, setScheduleTab] = useState<'view' | 'edit'>('view'); // Master Schedule: weekly view or Edit Schedule
@@ -967,6 +973,7 @@ const saveConsultationHours = async () => {
         { page: "status",    section: "Availability",  icon: "activity",  label: "Status & Notices" },
         { page: "hours",     section: "Availability",  icon: "clock",     label: "Consultation Hours" },
         { page: "analytics", section: "Insights",      icon: "chart",     label: "My Analytics" },
+        { page: "history", section: "Insights",        icon: "file",      label: "History" },
         { page: "profile",   section: "Account",       icon: "user",      label: "My Profile" },
       ] as { page: Page; section: string; icon: IconName; label: string; badge?: number }[]).map(({ page, ...item }) => ({
         key: page, ...item, active: activePage === page, onClick: () => { setActivePage(page); if (page === 'schedule') fetchData(); }, // reload so edits and imports show on the Master Schedule
@@ -1501,6 +1508,8 @@ const saveConsultationHours = async () => {
             <ProfilePage />
           </Box>
         )}
+
+        {activePage === "history" && !embedded && <HistoryPage showScheduleAccount />}
 
         {activePage === "analytics" && (
           <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Box, Button, Divider, Flex, Heading, HStack, Spinner, Text, VStack, useColorModeValue } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface HistoryEvent {
   _id: string;
@@ -80,16 +81,19 @@ export default function PersonalHistoryPanel() {
   const [exporting, setExporting] = useState(false);
   const border = useColorModeValue('gray.200', 'whiteAlpha.300');
   const muted = useColorModeValue('gray.600', 'gray.300');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const canOpenHistory = ['STUDENT', 'FACULTY', 'DEAN'].includes(localStorage.getItem('userRole') || '');
 
   const fetchHistory = useCallback(() => {
     authFetch(`${API}/api/history/me`)
       .then(async response => {
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Could not load your history.');
+        if (!response.ok) throw new Error();
         return data as PersonalHistory;
       })
       .then(data => { setHistory(data); setError(''); })
-      .catch((e: Error) => setError(e.message))
+      .catch(() => setError('Could not load your history. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -106,8 +110,7 @@ export default function PersonalHistoryPanel() {
     try {
       const response = await authFetch(`${API}/api/history/me/export.csv`);
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Could not export your history.');
+        throw new Error();
       }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement('a');
@@ -115,8 +118,8 @@ export default function PersonalHistoryPanel() {
       link.download = 'my-history.csv';
       link.click();
       URL.revokeObjectURL(url);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not export your history.');
+    } catch {
+      setError('Could not export your history. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -135,9 +138,10 @@ export default function PersonalHistoryPanel() {
           <Heading size="sm">My history</Heading>
           <Text fontSize="sm" color={muted} mt={1}>Your appointments, role changes, account events, and schedule history.</Text>
         </Box>
-        <Button size="sm" variant="outline" whiteSpace="nowrap" flexShrink={0} onClick={download} isLoading={exporting} isDisabled={!history}>
-          Export CSV
-        </Button>
+        <HStack spacing={2} flexShrink={0}>
+          {canOpenHistory && <Button size="sm" variant="outline" whiteSpace="nowrap" onClick={() => navigate({ pathname: location.pathname, search: '?page=history' })}>Open History</Button>}
+          <Button size="sm" variant="outline" whiteSpace="nowrap" onClick={download} isLoading={exporting} isDisabled={!history}>Export CSV</Button>
+        </HStack>
       </Flex>
 
       {loading && <Spinner size="sm" />}
