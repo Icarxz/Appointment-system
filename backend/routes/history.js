@@ -14,6 +14,7 @@ const { personalAppointmentFilter, personalHistoryFilter, personalHistoryCsv } =
 const { isValidDateString, matchesTermFilter, termForDate } = require('../utils/termCalendar');
 const { buildCsv } = require('../utils/csvExport');
 const { describeEvent } = require('../utils/eventDescription');
+const { formatManilaDateTime } = require('../utils/manilaTime');
 
 const router = express.Router();
 const ALL_ROLES = ['STUDENT', 'FACULTY', 'DEAN', 'ADMIN'];
@@ -313,7 +314,7 @@ router.get('/activity/export.csv', requireAuth(['ADMIN']), async (req, res) => {
     const csv = buildCsv([{
       title: 'Activity history',
       header: ['Time', 'Actor', 'Actor role', 'Subject', 'Event type', 'Activity'],
-      rows: result.rows.map((row) => [row.time, row.actorName, row.actorRole, row.subjectName, row.eventType, row.description]),
+      rows: result.rows.map((row) => [formatManilaDateTime(row.time), row.actorName, row.actorRole, row.subjectName, row.eventType, row.description]),
     }]);
     res.setHeader('Content-Disposition', 'attachment; filename="activity-history.csv"');
     res.type('text/csv; charset=utf-8').send(csv);
