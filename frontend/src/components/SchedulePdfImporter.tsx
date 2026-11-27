@@ -8,6 +8,7 @@ import ConfirmAction from './ConfirmAction';
 import type { ConfirmConfig } from './ConfirmAction';
 import { authFetch } from './authFetch';
 import { DAY_LONG, CONSULTATION_DAYS, CLASS_DAYS } from '../utils/daySettings';
+import { friendlyError } from '../utils/friendlyError';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -77,7 +78,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setUploadError(data.error || 'Could not read that PDF.'); return; }
       setParsed(data); setClasses(data.classes); setHours(data.consultationHours); setReport(null); setIdentity(false); setFileHash(data.fileHash || ''); setEffDate(data.metadata?.effectivityDate || '');
-    } catch { setUploadError('Could not reach the server.'); }
+    } catch (error) { setUploadError(friendlyError(error, 'Could not reach the server.')); }
     finally { setReading(false); }
   };
 
@@ -108,7 +109,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
       const data = await res.json();
       if (!res.ok) { toast({ title: 'Could not check the schedule', description: data.error, status: 'error', duration: 5000 }); return; }
       setReport(data);
-    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
+    } catch (error) { toast({ title: 'Could not reach the server', description: friendlyError(error, 'Could not reach the server.'), status: 'error', duration: 4000 }); }
     finally { setBusy(false); }
   };
 
@@ -128,7 +129,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
       setOutcome({ status: data.status, effectivityDate: data.effectivityDate, counts: data.counts });
       onDone?.(data.status);
       if (data.status === 'ACTIVE') onApplied?.();
-    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
+    } catch (error) { toast({ title: 'Could not reach the server', description: friendlyError(error, 'Could not reach the server.'), status: 'error', duration: 4000 }); }
     finally { setConfirming(false); }
   };
   const askConfirm = () => {
@@ -147,7 +148,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
       const data = await res.json();
       setHistory(res.ok ? data : []);
       if (!res.ok) toast({ title: 'Could not load the history', description: data.error, status: 'error', duration: 4000 });
-    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
+    } catch (error) { toast({ title: 'Could not reach the server', description: friendlyError(error, 'Could not reach the server.'), status: 'error', duration: 4000 }); }
   };
   const act = async (id: string, what: 'rollback' | 'cancel') => {
     try {
@@ -157,7 +158,7 @@ export default function SchedulePdfImporter({ facultyId, facultyName, mode, isOp
       toast({ title: what === 'rollback' ? 'Previous schedule restored' : 'Scheduled import cancelled', status: 'success', duration: 3000 });
       if (what === 'rollback') onApplied?.();
       loadHistory();
-    } catch { toast({ title: 'Could not reach the server', status: 'error', duration: 4000 }); }
+    } catch (error) { toast({ title: 'Could not reach the server', description: friendlyError(error, 'Could not reach the server.'), status: 'error', duration: 4000 }); }
   };
   const askAct = (it: HistoryItem, what: 'rollback' | 'cancel') => setConfirmCfg({
     title: what === 'rollback' ? 'Undo this import?' : 'Cancel this scheduled import?',

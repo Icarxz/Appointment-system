@@ -24,7 +24,7 @@ const googleLimiter = rateLimit({
 const signToken = (user) =>
   jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '8h' });
 
-// Same shape the old password login returned, so the dashboards need no changes.
+// Session payload shared by all dashboard portals.
 const sessionPayload = (user) => ({
   token: signToken(user),
   _id: user._id,

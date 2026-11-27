@@ -28,6 +28,7 @@ import ProfilePage from './ProfilePage';
 import { GENDER_OPTIONS, matchesGender, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 import { manilaToday, addDaysIso, mondayOf, weeksBetween, weekLabel } from '../utils/weekUtils';
 import WeeklyBookingCalendar from './WeeklyBookingCalendar';
+import { friendlyError, responseError } from '../utils/friendlyError';
 import BookingConfirmModal from './BookingConfirmModal';
 import HistoryPage from './HistoryPage';
 import { usePersistentPage } from '../utils/usePersistentPage';
@@ -317,7 +318,7 @@ export default function StudentDashboard() {
       // 2. === THE INTERCEPTOR ===
       // If the backend threw a 400 Bad Request (Class collision, Double-booking, or Spam)
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to request appointment.');
+        throw responseError(response, data.error || 'Could not request the appointment. Please try again.');
       }
 
       // 3. If it was mathematically safe and successful:
@@ -339,7 +340,7 @@ export default function StudentDashboard() {
       // Catches the backend error and displays it loudly at the top of the screen
       toast({ 
         title: 'Time Slot Unavailable', 
-        description: error.message,
+        description: friendlyError(error, 'Could not request the appointment. Please try again.'),
         status: 'error', 
         duration: 6000, // Stays visible long enough for the student to read it
         isClosable: true,

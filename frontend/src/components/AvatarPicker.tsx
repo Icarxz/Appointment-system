@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Avatar, Button, HStack, Text, VStack, useToast } from '@chakra-ui/react';
+import { friendlyError } from '../utils/friendlyError';
 
 // Profile photo picker. Crops the chosen image to a centred square, shrinks it to 256x256 and
 // compresses it to a JPEG small enough for the server (~65 KB). It hands back a data URL, or null
@@ -46,7 +47,7 @@ export default function AvatarPicker({ name, value, onChange }: {
       return;
     }
     try { onChange(await toSquareJpeg(file)); }
-    catch (e: any) { toast({ title: 'Could not use that photo', description: e.message, status: 'error' }); }
+    catch (e: any) { toast({ title: 'Could not use that photo', description: friendlyError(e, 'Could not use that photo. Please try another image.'), status: 'error' }); }
   };
 
   return (

@@ -4,6 +4,7 @@ import {
   Box, Flex, Heading, Text, Button, VStack, Spinner, Icon, Input, InputGroup, InputRightAddon, useColorModeValue
 } from '@chakra-ui/react';
 import { CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 // Shown when someone clicks the "verify your email" link from their inbox.
 // It reads the :token from the URL, sends it to the backend once, and
@@ -36,19 +37,20 @@ export default function VerifyEmail() {
     async function verify() {
       try {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/api/faculty/verify-email/${token}`);
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
           setStatus('error');
-          setMessage(data.error || 'This verification link is invalid or has expired.');
+          const fallback = 'This verification link is invalid or has expired. Request a new link and try again.';
+          setMessage(friendlyError(responseError(response, data.error || fallback), fallback));
           return;
         }
 
         setStatus('success');
         setMessage(data.message || 'Your email has been verified.');
-      } catch {
+      } catch (error) {
         setStatus('error');
-        setMessage('Could not reach the server. Check your connection and try again.');
+        setMessage(friendlyError(error, 'Could not verify your email. Please try again.'));
       }
     }
 
@@ -74,10 +76,10 @@ export default function VerifyEmail() {
         body: JSON.stringify({ email: `${resendEmail.trim()}@gmail.com`.toLowerCase() })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not send the email.');
+      if (!response.ok) throw responseError(response, data.error || 'Could not send the verification email. Please try again.');
       setResendResult({ ok: true, text: data.message });
     } catch (error: any) {
-      setResendResult({ ok: false, text: error.message });
+      setResendResult({ ok: false, text: friendlyError(error, 'Could not send the verification email. Please try again.') });
     } finally {
       setIsResending(false);
     }

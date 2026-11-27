@@ -210,16 +210,6 @@ async function sendApprovedEmail(to, { verifyLink, loginLink }) {
   });
 }
 
-async function sendResetEmail(to, link) {
-  return sendMail({
-    to,
-    subject: 'Password reset request',
-    html: `<p>A password reset was requested for this account. Click below to choose a new password.</p>
-           <p><a href="${link}">${link}</a></p>
-           <p>This link expires in 15 minutes. If you didn't request this, you can ignore this email.</p>`
-  });
-}
-
 const esc = (v) => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // A plain email copy of an in-app notification (approved, declined, cancelled, reminder, appeal...).
@@ -237,4 +227,4 @@ async function sendNotificationEmail(to, { title, message, link }) {
   });
 }
 
-module.exports = { sendMail, sendVerificationEmail, sendApprovedEmail, sendResetEmail, sendNotificationEmail, mailerStatus, verifyMailer, logMailerStatus, _setTransportForTests };
+module.exports = { sendMail, sendVerificationEmail, sendApprovedEmail, sendNotificationEmail, mailerStatus, verifyMailer, logMailerStatus, _setTransportForTests };

@@ -5,6 +5,7 @@ import {
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import CancelReasonPicker, { STUDENT_APPEAL_REASONS, FACULTY_APPEAL_REASONS } from './CancelReasonPicker';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 // Which statuses each side may appeal (must match the backend).
 const APPEALABLE: Record<string, string[]> = {
@@ -39,12 +40,12 @@ export default function AppealControls({ apt, role, onChanged }: Props) {
     try {
       const res = await authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+      if (!res.ok) throw responseError(res, data.error || 'Could not submit the reason. Please try again.');
       toast({ title: okTitle, status: 'success', position: 'top' });
       setOpen(false);
       onChanged();
     } catch (e: any) {
-      toast({ title: 'Could not complete that', description: e.message, status: 'error', position: 'top' });
+      toast({ title: 'Could not complete that', description: friendlyError(e, 'Could not submit the reason. Please try again.'), status: 'error', position: 'top' });
     }
     setBusy(false);
   };

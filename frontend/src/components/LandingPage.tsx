@@ -2,6 +2,7 @@ import React from 'react';
 import { EmailIcon, PhoneIcon, CalendarIcon, CheckCircleIcon, ChevronRightIcon, InfoOutlineIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
 import { isSafeAppLink, linkMatchesRole } from '../utils/deepLink';
+import { friendlyError, responseError } from '../utils/friendlyError';
 import GoogleSignInButton from './GoogleSignInButton';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 import {
@@ -219,11 +220,11 @@ export default function LandingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential, audience })
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw responseError(response, data.error || 'Could not sign in. Please try again.');
       finishLogin(data); // provisioned accounts with saved details review them on My Profile after sign-in
     } catch (error: any) {
-      toast({ title: 'Sign-in failed', description: error.message, duration: 9000, isClosable: true, status: 'error', position: 'top' });
+      toast({ title: 'Sign-in failed', description: friendlyError(error, 'Could not sign in. Please try again.'), duration: 9000, isClosable: true, status: 'error', position: 'top' });
     }
   };
 

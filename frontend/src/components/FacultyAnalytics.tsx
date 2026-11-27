@@ -7,6 +7,7 @@ import type { HeatmapData, LV } from './AnalyticsCharts';
 import { AppealsByReason, CohortTable, DrilldownDrawer } from './AnalyticsTables';
 import type { AppealRow, CohortRow, Drilldown } from './AnalyticsTables';
 import { useColorModeValue } from '@chakra-ui/react';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 interface Window { total: number; last4: number; prev4: number }
 interface Data {
@@ -50,9 +51,9 @@ export default function FacultyAnalytics() {
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_API_URL}/api/analytics/me`)
-      .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; })
+      .then(async r => { const d = await r.json(); if (!r.ok) throw responseError(r, d.error || 'Could not load your analytics. Please try again.'); return d; })
       .then(setData)
-      .catch((e: any) => setError(e.message || 'Could not load your analytics.'));
+      .catch((e: any) => setError(friendlyError(e, 'Could not load your analytics. Please try again.')));
   }, []);
 
   if (error) return <Text color="red.500">{error}</Text>;

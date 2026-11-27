@@ -5,6 +5,7 @@ import {
 } from '@chakra-ui/react';
 import CancelReasonPicker, { STUDENT_APPEAL_REASONS, FACULTY_APPEAL_REASONS } from './CancelReasonPicker';
 import { authFetch } from './authFetch';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 interface Props {
   apt: any | null;                 // the missed / cancelled appointment being appealed
@@ -28,11 +29,11 @@ export default function AppealDialog({ apt, role, describe, onClose, onDone }: P
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw responseError(res, data.error || 'Could not submit your reason. Please try again.');
       toast({ title: 'Reason submitted', description: role === 'STUDENT' ? 'Your professor can see it.' : 'The Dean can see it.', status: 'success' });
       onDone();
     } catch (e: any) {
-      toast({ title: 'Could not submit reason', description: e.message, status: 'error', position: 'top' });
+      toast({ title: 'Could not submit reason', description: friendlyError(e, 'Could not submit your reason. Please try again.'), status: 'error', position: 'top' });
     }
     setBusy(false);
   };

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge, Box, Button, Divider, Flex, Heading, HStack, Spinner, Text, VStack, useColorModeValue } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 interface HistoryEvent {
   _id: string;
@@ -89,11 +90,11 @@ export default function PersonalHistoryPanel() {
     authFetch(`${API}/api/history/me`)
       .then(async response => {
         const data = await response.json();
-        if (!response.ok) throw new Error();
+        if (!response.ok) throw responseError(response, data.error || 'Could not load your history. Please try again.');
         return data as PersonalHistory;
       })
       .then(data => { setHistory(data); setError(''); })
-      .catch(() => setError('Could not load your history. Please try again.'))
+      .catch((e: unknown) => setError(friendlyError(e, 'Could not load your history. Please try again.')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -110,7 +111,8 @@ export default function PersonalHistoryPanel() {
     try {
       const response = await authFetch(`${API}/api/history/me/export.csv`);
       if (!response.ok) {
-        throw new Error();
+        const data = await response.json().catch(() => ({}));
+        throw responseError(response, data.error || 'Could not export your history. Please try again.');
       }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement('a');
@@ -118,8 +120,8 @@ export default function PersonalHistoryPanel() {
       link.download = 'my-history.csv';
       link.click();
       URL.revokeObjectURL(url);
-    } catch {
-      setError('Could not export your history. Please try again.');
+    } catch (e) {
+      setError(friendlyError(e, 'Could not export your history. Please try again.'));
     } finally {
       setExporting(false);
     }

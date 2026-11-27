@@ -10,6 +10,7 @@ import { ChartCard, HBarChart, Heatmap, KpiTile, LineChart, StackedBar } from '.
 import type { HeatmapData, LV } from './AnalyticsCharts';
 import { AppealsByReason, CohortTable, DrilldownDrawer } from './AnalyticsTables';
 import type { AppealRow, CohortRow, Drilldown } from './AnalyticsTables';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 interface Window { total: number; last4: number; prev4: number }
 interface ReportData {
@@ -67,10 +68,10 @@ export default function AnalyticsReport() {
     try {
       const res = await authFetch(`${import.meta.env.VITE_API_URL}/api/analytics/report`);
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error || 'Could not load analytics.');
+      if (!res.ok) throw responseError(res, body.error || 'Could not load analytics. Please try again.');
       setData(body);
     } catch (e: any) {
-      setError(e.message || 'Could not load analytics.');
+      setError(friendlyError(e, 'Could not load analytics. Please try again.'));
     } finally {
       setLoading(false);
     }

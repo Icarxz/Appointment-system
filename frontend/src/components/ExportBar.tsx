@@ -3,6 +3,7 @@ import { Button, HStack, useToast } from '@chakra-ui/react';
 import { DownloadIcon } from '@chakra-ui/icons';
 import { usePrintReport } from '../utils/printReport';
 import { authFetch } from './authFetch';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 // Download the report as a CSV file (built on the server, so its formula-injection guard cannot be skipped)
 // or print it / save it as a PDF through the browser's print dialog. No PDF library is used.
@@ -17,14 +18,14 @@ export default function ExportBar({ csvPath, fileBase, solid = false }: { csvPat
     setBusy(true);
     try {
       const res = await authFetch(`${import.meta.env.VITE_API_URL}${csvPath}`);
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not export.');
+      if (!res.ok) throw responseError(res, (await res.json().catch(() => ({}))).error || 'Could not export the report. Please try again.');
       const url = URL.createObjectURL(await res.blob());
       const day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }); // YYYY-MM-DD
       const a = document.createElement('a');
       a.href = url; a.download = `${fileBase}-${day}.csv`; document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e: any) {
-      toast({ title: 'Export failed', description: e.message, status: 'error', position: 'top' });
+      toast({ title: 'Export failed', description: friendlyError(e, 'Could not export the report. Please try again.'), status: 'error', position: 'top' });
     }
     setBusy(false);
   };

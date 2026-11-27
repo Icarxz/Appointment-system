@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Box, Button, FormControl, FormLabel, Heading, HStack, NumberInput, NumberInputField, Spinner, Switch, Text, useToast } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import { useNavPalette } from '../utils/uiTokens';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 interface Settings { acceptsConsultations: boolean; weeklyRequestLimit: number }
 
@@ -17,9 +18,9 @@ export default function DeanConsultationSettings({ onChanged }: { onChanged?: (s
 
   useEffect(() => {
     authFetch(base)
-      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d as Settings; })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw responseError(r, d.error || 'Could not load your settings. Please try again.'); return d as Settings; })
       .then((d) => { setSettings(d); setLimit(String(d.weeklyRequestLimit)); })
-      .catch((e: any) => toast({ title: 'Could not load your settings', description: e.message, status: 'error', position: 'top' }));
+      .catch((e: any) => toast({ title: 'Could not load your settings', description: friendlyError(e, 'Could not load your settings. Please try again.'), status: 'error', position: 'top' }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async (body: Partial<Settings>, okTitle: string) => {
@@ -27,11 +28,11 @@ export default function DeanConsultationSettings({ onChanged }: { onChanged?: (s
     try {
       const res = await authFetch(base, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error || 'Could not save.');
+      if (!res.ok) throw responseError(res, d.error || 'Could not save your settings. Please try again.');
       setSettings(d); setLimit(String(d.weeklyRequestLimit)); onChanged?.(d);
       toast({ title: okTitle, status: 'success', position: 'top' });
     } catch (e: any) {
-      toast({ title: 'Could not save', description: e.message, status: 'error', position: 'top' });
+      toast({ title: 'Could not save', description: friendlyError(e, 'Could not save your settings. Please try again.'), status: 'error', position: 'top' });
     }
     setBusy(false);
   };

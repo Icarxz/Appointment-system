@@ -9,6 +9,7 @@ import SchedulePdfImporter from './SchedulePdfImporter';
 import type { Parsed } from './SchedulePdfImporter';
 import { matchFacultyByFilename } from '../utils/facultyMatch';
 import type { FacultyLite, FileMatch } from '../utils/facultyMatch';
+import { friendlyError } from '../utils/friendlyError';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -87,7 +88,7 @@ export default function BulkSchedulePdfImporter({ isOpen, onClose, facultyList, 
         message = data.error || message;
         if (data.code === 'OCR_BUSY' && attempt < 3) { await sleep(6000); continue; } // another reader is running: wait and try again
         break;
-      } catch { message = 'Could not reach the server.'; break; }
+      } catch (error) { message = friendlyError(error, 'Could not reach the server.'); break; }
     }
     patch(it.id, { ocr: 'failed', error: message });
   };
