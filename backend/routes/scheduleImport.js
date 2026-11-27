@@ -226,7 +226,10 @@ router.post('/:id/rollback', requireAuth(ALLOWED), async (req, res) => {
       const ok = checkRestore(imp.previousSnapshot, approved);
       if (!ok.ok) return res.status(409).json({ error: ok.message });
       try { await replaceSchedule(mongoStore, facultyId, imp.previousSnapshot.classes, imp.previousSnapshot.hours); }
-      catch (e) { return res.status(500).json({ error: e.message }); }
+      catch (e) {
+        console.error('Schedule import rollback failed:', e);
+        return res.status(500).json({ error: 'Something went wrong on our side. Please try again. If it keeps happening, tell your administrator.' });
+      }
       await ScheduleImport.updateOne({ _id: imp._id }, { $set: { status: 'ROLLED_BACK' } });
       await appendHistoryEvent({
         userId: facultyId, eventType: 'SCHEDULE_IMPORT_ROLLED_BACK', actorId: req.user.userId, actorRole: req.user.role,
