@@ -5,6 +5,7 @@ import {
   FormControl, FormLabel, InputGroup, InputRightElement, IconButton, List, ListItem, ListIcon
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon, CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 // Same password rule enforced on the backend in routes/faculty.js
 // (POST /reset-password/:token) and in LandingPage.tsx's registration form.
@@ -61,12 +62,12 @@ export default function ResetPassword() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Something went wrong.');
+      if (!response.ok) throw responseError(response, data.error || 'Could not reset your password. Please try again.');
 
       setDone(true);
       toast({ title: 'Password updated', description: data.message, status: 'success' });
     } catch (error: any) {
-      toast({ title: 'Reset failed', description: error.message, status: 'error' });
+      toast({ title: 'Reset failed', description: friendlyError(error, 'Could not reset your password. Please try again.'), status: 'error' });
     }
     setIsSubmitting(false);
   };

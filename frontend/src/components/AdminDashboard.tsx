@@ -33,6 +33,7 @@ import SchedulePdfImporter from './SchedulePdfImporter';
 import BulkSchedulePdfImporter from './BulkSchedulePdfImporter';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel, facultyStatusOf, facultyStatusUntil } from './appointmentStatus';
+import { friendlyError, responseError } from '../utils/friendlyError';
 import AnalyticsReport from './AnalyticsReport';
 // import { QRCodeSVG } from 'qrcode.react';
 
@@ -137,7 +138,7 @@ export default function AdminDashboard() {
     const get = async (path: string) => {
       const res = await authFetch(`${api}${path}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not load the data.');
+      if (!res.ok) throw responseError(res, data.error || 'Could not load the data. Please try again.');
       return data;
     };
     try {
@@ -147,7 +148,7 @@ export default function AdminDashboard() {
       setFacultyList(fac); setAppointments(appts); setAllUsers(users);
       setLoadError(''); setDataStatus('ready');
     } catch (e: any) {
-      setLoadError(e instanceof TypeError ? 'We could not reach the server. Check your connection and try again.' : (e.message || 'Could not load the data.'));
+      setLoadError(friendlyError(e, 'Could not load the data. Please try again.'));
       setDataStatus(prev => (prev === 'ready' ? 'ready' : 'error'));
     }
   };
@@ -233,8 +234,13 @@ export default function AdminDashboard() {
       });
       const data = await response.json();
       if (response.ok) setFacultyList(list => list.map(f => (f._id === id ? { ...f, program: data.program || undefined } : f)));
-      else toast({ title: data.error || 'Could not save the program.', status: 'error' });
-    } catch { toast({ title: 'Could not reach the server.', status: 'error' }); }
+      else {
+        const fallback = 'Could not save the program. Please try again.';
+        toast({ title: 'Could not save the program', description: friendlyError(responseError(response, data.error || fallback), fallback), status: 'error' });
+      }
+    } catch (error) {
+      toast({ title: 'Could not reach the server.', description: friendlyError(error, 'Could not save the program. Please try again.'), status: 'error' });
+    }
   };
 
   const downloadBulkTemplate = async (kind: 'student' | 'faculty', format: 'xlsx' | 'csv') => {
@@ -242,7 +248,7 @@ export default function AdminDashboard() {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/template/${kind}.${format}`);
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Could not download the template.');
+        throw responseError(response, data.error || 'Could not download the template. Please try again.');
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -254,7 +260,7 @@ export default function AdminDashboard() {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (error: any) {
-      toast({ title: 'Template download failed', description: error.message, status: 'error' });
+      toast({ title: 'Template download failed', description: friendlyError(error, 'Could not download the template. Please try again.'), status: 'error' });
     }
   };
 
@@ -274,11 +280,11 @@ export default function AdminDashboard() {
         body: form,
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not preview the spreadsheet.');
+      if (!response.ok) throw responseError(response, data.error || 'Could not preview the spreadsheet. Please try again.');
       setBulkPreview(data);
       setBulkNeedsValidation(false);
     } catch (error: any) {
-      toast({ title: 'Preview failed', description: error.message, status: 'error' });
+      toast({ title: 'Preview failed', description: friendlyError(error, 'Could not preview the spreadsheet. Please try again.'), status: 'error' });
     }
     setBulkBusy(false);
   };
@@ -305,11 +311,11 @@ export default function AdminDashboard() {
         body: form,
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not validate the edited rows.');
+      if (!response.ok) throw responseError(response, data.error || 'Could not validate the edited rows. Please try again.');
       setBulkPreview(data);
       setBulkNeedsValidation(false);
     } catch (error: any) {
-      toast({ title: 'Revalidation failed', description: error.message, status: 'error' });
+      toast({ title: 'Revalidation failed', description: friendlyError(error, 'Could not validate the edited rows. Please try again.'), status: 'error' });
     } finally {
       setBulkBusy(false);
     }
@@ -326,13 +332,13 @@ export default function AdminDashboard() {
         body: form,
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not import the spreadsheet.');
+      if (!response.ok) throw responseError(response, data.error || 'Could not import the spreadsheet. Please try again.');
       setBulkSummary(data);
       setBulkPreview(null);
       setBulkNeedsValidation(false);
       fetchAllData();
     } catch (error: any) {
-      toast({ title: 'Import failed', description: error.message, status: 'error' });
+      toast({ title: 'Import failed', description: friendlyError(error, 'Could not import the spreadsheet. Please try again.'), status: 'error' });
     }
     setBulkBusy(false);
   };
@@ -453,12 +459,12 @@ export default function AdminDashboard() {
         body: JSON.stringify({ name: normalizePersonName(nameEditValue) })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw responseError(response, data.error || 'Could not change the name. Please try again.');
       toast({ title: 'Name updated', description: data.message, status: 'success' });
       setNameEdit(null);
       fetchAllData();
     } catch (error: any) {
-      toast({ title: 'Could not change name', description: error.message, status: 'error' });
+      toast({ title: 'Could not change name', description: friendlyError(error, 'Could not change the name. Please try again.'), status: 'error' });
     }
     setNameSaving(false);
   };
@@ -478,12 +484,12 @@ export default function AdminDashboard() {
         body: JSON.stringify({ email: newEmail })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw responseError(response, data.error || 'Could not change the email. Please try again.');
       toast({ title: 'Email changed', description: data.message, status: 'success' });
       setEmailEdit(null);
       fetchAllData();
     } catch (error: any) {
-      toast({ title: 'Could not change email', description: error.message, status: 'error' });
+      toast({ title: 'Could not change email', description: friendlyError(error, 'Could not change the email. Please try again.'), status: 'error' });
     }
     setEmailSaving(false);
   };
@@ -499,12 +505,12 @@ export default function AdminDashboard() {
         body: JSON.stringify({ idValue: idEditValue })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw responseError(response, data.error || 'Could not save the ID. Please try again.');
       toast({ title: 'ID saved', description: data.message, status: 'success' });
       setIdEdit(null);
       fetchAllData();
     } catch (error: any) {
-      toast({ title: 'Could not save ID', description: error.message, status: 'error' });
+      toast({ title: 'Could not save ID', description: friendlyError(error, 'Could not save the ID. Please try again.'), status: 'error' });
     }
     setIdSaving(false);
   };
@@ -521,12 +527,12 @@ export default function AdminDashboard() {
         body: JSON.stringify({ disabled: disable })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw responseError(response, data.error || 'Could not update the account. Please try again.');
       toast({ title: disable ? 'Account disabled' : 'Account enabled', description: data.message, status: 'success' });
       setStatusTarget(null);
       fetchAllData();
     } catch (error: any) {
-      toast({ title: 'Could not update account', description: error.message, status: 'error' });
+      toast({ title: 'Could not update account', description: friendlyError(error, 'Could not update the account. Please try again.'), status: 'error' });
     }
     setStatusSaving(false);
   };

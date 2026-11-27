@@ -15,6 +15,7 @@ import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import { parseCohort } from './PeopleUi';
 import PersonalHistoryPanel from './PersonalHistoryPanel';
 import { normalizePersonName } from '../utils/personName';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 interface Profile {
   name: string; email: string; role: string; gender: string; programPosition: string;
@@ -53,7 +54,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_API_URL}/api/auth/me`)
-      .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; })
+      .then(async r => { const d = await r.json(); if (!r.ok) throw responseError(r, d.error || 'Could not load your profile. Please try again.'); return d; })
       .then((data: Profile) => {
         setP(data);
         setPrivacyAccepted(!!data.privacyAcceptedAt);
@@ -64,7 +65,7 @@ export default function ProfilePage() {
           window.location.reload();
         }
       })
-      .catch((e: any) => setError(e.message || 'Could not load your profile.'));
+      .catch((e: any) => setError(friendlyError(e, 'Could not load your profile. Please try again.')));
   }, []);
 
   if (error) return <Text color="red.500">{error}</Text>;
@@ -155,7 +156,7 @@ export default function ProfilePage() {
         body: JSON.stringify(body),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
+      if (!r.ok) throw responseError(r, d.error || 'Could not save your profile. Please try again.');
       const next = d.profile;
       const completeChanged = next.profileComplete !== p.profileComplete;
       setP({
@@ -172,7 +173,7 @@ export default function ProfilePage() {
       // the dashboard header / booking lock read these from localStorage, so refresh when they changed
       if (next.name !== p.name || next.programPosition !== p.programPosition || completeChanged) window.location.reload();
     } catch (e: any) {
-      toast({ title: 'Could not save your profile', description: e.message, status: 'error' });
+      toast({ title: 'Could not save your profile', description: friendlyError(e, 'Could not save your profile. Please try again.'), status: 'error' });
     }
     setSaving(false);
   };
@@ -186,14 +187,14 @@ export default function ProfilePage() {
         body: JSON.stringify({ privacyAccepted }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
+      if (!r.ok) throw responseError(r, d.error || 'Could not confirm your credentials. Please try again.');
       localStorage.setItem('onboardingComplete', 'true');
       localStorage.setItem('credentialConfirmationRequired', 'false');
       localStorage.setItem('programPosition', d.profile.programPosition || '');
       toast({ title: 'Credentials confirmed', description: 'Your account details are now locked.', status: 'success' });
       window.location.reload();
     } catch (e: any) {
-      toast({ title: 'Could not confirm credentials', description: e.message, status: 'error' });
+      toast({ title: 'Could not confirm credentials', description: friendlyError(e, 'Could not confirm your credentials. Please try again.'), status: 'error' });
     } finally {
       setConfirming(false);
     }
