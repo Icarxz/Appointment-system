@@ -29,7 +29,7 @@ const UserSchema = new mongoose.Schema({
   verificationTokenExpires: { type: Date, select: false },
   privacyAcceptedAt: { type: Date, default: null }, // when they agreed to the Privacy Policy at registration
 
-  // Forgot-password flow
+  // Legacy reset fields retained for existing records.
   resetPasswordToken: { type: String, select: false },
   resetPasswordExpires: { type: Date, select: false },
 

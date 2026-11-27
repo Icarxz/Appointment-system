@@ -1,31 +1,9 @@
-const bcrypt = require('bcryptjs');
 const express = require('express');
 const mongoose = require('mongoose');
-const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 
-// Blocks repeated password-guessing: after 10 failed/attempted logins from the
-// same IP within 15 minutes, further attempts are rejected until the window resets.
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
-  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// Same protection for the forgot-password request itself, so it can't be used
-// to spam a mailbox with reset links or to probe which emails are registered.
-const forgotPasswordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: 'Too many password reset requests. Please try again in 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const { sendVerificationEmail, sendApprovedEmail, sendResetEmail } = require('../utils/mailer');
+const { sendVerificationEmail, sendApprovedEmail } = require('../utils/mailer');
 const User = require('../models/User'); 
 const Schedule = require('../models/Schedule');
 const Appointment = require('../models/Appointment');
@@ -49,7 +27,7 @@ const { requireAuth } = require('../middleware/auth');
 const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 // Official ID formats (same rules as the User model).
 const Broadcast = require('../models/Broadcast');
-const { isProfileComplete, parseList, audienceMismatch } = require('../utils/signInPolicy');
+const { isProfileComplete, parseList } = require('../utils/signInPolicy');
 const { isApprovedFacultyPosition } = require('../utils/facultyPositions');
 const { isValidCohort, cohortLabel } = require('../utils/studentCohort');
 const { isProgram, programOfPosition, effectiveProgram } = require('../utils/programs');
@@ -104,8 +82,7 @@ const timeToMinutes = (time) => {
 // === ROUTES ===
 // =========================================================================
 
-// === 1. SECURE REGISTRATION ROUTE (With Bcrypt) ===
-// Gives the user a fresh one-time email-verification token (only its hash is stored, valid 24h)
+// Issues a fresh one-time email-verification token (only its hash is stored, valid 24h)
 // and returns the link to put in the email. Any earlier link stops working.
 async function issueVerificationLink(user) {
   const raw = crypto.randomBytes(32).toString('hex');
@@ -117,64 +94,6 @@ async function issueVerificationLink(user) {
 }
 
 // (Self-registration was removed: accounts are created by Google sign-in in routes/auth.js.)
-
-// === 2. SECURE LOGIN ROUTE ===
-router.post('/login', loginLimiter, async (req, res) => {
-  try {
-    const { email, password, audience } = req.body;
-
-    // 1. Find the user
-    const user = await User.findOne({ email: email.toLowerCase() });
-
-    // console.log("DIAGNOSTIC - User found:", user ? "YES" : "NO", "| Email searched:", email.toLowerCase());
-    
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid email or password.' });
-    }
-
-    // 2. Check the Status State Machine BEFORE checking the password
-    if (user.accountStatus === 'PENDING_APPROVAL') {
-      return res.status(403).json({ error: 'Access Denied: Your account is still awaiting Admin approval. You will receive an email once it is approved.' });
-    }
-    if (user.accountStatus === 'ARCHIVED' || user.accountStatus === 'RESTRICTED') {
-      return res.status(403).json({ error: 'Access Denied: Your account has been restricted or archived.' });
-    }
-    if (!user.isVerified) {
-      return res.status(403).json({ error: 'Please verify your email address before logging in. Check your inbox for the verification link.' });
-    }
-
-    // 3. Cryptographically verify the password (Declared only ONCE)
-    const isMatch = await bcrypt.compare(password, user.password);
-    // console.log("DIAGNOSTIC - Password Match:", isMatch);
-    
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid email or password.' });
-    }
-
-    // Signed in on the wrong tab (Student vs Faculty & Staff)? Tell them, and issue no token.
-    const wrongTab = audienceMismatch(audience, user.role);
-    if (wrongTab) return res.status(403).json({ error: wrongTab });
-
-    // 4. Send back the user data (Do NOT send the hashed password back to the frontend)
-    const token = jwt.sign(
-     { userId: user._id, role: user.role }, 
-     process.env.JWT_SECRET, 
-     { expiresIn: '8h' }
-   );
-   res.json({
-    token,
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    programPosition: user.programPosition
-});
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Server error during login.' });
-  }
-});
 
 // 1. GET ROUTE: Fetch all faculty members for the dashboard
 router.get('/status', requireAuth(ALL_ROLES), async (req, res) => {
@@ -1162,8 +1081,8 @@ router.patch('/users/:id/email', requireAuth(['ADMIN']), async (req, res) => {
 });
 
 // ADMIN: disable / re-enable a student, faculty or Dean account.
-// Disabled = accountStatus RESTRICTED or ARCHIVED: they cannot sign in (password login, Google sign-in, or an
-// already-open session) and faculty are hidden from booking lists. Appointments, ID and records are kept.
+// Disabled = accountStatus RESTRICTED or ARCHIVED: they cannot sign in with Google or use an
+// already-open session, and faculty are hidden from booking lists. Appointments, ID and records are kept.
 router.patch('/users/:id/status', requireAuth(['ADMIN']), async (req, res) => {
   try {
     if (typeof req.body.disabled !== 'boolean') {
@@ -2069,74 +1988,6 @@ router.post('/resend-verification', resendVerificationLimiter, async (req, res) 
     res.json({ message: 'If that account exists and still needs verification, a new link has been sent.', ...(devLink ? { devLink } : {}) });
   } catch (error) {
     res.status(500).json({ error: 'Could not send the email. Please try again later.' });
-  }
-});
-
-// =========================================================================
-// === FORGOT PASSWORD ===
-// =========================================================================
-
-// Step 1: request a reset link. Always replies with the same neutral message,
-// whether or not that email belongs to an account — this stops the endpoint
-// being used to check which emails are registered students/faculty.
-router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await User.findOne({ email: (email || '').toLowerCase() });
-    let devLink;
-
-    if (user) {
-      const rawResetToken = crypto.randomBytes(32).toString('hex');
-      const hashedResetToken = crypto.createHash('sha256').update(rawResetToken).digest('hex');
-
-      user.resetPasswordToken = hashedResetToken;
-      user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
-      await user.save();
-
-      const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',')[0].trim();
-      const resetLink = `${frontendUrl}/reset-password/${rawResetToken}`;
-      const result = await sendResetEmail(user.email, resetLink);
-      // Local development only (no SMTP set up): show the link on the page instead of the terminal.
-      if (result && result.preview) devLink = resetLink;
-    }
-
-    res.json({ message: 'If an account exists for this email, a password reset link has been sent.', ...(devLink ? { devLink } : {}) });
-  } catch (error) {
-    res.status(500).json({ error: 'Server error processing the request.' });
-  }
-});
-
-// Step 2: the link's token is checked, the new password is validated with the
-// same rule used at registration, and the token is single-use (cleared on success).
-router.post('/reset-password/:token', async (req, res) => {
-  try {
-    const { newPassword } = req.body;
-
-    const passwordPattern = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
-    if (!passwordPattern.test(newPassword)) {
-      return res.status(400).json({ error: 'Password must be at least 12 characters, with 1 uppercase letter, 1 number, and 1 symbol.' });
-    }
-
-    const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
-
-    const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: Date.now() }
-    }).select('+resetPasswordToken +resetPasswordExpires');
-
-    if (!user) {
-      return res.status(400).json({ error: 'This reset link is invalid or has expired.' });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
-    await user.save();
-
-    res.json({ message: 'Password updated. You can now log in with your new password.' });
-  } catch (error) {
-    res.status(500).json({ error: 'Server error resetting password.' });
   }
 });
 
