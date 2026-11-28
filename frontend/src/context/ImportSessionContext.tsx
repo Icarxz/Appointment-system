@@ -105,6 +105,7 @@ export interface ImportFile {
   identityRead: string;
   ownershipConfirmed: boolean;
   alreadyImported: string;
+  importAgain: boolean;
   importState: 'pending' | 'imported' | 'scheduled';
   reviewDraft?: ImportDraftSnapshot;
   batchCheck?: ImportFileBatchCheck;
@@ -165,6 +166,7 @@ interface ImportSessionActions {
   closeReview: () => void;
   addFiles: (files: File[]) => Promise<void>;
   assignFaculty: (id: string, facultyId: string) => void;
+  setFileImportAgain: (id: string, checked: boolean) => void;
   retryFile: (id: string) => void;
   removeFile: (id: string) => void;
   resetBulk: () => void;
@@ -502,7 +504,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       const auto = match.status === 'matched';
       list.push({
         id: `f${counter.current++}`, file, match, facultyId: auto ? match.candidates[0]._id : '', ocr: auto ? 'queued' : 'waiting',
-        error: '', data: null, fileHash: '', identity: 'unchecked', identityRead: '', ownershipConfirmed: false, alreadyImported: '', importState: 'pending',
+        error: '', data: null, fileHash: '', identity: 'unchecked', identityRead: '', ownershipConfirmed: false, alreadyImported: '', importAgain: false, importState: 'pending',
       });
     }
     setAll(list);
@@ -532,7 +534,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       const hist = await loadHistory(it.facultyId);
       if (generation !== generationRef.current) return;
       const hit = hist.find(h => h.fileHash === it.fileHash && ['ACTIVE', 'SCHEDULED', 'SUPERSEDED'].includes(h.status));
-      if (hit) already = `This exact PDF was already imported (effective ${hit.effectivityDate}).`;
+      if (hit) already = hit.effectivityDate;
     }
     if (generation === generationRef.current) patch(id, { identity, identityRead: read, alreadyImported: already });
   };
@@ -591,12 +593,15 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     const it = itemsRef.current.find(i => i.id === id);
     if (!it) return;
     if (it.data) {
-      patch(id, { facultyId: fid, identity: fid ? 'checking' : 'unchecked', ownershipConfirmed: false, reviewDraft: undefined, alreadyImported: '' });
+      patch(id, { facultyId: fid, identity: fid ? 'checking' : 'unchecked', ownershipConfirmed: false, reviewDraft: undefined, alreadyImported: '', importAgain: false });
       if (fid) void checkOne(id, generationRef.current);
     } else {
       patch(id, { facultyId: fid, ocr: fid ? 'queued' : 'waiting', ownershipConfirmed: false, reviewDraft: undefined });
       if (fid) void pump();
     }
+  };
+  const setFileImportAgain = (id: string, checked: boolean) => {
+    patch(id, { importAgain: checked });
   };
   const retryFile = (id: string) => { invalidateBulkChecks(); patch(id, { ocr: 'queued', error: '' }); void pump(); };
   const removeFile = (id: string) => { invalidateBulkChecks(); setAll(itemsRef.current.filter(i => i.id !== id)); setSkipped(n => n + 1); };
@@ -708,7 +713,8 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       }
 
       if (generation === generationRef.current) {
-        const ready = itemsRef.current.filter(item => item.importState === 'pending' && item.batchCheck?.status === 'ready').length;
+        const ready = itemsRef.current.filter(item => item.importState === 'pending'
+          && item.batchCheck?.status === 'ready' && (!item.alreadyImported || item.importAgain)).length;
         const blocked = itemsRef.current.filter(item => item.importState === 'pending' && item.batchCheck?.status !== 'ready').length;
         toast({
           title: ready ? 'Batch check complete' : 'No files are ready to submit',
@@ -730,7 +736,8 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     if (kind !== 'bulk' || bulkChecking || bulkSubmitting || bulkOperationRef.current) return;
     const generation = generationRef.current;
     const ready = itemsRef.current.filter(item => item.importState === 'pending'
-      && item.batchCheck?.status === 'ready' && item.batchCheck.snapshot && item.batchCheck.report);
+      && item.batchCheck?.status === 'ready' && (!item.alreadyImported || item.importAgain)
+      && item.batchCheck.snapshot && item.batchCheck.report);
     if (!ready.length) return;
 
     setBulkSubmitting(true);
@@ -883,10 +890,10 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       setIdentity, setFileOwnership, setEffDate, resetDraft,
       setReviewId,
       openReview, backToList, closeReview,
-      addFiles, assignFaculty, retryFile, removeFile, resetBulk,
+      addFiles, assignFaculty, setFileImportAgain, retryFile, removeFile, resetBulk,
       prepareBulkSubmit, submitBulk,
     },
-  }), [active, kind, mode, facultyId, facultyName, facultyList, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, fileHash, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, bulkChecking, bulkSubmitting, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setFileOwnership, setEffDate, resetDraft, setReviewId, openReview, backToList, closeReview, addFiles, assignFaculty, retryFile, removeFile, resetBulk, prepareBulkSubmit, submitBulk]);
+  }), [active, kind, mode, facultyId, facultyName, facultyList, minimized, pendingOpen, parsed, classes, hours, report, busy, reading, nextId, outcome, fileHash, effDate, identity, uploadError, confirming, files, problems, skipped, reviewId, bulkChecking, bulkSubmitting, begin, minimize, restore, clear, uploadPdf, loadFile, check, confirm, editClass, editHour, addClass, addHour, removeRow, setIdentity, setFileOwnership, setEffDate, resetDraft, setReviewId, openReview, backToList, closeReview, addFiles, assignFaculty, setFileImportAgain, retryFile, removeFile, resetBulk, prepareBulkSubmit, submitBulk]);
 
   return (
     <ImportSessionContext.Provider value={value}>{children}</ImportSessionContext.Provider>

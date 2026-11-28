@@ -17,7 +17,8 @@ export default function BulkSchedulePdfImporter() {
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
   const nameOf = (facultyId: string) => facultyList.find(f => f._id === facultyId)?.name || '';
-  const batchReadyCount = items.filter(i => i.importState === 'pending' && i.batchCheck?.status === 'ready').length;
+  const batchReadyCount = items.filter(i => i.importState === 'pending' && i.batchCheck?.status === 'ready'
+    && (!i.alreadyImported || i.importAgain)).length;
   const batchBusy = state.bulkChecking || state.bulkSubmitting;
 
   const flags = useMemo(() => {
@@ -49,6 +50,7 @@ export default function BulkSchedulePdfImporter() {
     if (i.importState === 'scheduled') return <Badge colorScheme="blue">Scheduled</Badge>;
     if (i.batchCheck?.status === 'checking') return <Badge colorScheme="blue">Checking</Badge>;
     if (i.batchCheck?.status === 'submitting') return <Badge colorScheme="blue">Submitting</Badge>;
+    if (i.alreadyImported && !i.importAgain) return <Badge colorScheme="orange">Already imported</Badge>;
     if (i.batchCheck?.status === 'ready') return <Badge colorScheme="green">Ready to submit</Badge>;
     if (i.batchCheck?.status === 'blocked' || i.batchCheck?.status === 'failed' || i.batchCheck?.status === 'submitFailed') return <Badge colorScheme="red">Needs review</Badge>;
     if (!i.facultyId) return <Badge colorScheme="red">Needs faculty</Badge>;
@@ -88,7 +90,10 @@ export default function BulkSchedulePdfImporter() {
       }
       return { status: 'error', message: 'We could not check or submit this PDF. Open Review and try again.' };
     }
-    if (i.alreadyImported || (i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name)) {
+    if (i.alreadyImported) {
+      return { status: 'warning', message: `This exact PDF was already imported on ${i.alreadyImported}. It will be skipped unless you choose Import again.` };
+    }
+    if (i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name) {
       return { status: 'warning', message: 'This PDF may be a duplicate. Double-check it before submitting.' };
     }
     if (i.facultyId && i.importState === 'pending' && flags.perFaculty[i.facultyId] > 1) {
@@ -175,6 +180,12 @@ export default function BulkSchedulePdfImporter() {
                                     <Checkbox size="sm" isChecked={i.ownershipConfirmed} isDisabled={batchBusy || i.importState !== 'pending'}
                                       onChange={e => actions.setFileOwnership(i.id, e.target.checked)}>
                                       This document belongs to <b>{nameOf(i.facultyId)}</b>
+                                    </Checkbox>
+                                  )}
+                                  {i.alreadyImported && (
+                                    <Checkbox size="sm" isChecked={i.importAgain} isDisabled={batchBusy || i.importState !== 'pending'}
+                                      onChange={e => actions.setFileImportAgain(i.id, e.target.checked)}>
+                                      Import again
                                     </Checkbox>
                                   )}
                                 </VStack>
