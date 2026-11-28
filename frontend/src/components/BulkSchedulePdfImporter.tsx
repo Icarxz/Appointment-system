@@ -163,6 +163,7 @@ export default function BulkSchedulePdfImporter() {
                       {items.map(i => {
                         const options = i.match.status === 'ambiguous' ? i.match.candidates : facultyList;
                         const itemNotice = notice(i);
+                        const readyToSubmit = i.batchCheck?.status === 'ready' && (!i.alreadyImported || i.importAgain);
                         return (
                           <Fragment key={i.id}>
                             <Tr>
@@ -196,7 +197,9 @@ export default function BulkSchedulePdfImporter() {
                                 <HStack spacing={1} justify="flex-end">
                                   {i.ocr === 'failed' && <Button size="xs" variant="outline" isDisabled={batchBusy} onClick={() => actions.retryFile(i.id)}>Retry</Button>}
                                   {i.importState === 'pending' && <Button size="xs" colorScheme="blue" isDisabled={batchBusy || !canReview(i)}
-                                    onClick={() => { if (!reviewId) actions.openReview(i.id); }}>{i.alreadyImported ? 'Review anyway' : 'Review'}</Button>}
+                                    onClick={() => { if (!reviewId) actions.openReview(i.id); }}>
+                                    {i.alreadyImported && !readyToSubmit ? 'Review anyway' : 'Review'}
+                                  </Button>}
                                   {i.importState === 'pending' && <IconButton size="xs" variant="ghost" aria-label={`Remove ${i.file.name}`}
                                     icon={<DeleteIcon />} isDisabled={batchBusy || i.ocr === 'reading' || reviewId === i.id} onClick={() => actions.removeFile(i.id)} />}
                                 </HStack>
