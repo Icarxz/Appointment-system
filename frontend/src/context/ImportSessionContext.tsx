@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useToast } from '@chakra-ui/react';
 import { authFetch } from '../components/authFetch';
-import { matchFacultyByFilename, type FacultyLite, type FileMatch } from '../utils/facultyMatch';
+import { matchFacultyByFilename, needsNameConfirmation, type FacultyLite, type FileMatch } from '../utils/facultyMatch';
 import { ImportSessionContext } from './ImportSessionContextCore';
 import { friendlyError } from '../utils/friendlyError';
 
@@ -104,6 +104,7 @@ export interface ImportFile {
   identity: 'unchecked' | 'checking' | 'match' | 'mismatch' | 'unreadable';
   identityRead: string;
   ownershipConfirmed: boolean;
+  nameOverrideConfirmed: boolean;
   alreadyImported: string;
   importAgain: boolean;
   importState: 'pending' | 'imported' | 'scheduled';
@@ -165,7 +166,7 @@ interface ImportSessionActions {
   backToList: () => void;
   closeReview: () => void;
   addFiles: (files: File[]) => Promise<void>;
-  assignFaculty: (id: string, facultyId: string) => void;
+  assignFaculty: (id: string, facultyId: string, confirmNameOverride?: boolean) => void;
   setFileImportAgain: (id: string, checked: boolean) => void;
   retryFile: (id: string) => void;
   removeFile: (id: string) => void;
@@ -504,7 +505,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
       const auto = match.status === 'matched';
       list.push({
         id: `f${counter.current++}`, file, match, facultyId: auto ? match.candidates[0]._id : '', ocr: auto ? 'queued' : 'waiting',
-        error: '', data: null, fileHash: '', identity: 'unchecked', identityRead: '', ownershipConfirmed: false, alreadyImported: '', importAgain: false, importState: 'pending',
+        error: '', data: null, fileHash: '', identity: 'unchecked', identityRead: '', ownershipConfirmed: false, nameOverrideConfirmed: false, alreadyImported: '', importAgain: false, importState: 'pending',
       });
     }
     setAll(list);
@@ -588,15 +589,17 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     }
   };
 
-  const assignFaculty = (id: string, fid: string) => {
-    invalidateBulkChecks();
+  const assignFaculty = (id: string, fid: string, confirmNameOverride = false) => {
     const it = itemsRef.current.find(i => i.id === id);
     if (!it) return;
+    const nameOverrideRequired = needsNameConfirmation(it.file.name, fid, facultyListRef.current);
+    if (nameOverrideRequired && (!confirmNameOverride || mode !== 'admin')) return;
+    invalidateBulkChecks();
     if (it.data) {
-      patch(id, { facultyId: fid, identity: fid ? 'checking' : 'unchecked', ownershipConfirmed: false, reviewDraft: undefined, alreadyImported: '', importAgain: false });
+      patch(id, { facultyId: fid, identity: fid ? 'checking' : 'unchecked', ownershipConfirmed: false, nameOverrideConfirmed: nameOverrideRequired, reviewDraft: undefined, alreadyImported: '', importAgain: false });
       if (fid) void checkOne(id, generationRef.current);
     } else {
-      patch(id, { facultyId: fid, ocr: fid ? 'queued' : 'waiting', ownershipConfirmed: false, reviewDraft: undefined });
+      patch(id, { facultyId: fid, ocr: fid ? 'queued' : 'waiting', ownershipConfirmed: false, nameOverrideConfirmed: nameOverrideRequired, reviewDraft: undefined });
       if (fid) void pump();
     }
   };
@@ -640,6 +643,9 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
 
         let blocker = '';
         if (!current.facultyId) blocker = 'Choose a faculty member before batch submission.';
+        else if (needsNameConfirmation(current.file.name, current.facultyId, facultyListRef.current) && !current.nameOverrideConfirmed) {
+          blocker = 'The file name does not match this faculty member. Choose the right one, or confirm if the file name has a typo.';
+        }
         else if (!current.ownershipConfirmed) {
           const facultyName = facultyListRef.current.find(faculty => faculty._id === current.facultyId)?.name || current.facultyId;
           blocker = `Tick the box to confirm this document belongs to ${facultyName}.`;
@@ -740,6 +746,7 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
     if (kind !== 'bulk' || bulkChecking || bulkSubmitting || bulkOperationRef.current) return;
     const generation = generationRef.current;
     const ready = itemsRef.current.filter(item => item.importState === 'pending'
+      && (!needsNameConfirmation(item.file.name, item.facultyId, facultyListRef.current) || item.nameOverrideConfirmed)
       && item.batchCheck?.status === 'ready' && (!item.alreadyImported || item.importAgain)
       && item.batchCheck.snapshot && item.batchCheck.report);
     if (!ready.length) return;

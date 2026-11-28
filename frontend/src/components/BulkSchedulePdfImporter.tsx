@@ -8,6 +8,7 @@ import ConfirmAction from './ConfirmAction';
 import type { ConfirmConfig } from './ConfirmAction';
 import type { ImportFile } from '../context/ImportSessionContext';
 import { useImportSession } from '../context/ImportSessionContextCore';
+import { needsNameConfirmation } from '../utils/facultyMatch';
 
 const MAX_FILES = 10;
 
@@ -16,8 +17,10 @@ export default function BulkSchedulePdfImporter() {
   const { files: items, problems, skipped, facultyList, reviewId } = state;
   const muted = useColorModeValue('#64748b', '#8fa6c4');
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
+  const [pendingNameChoice, setPendingNameChoice] = useState<{ id: string; facultyId: string } | null>(null);
   const nameOf = (facultyId: string) => facultyList.find(f => f._id === facultyId)?.name || '';
   const batchReadyCount = items.filter(i => i.importState === 'pending' && i.batchCheck?.status === 'ready'
+    && (!needsNameConfirmation(i.file.name, i.facultyId, facultyList) || i.nameOverrideConfirmed)
     && (!i.alreadyImported || i.importAgain)).length;
   const batchBusy = state.bulkChecking || state.bulkSubmitting;
 
@@ -45,9 +48,10 @@ export default function BulkSchedulePdfImporter() {
   const canReview = (i: ImportFile) => i.importState === 'pending' && i.ocr === 'done' && !!i.data
     && !!i.facultyId && i.identity !== 'mismatch' && i.identity !== 'checking';
 
-  const statusCell = (i: ImportFile) => {
+  const statusCell = (i: ImportFile, nameMismatch: boolean) => {
     if (i.importState === 'imported') return <Badge colorScheme="green">Imported</Badge>;
     if (i.importState === 'scheduled') return <Badge colorScheme="blue">Scheduled</Badge>;
+    if (nameMismatch) return <Badge colorScheme="red">Name does not match</Badge>;
     if (i.batchCheck?.status === 'checking') return <Badge colorScheme="blue">Checking</Badge>;
     if (i.batchCheck?.status === 'submitting') return <Badge colorScheme="blue">Submitting</Badge>;
     if (i.alreadyImported && !i.importAgain) return <Badge colorScheme="orange">Already imported</Badge>;
@@ -62,14 +66,17 @@ export default function BulkSchedulePdfImporter() {
     return <Badge colorScheme="green">Ready to review</Badge>;
   };
 
-  const notice = (i: ImportFile): { status: 'error' | 'warning'; message: string } | null => {
-    if (!i.facultyId) {
+  const notice = (i: ImportFile, selectedFacultyId: string, nameMismatch: boolean): { status: 'error' | 'warning'; message: string } | null => {
+    if (!selectedFacultyId) {
       return i.match.status === 'unmatched'
         ? { status: 'error', message: 'No faculty member matches this PDF name. Choose the right faculty member.' }
         : { status: 'error', message: 'Choose a faculty member for this PDF.' };
     }
+    if (nameMismatch) {
+      return { status: 'error', message: 'The file name does not match this faculty member. Choose the right one, or confirm if the file name has a typo.' };
+    }
     if (!i.ownershipConfirmed) {
-      return { status: 'error', message: `Tick the box to confirm this document belongs to ${nameOf(i.facultyId)}.` };
+      return { status: 'error', message: `Tick the box to confirm this document belongs to ${nameOf(selectedFacultyId)}.` };
     }
     if (i.ocr === 'failed') return { status: 'error', message: 'We could not read this PDF. Retry it or remove it.' };
     if (i.identity === 'mismatch') {
@@ -80,7 +87,7 @@ export default function BulkSchedulePdfImporter() {
     }
     if (i.batchCheck?.status === 'blocked' || i.batchCheck?.status === 'failed' || i.batchCheck?.status === 'submitFailed') {
       if (i.batchCheck.message?.toLowerCase().includes('more than one pdf')) {
-        return { status: 'error', message: `Only one PDF for ${nameOf(i.facultyId)} can be batch-submitted at a time.` };
+        return { status: 'error', message: `Only one PDF for ${nameOf(selectedFacultyId)} can be batch-submitted at a time.` };
       }
       if (i.batchCheck.message?.toLowerCase().includes('effectivity date')) {
         return { status: 'error', message: 'Add an effectivity date in Review before submitting this PDF.' };
@@ -90,8 +97,8 @@ export default function BulkSchedulePdfImporter() {
     if (!i.alreadyImported && i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name) {
       return { status: 'warning', message: 'This PDF may be a duplicate. Double-check it before submitting.' };
     }
-    if (i.facultyId && i.importState === 'pending' && flags.perFaculty[i.facultyId] > 1) {
-      return { status: 'warning', message: `Several PDFs are assigned to ${nameOf(i.facultyId)}. Review them before submitting.` };
+    if (selectedFacultyId && i.importState === 'pending' && flags.perFaculty[selectedFacultyId] > 1) {
+      return { status: 'warning', message: `Several PDFs are assigned to ${nameOf(selectedFacultyId)}. Review them before submitting.` };
     }
     const hasReviewFlags = !!i.data && [
       ...i.data.classes,
@@ -109,6 +116,24 @@ export default function BulkSchedulePdfImporter() {
     confirmLabel: 'Discard import',
     run: actions.clear,
   });
+  const handleFacultyChange = (item: ImportFile, facultyId: string) => {
+    if (state.mode === 'admin' && needsNameConfirmation(item.file.name, facultyId, facultyList)) {
+      setPendingNameChoice({ id: item.id, facultyId });
+      setConfirmCfg({
+        title: 'File name does not match',
+        body: `The file name says ${item.file.name.replace(/\.pdf$/i, '')}, but you chose ${nameOf(facultyId)}. Continue only if the file name has a typo or is wrong.`,
+        confirmLabel: 'Use this faculty',
+        cancelLabel: 'Choose again',
+        run: () => actions.assignFaculty(item.id, facultyId, true),
+      });
+      return;
+    }
+    actions.assignFaculty(item.id, facultyId);
+  };
+  const closeConfirmation = () => {
+    setConfirmCfg(null);
+    setPendingNameChoice(null);
+  };
   const close = actions.minimize;
   const askBatchSubmit = () => {
     if (!batchReadyCount) return;
@@ -158,8 +183,11 @@ export default function BulkSchedulePdfImporter() {
                     <Thead><Tr><Th>PDF</Th><Th>Faculty</Th><Th>Status</Th><Th>Read</Th><Th /></Tr></Thead>
                     <Tbody>
                       {items.map(i => {
-                        const options = i.match.status === 'ambiguous' ? i.match.candidates : facultyList;
-                        const itemNotice = notice(i);
+                        const pendingChoice = pendingNameChoice?.id === i.id ? pendingNameChoice : null;
+                        const selectedFacultyId = pendingChoice?.facultyId ?? i.facultyId;
+                        const nameMismatch = !!pendingChoice || (!!selectedFacultyId
+                          && needsNameConfirmation(i.file.name, selectedFacultyId, facultyList) && !i.nameOverrideConfirmed);
+                        const itemNotice = notice(i, selectedFacultyId, nameMismatch);
                         const duplicateNotice = i.alreadyImported
                           ? `This exact PDF was already imported on ${i.alreadyImported}. It will be skipped unless you choose Import again.`
                           : '';
@@ -170,14 +198,17 @@ export default function BulkSchedulePdfImporter() {
                               <Td maxW="220px" whiteSpace="normal" wordBreak="break-all" fontSize="xs">{i.file.name}</Td>
                               <Td>
                                 <VStack align="stretch" spacing={2}>
-                                  <Select size="sm" minW="200px" value={i.facultyId} aria-label={`Faculty for ${i.file.name}`} placeholder="Choose faculty..."
-                                    isDisabled={batchBusy || i.importState !== 'pending' || i.ocr === 'reading'} onChange={e => actions.assignFaculty(i.id, e.target.value)}>
-                                    {options.map(f => <option key={f._id} value={f._id}>{f.name}</option>)}
+                                  <Select size="sm" minW="200px" value={selectedFacultyId} aria-label={`Faculty for ${i.file.name}`} placeholder="Choose faculty..."
+                                    isDisabled={batchBusy || i.importState !== 'pending' || i.ocr === 'reading'} onChange={e => handleFacultyChange(i, e.target.value)}>
+                                    {facultyList.map(f => <option key={f._id} value={f._id}>{f.name}</option>)}
                                   </Select>
-                                  {i.facultyId && (
+                                  {i.nameOverrideConfirmed && !pendingChoice && (
+                                    <Text fontSize="xs" color="yellow.600">Name differs from the file name. Confirmed by you.</Text>
+                                  )}
+                                  {selectedFacultyId && !nameMismatch && (
                                     <Checkbox size="sm" isChecked={i.ownershipConfirmed} isDisabled={batchBusy || i.importState !== 'pending'}
                                       onChange={e => actions.setFileOwnership(i.id, e.target.checked)}>
-                                      This document belongs to <b>{nameOf(i.facultyId)}</b>
+                                      This document belongs to <b>{nameOf(selectedFacultyId)}</b>
                                     </Checkbox>
                                   )}
                                   {i.alreadyImported && (
@@ -188,7 +219,7 @@ export default function BulkSchedulePdfImporter() {
                                   )}
                                 </VStack>
                               </Td>
-                              <Td>{statusCell(i)}</Td>
+                              <Td>{statusCell(i, nameMismatch)}</Td>
                               <Td fontSize="xs" color={muted} whiteSpace="normal">
                                 {i.ocr === 'reading' ? <HStack><Spinner size="xs" /><Text>Reading...</Text></HStack>
                                   : i.data ? `${i.data.classes.length} classes, ${i.data.consultationHours.length} consult blocks` : i.ocr === 'queued' ? 'Waiting for its turn' : ''}
@@ -264,7 +295,7 @@ export default function BulkSchedulePdfImporter() {
           </ModalBody>
         </ModalContent>
       </Modal>
-      <ConfirmAction config={confirmCfg} onClose={() => setConfirmCfg(null)} />
+      <ConfirmAction config={confirmCfg} onClose={closeConfirmation} />
     </>
   );
 }
