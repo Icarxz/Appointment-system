@@ -17,15 +17,17 @@ export default function ImportSessionMinimizedBar() {
   if (state.kind === 'bulk') {
     const total = state.files.length;
     const pending = state.files.filter(i => i.importState === 'pending');
+    const imported = state.files.filter(i => i.importState === 'imported').length;
     const checked = state.files.filter(i => i.importState !== 'pending'
       || (i.batchCheck && i.batchCheck.status !== 'checking')).length;
     const submitted = state.files.filter(i => i.importState !== 'pending'
       || i.batchCheck?.status === 'submitFailed').length;
-    const attention = pending.filter(i => !i.facultyId || i.ocr === 'failed' || i.identity === 'mismatch'
+    const attention = pending.filter(i => !i.facultyId || !i.ownershipConfirmed || i.ocr === 'failed' || i.identity === 'mismatch'
       || i.batchCheck?.status === 'blocked' || i.batchCheck?.status === 'failed' || i.batchCheck?.status === 'submitFailed').length;
-    const busy = pending.filter(i => i.facultyId && i.ocr !== 'failed' && i.identity !== 'mismatch'
-      && (i.ocr === 'queued' || i.ocr === 'reading' || i.identity === 'checking')).length;
-    const ready = pending.length - attention - busy;
+    const ready = pending.filter(i => i.facultyId && i.ownershipConfirmed && i.ocr === 'done'
+      && i.identity !== 'mismatch' && i.identity !== 'checking'
+      && i.batchCheck?.status !== 'blocked' && i.batchCheck?.status !== 'failed' && i.batchCheck?.status !== 'submitFailed'
+      && (!i.alreadyImported || i.importAgain)).length;
     const processed = state.files.filter(i => i.importState !== 'pending' || i.ocr === 'done' || i.ocr === 'failed').length;
     if (state.bulkSubmitting) {
       status = `Bulk import: submitting ${submitted} of ${total}; ${pending.length - submitted} remain`;
@@ -36,9 +38,9 @@ export default function ImportSessionMinimizedBar() {
       progress = total ? Math.round(checked / total * 100) : 0;
       progressLabel = `${checked} of ${total} checked`;
     } else {
-      status = total
-        ? `Bulk import: ${ready} of ${total} ready, ${attention} need attention`
-        : 'Bulk import: choose PDFs to begin';
+      if (!total) status = 'Bulk import: choose PDFs to begin';
+      else if (imported > 0) status = `${imported} imported, ${attention} need attention`;
+      else status = `${ready} ready to submit`;
       progress = total ? Math.round(processed / total * 100) : 0;
       progressLabel = `${processed} of ${total} read`;
     }
