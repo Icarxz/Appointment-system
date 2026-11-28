@@ -87,10 +87,7 @@ export default function BulkSchedulePdfImporter() {
       }
       return { status: 'error', message: 'We could not check or submit this PDF. Open Review and try again.' };
     }
-    if (i.alreadyImported) {
-      return { status: 'warning', message: `This exact PDF was already imported on ${i.alreadyImported}. It will be skipped unless you choose Import again.` };
-    }
-    if (i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name) {
+    if (!i.alreadyImported && i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name) {
       return { status: 'warning', message: 'This PDF may be a duplicate. Double-check it before submitting.' };
     }
     if (i.facultyId && i.importState === 'pending' && flags.perFaculty[i.facultyId] > 1) {
@@ -163,6 +160,9 @@ export default function BulkSchedulePdfImporter() {
                       {items.map(i => {
                         const options = i.match.status === 'ambiguous' ? i.match.candidates : facultyList;
                         const itemNotice = notice(i);
+                        const duplicateNotice = i.alreadyImported
+                          ? `This exact PDF was already imported on ${i.alreadyImported}. It will be skipped unless you choose Import again.`
+                          : '';
                         const readyToSubmit = i.batchCheck?.status === 'ready' && (!i.alreadyImported || i.importAgain);
                         return (
                           <Fragment key={i.id}>
@@ -205,12 +205,22 @@ export default function BulkSchedulePdfImporter() {
                                 </HStack>
                               </Td>
                             </Tr>
-                            {itemNotice && (
+                            {(itemNotice || duplicateNotice) && (
                               <Tr><Td colSpan={5} py={2} borderTop="none">
-                                <Alert status={itemNotice.status} borderRadius="md" py={2}>
-                                  <AlertIcon />
-                                  <Text fontSize="sm">{itemNotice.message}</Text>
-                                </Alert>
+                                <VStack align="stretch" spacing={2}>
+                                  {itemNotice && (
+                                    <Alert status={itemNotice.status} borderRadius="md" py={2}>
+                                      <AlertIcon />
+                                      <Text fontSize="sm">{itemNotice.message}</Text>
+                                    </Alert>
+                                  )}
+                                  {duplicateNotice && (
+                                    <Alert status="warning" borderRadius="md" py={2}>
+                                      <AlertIcon />
+                                      <Text fontSize="sm">{duplicateNotice}</Text>
+                                    </Alert>
+                                  )}
+                                </VStack>
                               </Td></Tr>
                             )}
                           </Fragment>
