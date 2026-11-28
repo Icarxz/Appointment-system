@@ -57,7 +57,7 @@ export default function BulkSchedulePdfImporter() {
     if (i.ocr === 'failed') return <Badge colorScheme="red">Unreadable</Badge>;
     if (i.ocr !== 'done' || i.identity === 'checking') return <Badge>{i.ocr === 'queued' ? 'Waiting' : 'Reading'}</Badge>;
     if (i.identity === 'mismatch') return <Badge colorScheme="red">Mismatch</Badge>;
-    if (i.identity === 'unreadable' && !i.ownershipConfirmed) return <Badge colorScheme="orange">Confirm owner</Badge>;
+    if (!i.ownershipConfirmed) return <Badge colorScheme="orange">Confirm owner</Badge>;
     if (i.alreadyImported || (i.fileHash && flags.firstByHash[i.fileHash] !== i.file.name)) return <Badge colorScheme="orange">Double-check</Badge>;
     return <Badge colorScheme="green">Ready to review</Badge>;
   };
@@ -68,15 +68,12 @@ export default function BulkSchedulePdfImporter() {
         ? { status: 'error', message: 'No faculty member matches this PDF name. Choose the right faculty member.' }
         : { status: 'error', message: 'Choose a faculty member for this PDF.' };
     }
+    if (!i.ownershipConfirmed) {
+      return { status: 'error', message: `Tick the box to confirm this document belongs to ${nameOf(i.facultyId)}.` };
+    }
     if (i.ocr === 'failed') return { status: 'error', message: 'We could not read this PDF. Retry it or remove it.' };
     if (i.identity === 'mismatch') {
       return { status: 'error', message: 'This PDF does not seem to belong to the selected faculty member. Choose another faculty member or a different PDF.' };
-    }
-    if (i.identity === 'unreadable' && !i.ownershipConfirmed) {
-      return { status: 'error', message: `Check the box to confirm this PDF belongs to ${nameOf(i.facultyId)}.` };
-    }
-    if (!i.ownershipConfirmed && i.batchCheck?.report?.errors.some(issue => issue.code === 'IDENTITY_NOT_CONFIRMED')) {
-      return { status: 'error', message: `Check the box to confirm this PDF belongs to ${nameOf(i.facultyId)}.` };
     }
     if (i.batchCheck?.report?.errors.length) {
       return { status: 'error', message: 'Fix the schedule issues in Review before submitting this PDF.' };
@@ -176,7 +173,7 @@ export default function BulkSchedulePdfImporter() {
                                     isDisabled={batchBusy || i.importState !== 'pending' || i.ocr === 'reading'} onChange={e => actions.assignFaculty(i.id, e.target.value)}>
                                     {options.map(f => <option key={f._id} value={f._id}>{f.name}</option>)}
                                   </Select>
-                                  {i.identity === 'unreadable' && i.facultyId && (
+                                  {i.facultyId && (
                                     <Checkbox size="sm" isChecked={i.ownershipConfirmed} isDisabled={batchBusy || i.importState !== 'pending'}
                                       onChange={e => actions.setFileOwnership(i.id, e.target.checked)}>
                                       This document belongs to <b>{nameOf(i.facultyId)}</b>

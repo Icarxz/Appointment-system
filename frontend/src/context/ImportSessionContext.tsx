@@ -640,6 +640,10 @@ export default function ImportSessionProvider({ children }: { children: ReactNod
 
         let blocker = '';
         if (!current.facultyId) blocker = 'Choose a faculty member before batch submission.';
+        else if (!current.ownershipConfirmed) {
+          const facultyName = facultyListRef.current.find(faculty => faculty._id === current.facultyId)?.name || current.facultyId;
+          blocker = `Tick the box to confirm this document belongs to ${facultyName}.`;
+        }
         else if (current.ocr !== 'done' || !current.data) blocker = 'Wait for this PDF to finish reading, or retry it before batch submission.';
         else if (current.identity === 'checking') blocker = 'Wait for the faculty account check to finish.';
         else if (current.identity === 'mismatch') blocker = 'Choose the correct faculty account or remove this PDF.';
