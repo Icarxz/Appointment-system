@@ -11,6 +11,7 @@ import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import { PROGRAM_OPTIONS, facultyProgram, programOfPosition } from '../utils/programs';
 import { EMPLOYMENT_OPTIONS } from '../utils/employment';
 import { normalizePersonName } from '../utils/personName';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 // Admin > Faculty / Students > Edit. The same form a person sees on their own profile (name, gender, School / Faculty ID), plus program,
 // year and section for a student, or the program and employment type (Full-time / Part-time) for faculty. Email (it has its own safe change) is not editable here; a
@@ -100,12 +101,12 @@ export default function AdminEditAccountModal({ user, onClose, onSaved, onChange
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Could not save the changes.');
+      if (!res.ok) throw responseError(res, data.error || 'Could not save the changes. Please try again.');
       toast({ title: 'Changes saved', description: data.message, status: 'success' });
       onSaved();
       onClose();
     } catch (e: any) {
-      toast({ title: 'Could not save', description: e.message, status: 'error' });
+      toast({ title: 'Could not save', description: friendlyError(e, 'Could not save the changes. Please try again.'), status: 'error' });
       setSaving(false);
     }
   };

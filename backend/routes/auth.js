@@ -24,7 +24,7 @@ const googleLimiter = rateLimit({
 const signToken = (user) =>
   jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '8h' });
 
-// Same shape the old password login returned, so the dashboards need no changes.
+// Session payload shared by all dashboard portals.
 const sessionPayload = (user) => ({
   token: signToken(user),
   _id: user._id,
@@ -64,7 +64,16 @@ router.post('/google', googleLimiter, async (req, res) => {
       rosterRole: rosterEntry?.role || null,
       requireProvisionedAccounts: String(process.env.REQUIRE_PROVISIONED_ACCOUNTS || '').trim().toLowerCase() === 'true'
     });
-    if (decision.action === 'DENY') return res.status(403).json({ error: decision.error });
+    if (decision.action === 'DENY') {
+      if (existingUser && ['RESTRICTED', 'ARCHIVED'].includes(existingUser.accountStatus)) {
+        await appendHistoryEvent({
+          userId: existingUser._id, eventType: 'SIGN_IN_BLOCKED',
+          actorId: existingUser._id, actorRole: existingUser.role,
+          details: { accountStatus: existingUser.accountStatus },
+        });
+      }
+      return res.status(403).json({ error: decision.error });
+    }
     // Wrong tab? Stop before any account is created or changed.
     const resultingRole = decision.action === 'CREATE' ? decision.role : (decision.promoteTo || existingUser.role);
     const wrongTab = audienceMismatch(audience, resultingRole, decision.action === 'CREATE');
@@ -82,6 +91,10 @@ router.post('/google', googleLimiter, async (req, res) => {
         isVerified: true,
         accountStatus: 'ACTIVE',
         onboardingComplete: false
+      });
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'ACCOUNT_PROVISIONED', actorId: user._id, actorRole: user.role,
+        details: { source: 'GOOGLE_SIGN_IN', role: user.role },
       });
       await appendHistoryEvent({
         userId: user._id, eventType: 'ACCOUNT_ACTIVATED', actorRole: 'SYSTEM',
@@ -227,6 +240,7 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY', 'DEAN']), async (req
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const body = req.body || {};
+    const previousPosition = user.programPosition || '';
     const { name, gender, idValue, avatar, program, employmentType, programPosition, year, section } = body;
     const reviewingCredentials = requiresCredentialConfirmation(user);
     const credentialFields = ['name', 'gender', 'idValue', 'program', 'employmentType', 'programPosition', 'year', 'section'];
@@ -309,12 +323,18 @@ router.patch('/profile', requireAuth(['STUDENT', 'FACULTY', 'DEAN']), async (req
     }
 
     await user.save({ validateModifiedOnly: true });
-    const changedFields = credentialFields.filter(field => body[field] !== undefined);
+    const changedFields = credentialFields.filter(field => body[field] !== undefined && field !== 'programPosition');
     if (avatar !== undefined) changedFields.push('avatar');
     if (changedFields.length) {
       await appendHistoryEvent({
         userId: user._id, eventType: 'PROFILE_UPDATED', actorId: user._id, actorRole: user.role,
         details: { fields: changedFields },
+      });
+    }
+    if (user.role !== 'STUDENT' && previousPosition !== (user.programPosition || '')) {
+      await appendHistoryEvent({
+        userId: user._id, eventType: 'POSITION_CHANGED', actorId: user._id, actorRole: user.role,
+        details: { fromPosition: previousPosition, toPosition: user.programPosition || '' },
       });
     }
     res.json({

@@ -7,6 +7,7 @@ import { cohortConfig, FACULTY_POSITIONS } from '../data/cohortConfig';
 import SearchableSelect from './SearchableSelect';
 import { idHint, isValidId } from '../utils/idValidator';
 import { PROGRAM_OPTIONS, programOfPosition } from '../utils/programs';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 interface Props {
   isOpen: boolean;
@@ -73,10 +74,10 @@ export default function OnboardingModal({ isOpen, role, email, name: googleName,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not save your details.');
+      if (!res.ok) throw responseError(res, data.error || 'Could not save your details. Please try again.');
       onDone(data);
     } catch (e: any) {
-      setError(e.message);
+      setError(friendlyError(e, 'Could not save your details. Please try again.'));
     }
     setSaving(false);
   };

@@ -41,6 +41,8 @@ test('personal history CSV includes schedule and appointment history and guards 
   });
 
   assert.match(csv, /ROLE_CHANGED/);
+  assert.match(csv, /2026-01-01 08:00:00/);
+  assert.match(csv, /2026-01-02 08:00:00/);
   assert.match(csv, /First activated/);
   assert.match(csv, /Current class/);
   assert.match(csv, /Import record/);

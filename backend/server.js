@@ -51,6 +51,9 @@ app.use('/api/analytics', analyticsRoutes); // Reports & Analytics (Admin/Dean o
 const historyRoutes = require('./routes/history');
 app.use('/api/history', historyRoutes);
 
+const termRoutes = require('./routes/terms');
+app.use('/api/terms', termRoutes);
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {

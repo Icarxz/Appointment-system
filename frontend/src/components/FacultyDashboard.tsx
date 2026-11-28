@@ -30,19 +30,22 @@ import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrin
 import type { ConfirmConfig } from './ConfirmAction';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { visibleDays } from '../utils/daySettings';
+import { friendlyError, responseError } from '../utils/friendlyError';
 import ExportBar from './ExportBar';
 import SearchableSelect from './SearchableSelect';
-import SchedulePdfImporter from './SchedulePdfImporter';
+import { useImportSession } from '../context/ImportSessionContextCore';
 import ClassGridEditor from './ClassGridEditor';
 import { cohortConfig } from '../data/cohortConfig';
 import { dayHeading, groupByDay, manilaDay } from '../utils/logDays';
 import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
+import HistoryPage from './HistoryPage';
+import { usePersistentPage } from '../utils/usePersistentPage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours";
+type Page      = "status" | "schedule" | "requests" | "log" | "analytics" | "profile" | "hours" | "history";
 type ViewMode  = "week" | "day";
 type EventType = "teaching" | "appointment" | "consultation" | "note";
 
@@ -181,6 +184,7 @@ const EmbeddedFrame = ({ children }: { children?: React.ReactNode } & Record<str
 interface FacultyDashboardProps { embeddedPage?: Page; role?: 'FACULTY' | 'DEAN'; canImportSchedule?: boolean }
 
 export default function FacultyDashboard({ embeddedPage, role = 'FACULTY', canImportSchedule = true }: FacultyDashboardProps = {}) {
+  const { actions: importActions } = useImportSession();
   const isDean = role === 'DEAN';
   const embedded = embeddedPage !== undefined;
   const Frame: React.ComponentType<any> = embedded ? EmbeddedFrame : DashboardShell;
@@ -192,13 +196,16 @@ export default function FacultyDashboard({ embeddedPage, role = 'FACULTY', canIm
   const credentialReviewRequired = !embedded && localStorage.getItem('credentialConfirmationRequired') === 'true';
 
   // ── UI State ─────────────────────────────────────────────────────────────────
-  const [activePage, setActivePage] = useState<Page>(embeddedPage ?? (credentialReviewRequired ? 'profile' : 'schedule'));
+  const facultyPages = ["status", "schedule", "requests", "log", "analytics", "profile", "hours", "history"] as const;
+  const [activePage, setActivePage] = usePersistentPage<Page>(
+    'faculty-dashboard-page', facultyPages, credentialReviewRequired ? 'profile' : 'schedule',
+    embeddedPage || (credentialReviewRequired ? 'profile' : undefined), !embedded,
+  );
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink<Page>(embedded ? [] : credentialReviewRequired ? ['profile'] : ["status", "schedule", "requests", "log", "analytics", "profile"], setActivePage); // embedded: the Dean dashboard handles links itself
+  const { aptId, closeApt } = useDeepLink<Page>(embedded ? [] : credentialReviewRequired ? ['profile'] : facultyPages, setActivePage); // embedded: the Dean dashboard handles links itself
   useEffect(() => { if (credentialReviewRequired) closeApt(); }, [credentialReviewRequired, closeApt]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [scheduleTab, setScheduleTab] = useState<'view' | 'edit'>('view'); // Master Schedule: weekly view or Edit Schedule
-  const [importOpen, setImportOpen] = useState(false); // Master Schedule: import my schedule from a scanned PDF
   const [showWeekend, setShowWeekend] = useState(false); // display preference: reveal empty Saturday / Sunday columns
   // Phones open on one day at a time; the 7-column week grid needs a wider screen.
   const [viewMode,   setViewMode]   = useState<ViewMode>(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "day" : "week"));
@@ -302,12 +309,12 @@ const submitLogEntry = async (aptId: string) => {
       body: JSON.stringify(entry)
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
+    if (!response.ok) throw responseError(response, data.error || 'Could not complete the consultation. Please try again.');
     fetchLog();
     setCompletionModal({ studentName: apt?.studentName || 'Student', studentSection: apt?.studentSection || '' });
     fetchData();
   } catch (error: any) {
-    toast({ title: 'Failed', description: error.message, status: 'error' });
+    toast({ title: 'Failed', description: friendlyError(error, 'Could not complete the consultation. Please try again.'), status: 'error' });
   }
 };
 
@@ -338,11 +345,11 @@ const saveConsultLogChanges = async (apt: any) => {
       }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Could not update this consultation log.');
+    if (!response.ok) throw responseError(response, data.error || 'Could not update this consultation log. Please try again.');
     setConsultLog(prev => prev.map(row => row._id === apt._id ? data.appointment : row));
     toast({ title: 'Consultation log updated', status: 'success', duration: 2500 });
   } catch (error: any) {
-    toast({ title: 'Could not save changes', description: error.message, status: 'error' });
+    toast({ title: 'Could not save changes', description: friendlyError(error, 'Could not update this consultation log. Please try again.'), status: 'error' });
   } finally {
     setSavingLogId(null);
   }
@@ -366,22 +373,22 @@ const saveConsultLogChanges = async (apt: any) => {
         body: JSON.stringify(addedForm)
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw responseError(response, data.error || 'Could not add consultation hours. Please try again.');
       toast({ title: 'Added hours saved', status: 'success' });
       setAddedForm({ dayOfWeek: addedForm.dayOfWeek, startTime: '', endTime: '' });
       loadAddedHours();
     } catch (error: any) {
-      toast({ title: 'Could not add hours', description: error.message, status: 'error', position: 'top' });
+      toast({ title: 'Could not add hours', description: friendlyError(error, 'Could not add consultation hours. Please try again.'), status: 'error', position: 'top' });
     }
   };
   const removeExtraHours = async (id: string) => {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/added-hours/${id}`, { method: 'DELETE' });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw responseError(response, data.error || 'Could not remove consultation hours. Please try again.');
       loadAddedHours();
     } catch (error: any) {
-      toast({ title: 'Could not remove', description: error.message, status: 'error', position: 'top' });
+      toast({ title: 'Could not remove', description: friendlyError(error, 'Could not remove consultation hours. Please try again.'), status: 'error', position: 'top' });
     }
   };
 
@@ -396,10 +403,10 @@ const saveConsultationHours = async () => {
       body: JSON.stringify({ facultyId: userId, hours: consultBlocks })
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
+    if (!response.ok) throw responseError(response, data.error || 'Could not save consultation hours. Please try again.');
     toast({ title: 'Saved', description: data.message, status: 'success' });
   } catch (error: any) {
-    toast({ title: 'Failed', description: error.message, status: 'error' });
+    toast({ title: 'Failed', description: friendlyError(error, 'Could not save consultation hours. Please try again.'), status: 'error' });
   }
 };
 
@@ -570,13 +577,13 @@ const saveConsultationHours = async () => {
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to set status (${response.status})`);
+        throw responseError(response, data.error || 'Could not set your status. Please try again.');
       }
       toast({ title: 'Status set!', status: 'success', duration: 2000 });
       setMyStatus(''); setMyDuration(''); setMyUntil('');
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not set status', description: error.message, status: 'error' });
+      toast({ title: 'Could not set status', description: friendlyError(error, 'Could not set your status. Please try again.'), status: 'error' });
     }
     setIsUpdating(false);
   };
@@ -585,11 +592,11 @@ const saveConsultationHours = async () => {
     if (!myCurrent?.statusEntryId) return;
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status-entry/${myCurrent.statusEntryId}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to clear status');
+      if (!response.ok) throw responseError(response, 'Could not clear your status. Please try again.');
       toast({ title: 'Status cleared', status: 'success', duration: 2000 });
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not clear status', description: error.message, status: 'error' });
+      toast({ title: 'Could not clear status', description: friendlyError(error, 'Could not clear your status. Please try again.'), status: 'error' });
     }
   };
 
@@ -633,13 +640,13 @@ const saveConsultationHours = async () => {
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to post notice (${response.status})`);
+        throw responseError(response, data.error || 'Could not announce this notice. Please try again.');
       }
       toast({ title: 'Announced to students!', status: 'success', duration: 2000 });
       setNType(''); setNStartDate(''); setNEndDate(''); setNStartTime(''); setNEndTime(''); setNReason(''); setNReasonOther(''); setNMakeUp('');
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not announce', description: error.message, status: 'error' });
+      toast({ title: 'Could not announce', description: friendlyError(error, 'Could not announce this notice. Please try again.'), status: 'error' });
     }
     setIsPosting(false);
   };
@@ -647,11 +654,11 @@ const saveConsultationHours = async () => {
   const handleCancelNotice = async (id: string) => {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/status-entry/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to cancel notice');
+      if (!response.ok) throw responseError(response, 'Could not cancel this notice. Please try again.');
       toast({ title: 'Announcement cancelled', status: 'success', duration: 2000 });
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not cancel the announcement', description: error.message, status: 'error' });
+      toast({ title: 'Could not cancel the announcement', description: friendlyError(error, 'Could not cancel this notice. Please try again.'), status: 'error' });
     }
   };
 
@@ -694,13 +701,13 @@ const saveConsultationHours = async () => {
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to save note');
+        throw responseError(response, err.error || 'Could not save the note. Please try again.');
       }
       toast({ title: editingId ? 'Note updated' : 'Note added', status: 'success' });
       setNoteModal(null);
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not save note', description: error.message, status: 'error' });
+      toast({ title: 'Could not save note', description: friendlyError(error, 'Could not save the note. Please try again.'), status: 'error' });
     } finally {
       setIsSavingNote(false);
     }
@@ -765,13 +772,13 @@ const saveConsultationHours = async () => {
         body: JSON.stringify(body)
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to process appointment.');
+      if (!response.ok) throw responseError(response, data.error || 'Could not process the appointment. Please try again.');
 
       toast({ title: newStatus === 'APPROVED' && chosenTime !== targetApt.time ? `Approved for ${formatTime(chosenTime)}` : `Appointment ${newStatus}`, status: 'success' });
       fetchData(); 
     } catch (error: any) {
       toast({
-        title: "Scheduling Conflict Blocked", description: error.message,
+        title: "Scheduling Conflict Blocked", description: friendlyError(error, 'Could not process the appointment. Please try again.'),
         status: "error", duration: 7000, isClosable: true, position: "top", 
       });
     }
@@ -797,12 +804,12 @@ const saveConsultationHours = async () => {
         }
       );
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not cancel the consultation.');
+      if (!response.ok) throw responseError(response, data.error || 'Could not cancel the consultation. Please try again.');
       toast({ title: cancelMode === 'reject' ? 'Request declined' : 'Consultation cancelled', description: 'The student has been notified.', status: 'success' });
       setCancelTarget(null);
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not cancel', description: error.message, status: 'error' });
+      toast({ title: 'Could not cancel', description: friendlyError(error, 'Could not cancel the consultation. Please try again.'), status: 'error' });
     } finally { setCancelBusy(false); }
   };
 
@@ -821,12 +828,12 @@ const saveConsultationHours = async () => {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: missReason })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not mark as Missed by Student.');
+      if (!response.ok) throw responseError(response, data.error || 'Could not mark the consultation as missed. Please try again.');
       toast({ title: 'Marked as Missed by Student', description: 'The student has been notified, with your reason.', status: 'info' });
       setMissTarget(null);
       fetchData();
     } catch (error: any) {
-      toast({ title: 'Could not update', description: error.message, status: 'error' });
+      toast({ title: 'Could not update', description: friendlyError(error, 'Could not mark the consultation as missed. Please try again.'), status: 'error' });
     } finally { setMissBusy(false); }
   };
 
@@ -967,6 +974,7 @@ const saveConsultationHours = async () => {
         { page: "status",    section: "Availability",  icon: "activity",  label: "Status & Notices" },
         { page: "hours",     section: "Availability",  icon: "clock",     label: "Consultation Hours" },
         { page: "analytics", section: "Insights",      icon: "chart",     label: "My Analytics" },
+        { page: "history", section: "Insights",        icon: "file",      label: "History" },
         { page: "profile",   section: "Account",       icon: "user",      label: "My Profile" },
       ] as { page: Page; section: string; icon: IconName; label: string; badge?: number }[]).map(({ page, ...item }) => ({
         key: page, ...item, active: activePage === page, onClick: () => { setActivePage(page); if (page === 'schedule') fetchData(); }, // reload so edits and imports show on the Master Schedule
@@ -1275,10 +1283,9 @@ const saveConsultationHours = async () => {
                   <Heading size="md" color={textColor}>Edit Schedule</Heading>
                   <Text fontSize="sm" color={mutedText}>Add, change or delete your classes, or import them from your scanned Faculty Load PDF. Your weekly view updates after you save.</Text>
                 </Box>
-                <ChakraButton size="sm" variant="outline" onClick={() => setImportOpen(true)} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule.">Import Schedule PDF</ChakraButton>
+                <ChakraButton size="sm" variant="outline" onClick={() => importActions.begin('single', 'faculty', userId, userName || '', { callbacks: { onApplied: fetchData } })} title="Upload your scanned Faculty Load PDF, review it, then confirm to replace your class schedule.">Import Schedule PDF</ChakraButton>
               </Flex>
               <ClassGridEditor facultyId={userId} facultyName={userName || ''} />
-              <SchedulePdfImporter mode="faculty" facultyId={userId} facultyName={userName || ''} isOpen={importOpen} onClose={() => setImportOpen(false)} onApplied={fetchData} />
             </Box>
           </Box>
         )}
@@ -1501,6 +1508,8 @@ const saveConsultationHours = async () => {
             <ProfilePage />
           </Box>
         )}
+
+        {activePage === "history" && !embedded && <HistoryPage showScheduleAccount />}
 
         {activePage === "analytics" && (
           <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>

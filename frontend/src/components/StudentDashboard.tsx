@@ -28,7 +28,10 @@ import ProfilePage from './ProfilePage';
 import { GENDER_OPTIONS, matchesGender, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 import { manilaToday, addDaysIso, mondayOf, weeksBetween, weekLabel } from '../utils/weekUtils';
 import WeeklyBookingCalendar from './WeeklyBookingCalendar';
+import { friendlyError, responseError } from '../utils/friendlyError';
 import BookingConfirmModal from './BookingConfirmModal';
+import HistoryPage from './HistoryPage';
+import { usePersistentPage } from '../utils/usePersistentPage';
 
 const PURPOSE_OPTIONS = [
   'Capstone / Thesis Consultation',
@@ -61,9 +64,13 @@ export default function StudentDashboard() {
   const { isOpen: isPrivacyOpen, onOpen: onPrivacyOpen, onClose: onPrivacyClose } = useDisclosure();
   useEffect(() => { if (!profileComplete && !credentialReviewRequired) onProfileOpen(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [activePage, setActivePage] = useState(credentialReviewRequired ? 'profile' : 'home');
+  const studentPages = ['home', 'appointments', 'requests', 'profile', 'history'] as const;
+  const [activePage, setActivePage] = usePersistentPage(
+    'student-dashboard-page', studentPages, credentialReviewRequired ? 'profile' : 'home',
+    credentialReviewRequired ? 'profile' : undefined,
+  );
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink(credentialReviewRequired ? ['profile'] as const : ['home', 'appointments', 'requests', 'profile'] as const, setActivePage);
+  const { aptId, closeApt } = useDeepLink(credentialReviewRequired ? ['profile'] as const : studentPages, setActivePage);
   useEffect(() => { if (credentialReviewRequired) closeApt(); }, [credentialReviewRequired, closeApt]);
   const [faculty, setFaculty] = useState<any[]>([]);
   const [studentSection] = useState(localStorage.getItem('programPosition') || '');
@@ -311,7 +318,7 @@ export default function StudentDashboard() {
       // 2. === THE INTERCEPTOR ===
       // If the backend threw a 400 Bad Request (Class collision, Double-booking, or Spam)
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to request appointment.');
+        throw responseError(response, data.error || 'Could not request the appointment. Please try again.');
       }
 
       // 3. If it was mathematically safe and successful:
@@ -333,7 +340,7 @@ export default function StudentDashboard() {
       // Catches the backend error and displays it loudly at the top of the screen
       toast({ 
         title: 'Time Slot Unavailable', 
-        description: error.message,
+        description: friendlyError(error, 'Could not request the appointment. Please try again.'),
         status: 'error', 
         duration: 6000, // Stays visible long enough for the student to read it
         isClosable: true,
@@ -407,20 +414,22 @@ export default function StudentDashboard() {
         { key: 'home', section: 'Find & Book', icon: 'users', label: 'Faculty Status', active: activePage === 'home', onClick: () => setActivePage('home') },
         { key: 'appointments', section: 'Find & Book', icon: 'calendarPlus', label: 'Consultation', active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
         { key: 'requests', section: 'My Activity', icon: 'inbox', label: 'My Requests', badge: myRequests.filter(r => r.status === 'PENDING').length, active: activePage === 'requests', onClick: () => setActivePage('requests') },
+        { key: 'history', section: 'My Activity', icon: 'file', label: 'History', active: activePage === 'history', onClick: () => setActivePage('history') },
         { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
       ]}
     >
         <WelcomeHeader name={userName} />
         <BroadcastBanner userRole="STUDENT" />
         <Box flex="1" minH={0} overflowY="auto" p={PAGE_PAD}>
-          <PageTitle>
+          {activePage !== 'history' && <PageTitle>
             {activePage === 'home' && "Faculty Status"}
             {activePage === 'appointments' && "Consultation"}
             {activePage === 'requests' && "My Requests"}
             {activePage === 'profile' && "My Profile"}
-          </PageTitle>
+          </PageTitle>}
 
           {activePage === 'profile' && <ProfilePage />}
+          {activePage === 'history' && <HistoryPage />}
 
           {activePage === 'home' && (
             <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">

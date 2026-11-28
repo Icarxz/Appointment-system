@@ -60,6 +60,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
 
   const isStudent = role === 'STUDENT';
   const isAdmin = role === 'ADMIN';
+  const purposeLabel = role === 'FACULTY' ? 'Purpose' : 'Reason';
   const personKey = isStudent || isAdmin ? professorKey : studentKey; // the one person filter: a student filters by professor, the Admin too
   const actionsOf = (a: ListItem): NextAction[] => (isAdmin ? [] : isStudent ? nextActions(a, canCancelNow, (x) => canMarkMissedNow(x.date, x.time)) : facultyNextActions(a, { canCancel: canCancelNow(a), started: hasStarted(a.date, a.time), missOpen: canMarkMissedNow(a.date, a.time) }));
 
@@ -128,7 +129,7 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
                 {apt.studentSection && <Text fontSize="xs" color={C.textMid}>{apt.studentSection}</Text>}
               </>
             ))}
-          {field('Reason', <Text fontSize="sm" color={C.text} noOfLines={2} title={apt.reason}>{apt.reason}</Text>, true)}
+          {field(purposeLabel, <Text fontSize="sm" color={C.text} noOfLines={2} title={apt.reason}>{apt.reason}</Text>, true)}
           {field('Status', (
             <Box>
               <Badge colorScheme={statusColor(apt.status)} px={2} py={1} borderRadius="md">{statusLabel(apt.status)}</Badge>
@@ -167,8 +168,8 @@ export default function RequestList({ role, requests, onViewDetails, onCancel, o
               placeholder={isStudent || isAdmin ? 'All Professors' : 'All Students'}
               options={Array.from(people.entries()).sort((a, b) => a[1].localeCompare(b[1])).map(([key, name]) => ({ value: key, label: name }))} />
           ))}
-          {filterBox('Reason', (
-            <SearchableSelect value={filters.reason} onChange={value => set({ reason: value })} placeholder="All Reasons"
+          {filterBox(purposeLabel, (
+            <SearchableSelect value={filters.reason} onChange={value => set({ reason: value })} placeholder={purposeLabel === 'Purpose' ? 'All Purposes' : 'All Reasons'}
               options={reasons.map(reason => ({ value: reason, label: reason }))} />
           ))}
           {filterBox('Status', (

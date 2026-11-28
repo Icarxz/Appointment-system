@@ -21,12 +21,15 @@ import WelcomeHeader from './WelcomeHeader';
 import ExportBar from './ExportBar';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel, facultyStatusOf, facultyStatusUntil } from './appointmentStatus';
+import HistoryPage from './HistoryPage';
+import { usePersistentPage } from '../utils/usePersistentPage';
 import { GENDER_OPTIONS, matchesGender, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 
 const PAGE_TITLES = {
   reports: 'Reports & Analytics', roster: 'Faculty Roster', records: 'Consultation Records',
   requests: 'Requests', settings: 'Consultation Settings', analytics: 'My Analytics', profile: 'My Profile',
   schedule: 'Master Schedule', log: 'My Consultation Log', hours: 'Consultation Hours', status: 'Status & Notices',
+  history: 'History',
 } as const;
 
 // === Helper function for time formatting ===
@@ -39,7 +42,7 @@ export const formatTime = (timeStr: string) => {
   return `${standardHour}:${minute} ${ampm}`;
 };
 
-type DeanPage = 'roster' | 'reports' | 'records' | 'requests' | 'settings' | 'analytics' | 'profile' | 'schedule' | 'log' | 'hours' | 'status';
+type DeanPage = 'roster' | 'reports' | 'records' | 'requests' | 'settings' | 'analytics' | 'profile' | 'schedule' | 'log' | 'hours' | 'status' | 'history';
 // These pages are the faculty pages, shown inside the Dean's portal (FacultyDashboard in embedded mode).
 const CONSULTATION_PAGES: DeanPage[] = ['schedule', 'requests', 'log', 'hours', 'status', 'analytics'];
 
@@ -48,10 +51,14 @@ export default function DeanDashboard() {
   const credentialReviewRequired = localStorage.getItem('credentialConfirmationRequired') === 'true';
 
   // Unified Page State
-  const [activePage, setActivePage] = useState<DeanPage>(credentialReviewRequired ? 'profile' : 'reports');
+  const deanPages = ['roster', 'reports', 'records', 'requests', 'settings', 'analytics', 'profile', 'schedule', 'log', 'hours', 'status', 'history'] as const;
+  const [activePage, setActivePage] = usePersistentPage<DeanPage>(
+    'dean-dashboard-page', deanPages, credentialReviewRequired ? 'profile' : 'reports',
+    credentialReviewRequired ? 'profile' : undefined,
+  );
   // Executive Broadcast is hidden for now (Nov 9): its page and menu item are removed here; DeanBroadcastPanel.tsx is kept.
   // Notification links: ?page= switches page, ?apt= opens that appointment's details
-  const { aptId, closeApt } = useDeepLink(credentialReviewRequired ? ['profile'] as const : ['roster', 'reports', 'records', 'requests', 'analytics', 'schedule', 'log', 'hours', 'status'] as const, setActivePage);
+  const { aptId, closeApt } = useDeepLink(credentialReviewRequired ? ['profile'] as const : deanPages, setActivePage);
   useEffect(() => { if (credentialReviewRequired) closeApt(); }, [credentialReviewRequired, closeApt]);
   
   // Shared navy palette (same colours in every portal)
@@ -175,6 +182,7 @@ export default function DeanDashboard() {
           { key: 'status', section: 'My Consultations', icon: 'activity' as const, label: 'Status & Notices', active: activePage === 'status', onClick: () => setActivePage('status') },
           { key: 'analytics', section: 'Insights', icon: 'chart' as const, label: 'My Analytics', active: activePage === 'analytics', onClick: () => setActivePage('analytics') },
         ] : []),
+        { key: 'history', section: 'Account', icon: 'file', label: 'History', active: activePage === 'history', onClick: () => setActivePage('history') },
         { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
       ]}
     >
@@ -352,6 +360,7 @@ export default function DeanDashboard() {
         )}
 
         {activePage === 'profile' && <ProfilePage />}
+        {activePage === 'history' && <HistoryPage showScheduleAccount />}
 
       </Box>
       )}

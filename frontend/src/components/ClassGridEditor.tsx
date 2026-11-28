@@ -6,6 +6,7 @@ import {
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
 import { visibleDays, DAY_SHORT, DAY_LONG } from '../utils/daySettings';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 // The admin's class schedule editor: an empty weekly grid with a line every 30 minutes (7:00 AM to 7:00 PM,
 // Monday to Friday, plus Saturday / Sunday when needed). Click an empty spot to add a class, click a class to change or delete it.
@@ -57,10 +58,10 @@ export default function ClassGridEditor({ facultyId, facultyName }: Props) {
     try {
       const res = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/my-schedule/${facultyId}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not load the schedule.');
+      if (!res.ok) throw responseError(res, data.error || 'Could not load the schedule. Please try again.');
       setBlocks(Array.isArray(data) ? data : []);
     } catch (e: any) {
-      toast({ title: 'Could not load the schedule', description: e.message, status: 'error' });
+      toast({ title: 'Could not load the schedule', description: friendlyError(e, 'Could not load the schedule. Please try again.'), status: 'error' });
     }
     setLoading(false);
   }, [facultyId, toast]);
@@ -92,12 +93,12 @@ export default function ClassGridEditor({ facultyId, facultyName }: Props) {
         { method: draft.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body },
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not save the class.');
+      if (!res.ok) throw responseError(res, data.error || 'Could not save the class. Please try again.');
       toast({ title: draft.id ? 'Class updated' : 'Class added', status: 'success', duration: 2500 });
       setDraft(null);
       await load();
     } catch (e: any) {
-      toast({ title: 'Not saved', description: e.message, status: 'error', duration: 7000 });
+      toast({ title: 'Not saved', description: friendlyError(e, 'Could not save the class. Please try again.'), status: 'error', duration: 7000 });
     }
     setSaving(false);
   };
@@ -108,12 +109,12 @@ export default function ClassGridEditor({ facultyId, facultyName }: Props) {
     try {
       const res = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/schedule/${draft.id}`, { method: 'DELETE' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not remove the class.');
+      if (!res.ok) throw responseError(res, data.error || 'Could not remove the class. Please try again.');
       toast({ title: 'Class removed', status: 'success', duration: 2500 });
       setDraft(null);
       await load();
     } catch (e: any) {
-      toast({ title: 'Not removed', description: e.message, status: 'error' });
+      toast({ title: 'Not removed', description: friendlyError(e, 'Could not remove the class. Please try again.'), status: 'error' });
     }
     setSaving(false);
   };

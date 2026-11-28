@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { authFetch } from './authFetch';
 import { formatDate, formatDateTime } from './dateUtils';
 import { statusColor, statusLabel, REASON_TIME_TAKEN } from './appointmentStatus';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -44,14 +45,11 @@ export default function AppointmentDetailsDrawer({ aptId, onClose }: Props) {
     authFetch(`${API}/api/faculty/appointment/${id}`)
       .then(async (res) => {
         if (res.ok) return { id, apt: await res.json(), error: '' };
-        return {
-          id, apt: null,
-          error: res.status === 404
-            ? 'This appointment is not available to your account. It may have been removed, or the link belongs to a different account.'
-            : 'Could not load this appointment. Please try again.',
-        };
+        const data = await res.json().catch(() => ({}));
+        const fallback = 'Could not load appointment details. Please try again.';
+        return { id, apt: null, error: friendlyError(responseError(res, data.error || fallback), fallback) };
       })
-      .catch(() => ({ id, apt: null, error: 'Could not reach the server. Check your connection and try again.' }))
+      .catch((error) => ({ id, apt: null, error: friendlyError(error, 'Could not load appointment details. Please try again.') }))
       .then((r) => { if (!cancelled) setResult(r); });
     return () => { cancelled = true; };
   }, [aptId]);

@@ -8,6 +8,7 @@ export interface ConfirmConfig {
   title: string;
   body: ReactNode;
   confirmLabel: string;
+  cancelLabel?: string;
   /** Runs when the person presses the confirm button; the dialog closes first. */
   run: () => void;
 }
@@ -23,7 +24,7 @@ export default function ConfirmAction({ config, onClose }: { config: ConfirmConf
           <AlertDialogHeader>{config?.title}</AlertDialogHeader>
           <AlertDialogBody fontSize="sm">{config?.body}</AlertDialogBody>
           <AlertDialogFooter gap={3}>
-            <Button ref={cancelRef} variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button ref={cancelRef} variant="ghost" onClick={onClose}>{config?.cancelLabel || 'Cancel'}</Button>
             <Button colorScheme="blue" onClick={() => { const run = config?.run; onClose(); run?.(); }}>{config?.confirmLabel}</Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -4,6 +4,7 @@ import {
   Table, Thead, Tbody, Tr, Th, Td, TableContainer, useToast,
 } from '@chakra-ui/react';
 import { authFetch } from './authFetch';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 interface Palette { surface: string; border: string; text: string; textMid: string }
 
@@ -68,12 +69,12 @@ export default function DeanBroadcastPanel({ C }: { C: Palette }) {
         body: JSON.stringify({ title, message, audience, priority, durationMinutes: duration }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to send.');
+      if (!res.ok) throw responseError(res, data.error || 'Could not send the announcement. Please try again.');
       toast({ title: 'Broadcast sent', description: `Delivered to ${data.recipients} user(s).`, status: 'success', duration: 4000 });
       setTitle(''); setMessage('');
       load();
     } catch (e) {
-      toast({ title: e instanceof Error ? e.message : 'Failed to send.', status: 'error', duration: 4000 });
+      toast({ title: 'Failed to send', description: friendlyError(e, 'Could not send the announcement. Please try again.'), status: 'error', duration: 4000 });
     } finally { setSending(false); }
   };
 

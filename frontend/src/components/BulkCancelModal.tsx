@@ -7,6 +7,7 @@ import { authFetch } from './authFetch';
 import CancelReasonPicker, { STUDENT_CANCEL_REASONS, FACULTY_CANCEL_REASONS } from './CancelReasonPicker';
 import { formatDate } from './dateUtils';
 import { hasStarted, isBeforeCutoff, CANCEL_CUTOFF_HOURS } from './appointmentStatus';
+import { friendlyError, responseError } from '../utils/friendlyError';
 
 const fmtTime = (t: string) => {
   const [h, m] = (t || '00:00').split(':').map(Number);
@@ -55,11 +56,11 @@ export default function BulkCancelModal({ isOpen, onClose, role, appointments, o
         body: JSON.stringify({ ids: chosen.map(a => a._id), reason }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Could not cancel.');
+      if (!res.ok) throw responseError(res, data.error || 'Could not cancel the selected appointments. Please try again.');
       toast({ title: data.message, status: data.skipped?.length ? 'warning' : 'success', position: 'top' });
       setPicked({}); setReason(''); onDone(); onClose();
     } catch (e: any) {
-      toast({ title: 'Could not cancel', description: e.message, status: 'error', position: 'top' });
+      toast({ title: 'Could not cancel', description: friendlyError(e, 'Could not cancel the selected appointments. Please try again.'), status: 'error', position: 'top' });
     }
     setBusy(false);
   };
