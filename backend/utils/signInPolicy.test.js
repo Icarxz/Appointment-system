@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { decideSignIn, isProfileComplete, parseList } = require('./signInPolicy');
+const { decideSignIn, isProfileComplete, requiresCredentialConfirmation, parseList } = require('./signInPolicy');
 
 const base = { allowedDomains: ['school.edu.ph'], adminEmails: ['boss@school.edu.ph'], existingUser: null, rosterRole: null };
 const ok = (email) => ({ email, email_verified: true });
@@ -17,6 +17,15 @@ test('rejects lookalike domain', () => {
 test('unknown school email becomes STUDENT', () => {
   assert.deepStrictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph') }), { action: 'CREATE', role: 'STUDENT' });
 });
+test('provisioning flag denies unknown users and does not create a student', () => {
+  const denied = decideSignIn({ ...base, payload: ok('unknown@school.edu.ph'), requireProvisionedAccounts: true });
+  assert.strictEqual(denied.action, 'DENY');
+  assert.match(denied.error, /No account was found/);
+});
+test('provisioning flag still allows Admin and roster exceptions', () => {
+  assert.strictEqual(decideSignIn({ ...base, payload: ok('Boss@school.edu.ph'), requireProvisionedAccounts: true }).role, 'ADMIN');
+  assert.strictEqual(decideSignIn({ ...base, payload: ok('f@school.edu.ph'), rosterRole: 'FACULTY', requireProvisionedAccounts: true }).role, 'FACULTY');
+});
 test('roster gives faculty role', () => {
   assert.strictEqual(decideSignIn({ ...base, payload: ok('f@school.edu.ph'), rosterRole: 'FACULTY' }).role, 'FACULTY');
 });
@@ -26,13 +35,19 @@ test('ADMIN_EMAILS bootstrap wins', () => {
 test('existing active user logs in', () => {
   assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus: 'ACTIVE' } }).action, 'LOGIN');
 });
-test('archived user denied', () => {
-  assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus: 'ARCHIVED' } }).action, 'DENY');
+test('disabled users are denied with an explicit disabled-account message', () => {
+  for (const accountStatus of ['ARCHIVED', 'RESTRICTED']) {
+    const decision = decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus } });
+    assert.strictEqual(decision.action, 'DENY');
+    assert.match(decision.error, /account has been disabled/i);
+  }
 });
 test('restricted and pending-approval users denied, a new student is still created', () => {
   for (const accountStatus of ['RESTRICTED', 'PENDING_APPROVAL']) {
     assert.strictEqual(decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus } }).action, 'DENY');
   }
+  const pending = decideSignIn({ ...base, payload: ok('a@school.edu.ph'), existingUser: { accountStatus: 'PENDING_APPROVAL' } });
+  assert.match(pending.error, /not active/i);
   const created = decideSignIn({ ...base, payload: ok('new@school.edu.ph'), existingUser: null, rosterRole: null });
   assert.deepStrictEqual([created.action, created.role], ['CREATE', 'STUDENT']);
 });
@@ -45,6 +60,31 @@ test('profile completeness', () => {
   assert.ok(!isProfileComplete({ role: 'STUDENT', schoolId: undefined }));        // legacy "no ID yet"
   assert.ok(!isProfileComplete({ role: 'STUDENT', schoolId: 'X', onboardingComplete: false }));
   assert.ok(isProfileComplete({ role: 'ADMIN' }));
+});
+
+test('requires first-login credential confirmation only for provisioned incomplete student and staff accounts', () => {
+  assert.ok(requiresCredentialConfirmation({
+    role: 'STUDENT', schoolId: '2025-S00001', programPosition: 'BS INFO 1A', onboardingComplete: false,
+  }));
+  for (const role of ['FACULTY', 'DEAN']) {
+    assert.ok(requiresCredentialConfirmation({
+      role, facultyId: '2025S-00001', programPosition: 'Faculty', onboardingComplete: false,
+    }));
+  }
+  assert.ok(!requiresCredentialConfirmation({ role: 'STUDENT', onboardingComplete: false }));
+  assert.ok(!requiresCredentialConfirmation({
+    role: 'FACULTY', facultyId: '2025S-00001', programPosition: 'Faculty', onboardingComplete: true,
+  }));
+  assert.ok(!requiresCredentialConfirmation({
+    role: 'FACULTY', facultyId: '2025S-00001', programPosition: 'Faculty',
+    onboardingComplete: false, credentialsConfirmedAt: new Date(),
+  }));
+  assert.ok(!requiresCredentialConfirmation({
+    role: 'DEAN', programPosition: 'Dean', onboardingComplete: false,
+  }));
+  assert.ok(!requiresCredentialConfirmation({
+    role: 'ADMIN', programPosition: 'Admin', onboardingComplete: false,
+  }));
 });
 
 test('ADMIN_EMAILS promotes an existing non-admin account', () => {

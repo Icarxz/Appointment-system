@@ -4,12 +4,14 @@ import { PROGRAM_OPTIONS, facultyProgram, programOfPosition } from '../utils/pro
 import { GENDER_OPTIONS, matchesGender, parseCohort, GenderBadge, PersonCell, FilterField, FilterPanel } from './PeopleUi';
 import { formatDate, formatDateTime } from './dateUtils';
 import { 
-  Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel, 
+  Alert, AlertIcon, Box, Heading, Text, Button as ChakraButton, VStack, Input, FormControl, FormLabel,
   useToast, Select, HStack, Flex, SimpleGrid, useColorModeValue, Table, Thead, Tbody, Tr, Th, Td, Badge,
+  Tabs, TabList, TabPanels, Tab, TabPanel,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter,
   InputGroup, InputRightAddon
 } from '@chakra-ui/react';
 import { IdTray, isIdComplete } from './IdTray';
+import { normalizePersonName } from '../utils/personName';
 import { ConnectionBanner, OfflineState, FilterPanelSkeleton, TableSkeleton, CardListSkeleton, useOnlineStatus, useSlowLoading } from './LoadingStates';
 import { authFetch } from './authFetch';
 import ConsultationPrintForm, { printConsultationForm } from './ConsultationPrintForm';
@@ -36,8 +38,8 @@ import AnalyticsReport from './AnalyticsReport';
 
 const SCHOOL_DOMAIN = 'antiquespride.edu.ph';
 
-// Disabled accounts have accountStatus RESTRICTED (the backend blocks sign-in and hides them from booking lists)
-const isAccountDisabled = (u: any) => u?.accountStatus === 'RESTRICTED';
+// Disabled accounts are RESTRICTED or ARCHIVED (the backend blocks sign-in and hides them from booking lists).
+const isAccountDisabled = (u: any) => u?.accountStatus === 'RESTRICTED' || u?.accountStatus === 'ARCHIVED';
 
 // "mx@antiquespride.edu.ph" -> "mx"; anything not on the school domain -> ''
 const emailLocalOf = (email?: string) => {
@@ -61,9 +63,11 @@ export default function AdminDashboard() {
   const [activePage, setActivePage] = useState('appointments');
   const [facultyList, setFacultyList] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [userTab, setUserTab] = useState<'faculty' | 'students'>('faculty');
+  const [userTab, setUserTab] = useState<'faculty' | 'students' | 'disabled'>('faculty');
   const [facultySearch, setFacultySearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
+  const [disabledSearch, setDisabledSearch] = useState('');
+  const [disabledRoleFilter, setDisabledRoleFilter] = useState('');
   const [filterProgram, setFilterProgram] = useState('');
   const [filterYear, setFilterYear] = useState('');
   const [filterSection, setFilterSection] = useState('');
@@ -77,6 +81,12 @@ export default function AdminDashboard() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [programPosition, setProgramPosition] = useState('');
+  const [schoolId, setSchoolId] = useState('');
+  const [facultyId, setFacultyId] = useState('');
+  const [studentProgram, setStudentProgram] = useState('');
+  const [studentYear, setStudentYear] = useState('');
+  const [studentSection, setStudentSection] = useState('');
+  const [gender, setGender] = useState('');
   const [loading, setLoading] = useState(false);
   // const [generatedQr, setGeneratedQr] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
@@ -100,6 +110,12 @@ export default function AdminDashboard() {
   const [emailDomainWarn, setEmailDomainWarn] = useState(false);
   const [statusTarget, setStatusTarget] = useState<any | null>(null); // account about to be disabled / re-enabled
   const [statusSaving, setStatusSaving] = useState(false);
+  const [bulkTemplateKind, setBulkTemplateKind] = useState<'student' | 'faculty'>('student');
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkPreview, setBulkPreview] = useState<any | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkSummary, setBulkSummary] = useState<any | null>(null);
+  const [bulkNeedsValidation, setBulkNeedsValidation] = useState(false);
 
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
 
@@ -198,7 +214,8 @@ export default function AdminDashboard() {
 
   // The Faculty list also shows every Dean account (even one who has not turned consultations on), so an account switched to Dean can still be edited.
   const facultyRows = React.useMemo(
-    () => [...facultyList, ...allUsers.filter(u => u.role === 'DEAN' && !facultyList.some(f => f._id === u._id))],
+    () => [...facultyList, ...allUsers.filter(u => u.role === 'DEAN' && !facultyList.some(f => f._id === u._id))]
+      .filter(u => !isAccountDisabled(allUsers.find(a => a._id === u._id))),
     [facultyList, allUsers],
   );
   const filteredFacultyList = React.useMemo(() => facultyRows.filter(f =>
@@ -220,6 +237,149 @@ export default function AdminDashboard() {
     } catch { toast({ title: 'Could not reach the server.', status: 'error' }); }
   };
 
+  const downloadBulkTemplate = async (kind: 'student' | 'faculty', format: 'xlsx' | 'csv') => {
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/template/${kind}.${format}`);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Could not download the template.');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${kind}-account-template.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      toast({ title: 'Template download failed', description: error.message, status: 'error' });
+    }
+  };
+
+  const previewBulkFile = async () => {
+    if (!bulkFile) return;
+    setBulkBusy(true);
+    setBulkPreview(null);
+    setBulkSummary(null);
+    try {
+      const extension = bulkFile.name.toLowerCase();
+      if (!extension.endsWith('.xlsx') && !extension.endsWith('.csv')) throw new Error('Only .xlsx and .csv files are accepted.');
+      if (bulkFile.size > 2 * 1024 * 1024) throw new Error('The file exceeds the 2 MB limit.');
+      const form = new FormData();
+      form.append('file', bulkFile);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/preview?template=${bulkTemplateKind}`, {
+        method: 'POST',
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not preview the spreadsheet.');
+      setBulkPreview(data);
+      setBulkNeedsValidation(false);
+    } catch (error: any) {
+      toast({ title: 'Preview failed', description: error.message, status: 'error' });
+    }
+    setBulkBusy(false);
+  };
+
+  const updateBulkRow = (rowNumber: number, field: string, value: string) => {
+    setBulkPreview((current: any) => current && ({
+      ...current,
+      rows: current.rows.map((row: any) => row.rowNumber === rowNumber
+        ? { ...row, submitted: { ...row.submitted, [field]: value } }
+        : row),
+    }));
+    setBulkNeedsValidation(true);
+    setBulkSummary(null);
+  };
+
+  const revalidateBulkRows = async () => {
+    if (!bulkPreview) return;
+    setBulkBusy(true);
+    try {
+      const form = new FormData();
+      form.append('rows', JSON.stringify(bulkPreview.rows));
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/revalidate?template=${bulkTemplateKind}`, {
+        method: 'POST',
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not validate the edited rows.');
+      setBulkPreview(data);
+      setBulkNeedsValidation(false);
+    } catch (error: any) {
+      toast({ title: 'Revalidation failed', description: error.message, status: 'error' });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const confirmBulkFile = async () => {
+    if (!bulkFile || !bulkPreview) return;
+    setBulkBusy(true);
+    try {
+      const form = new FormData();
+      form.append('rows', JSON.stringify(bulkPreview.rows));
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/bulk/confirm?template=${bulkTemplateKind}`, {
+        method: 'POST',
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not import the spreadsheet.');
+      setBulkSummary(data);
+      setBulkPreview(null);
+      setBulkNeedsValidation(false);
+      fetchAllData();
+    } catch (error: any) {
+      toast({ title: 'Import failed', description: error.message, status: 'error' });
+    }
+    setBulkBusy(false);
+  };
+
+  const downloadBulkErrorReport = () => {
+    const rejected = bulkSummary?.rejectedRows || bulkPreview?.rows?.filter((r: any) => !r.valid).map((r: any) => ({
+      rowNumber: r.rowNumber,
+      submitted: r.submitted,
+      reason: r.errors.join(' '),
+    })) || [];
+    if (!rejected.length) return;
+    const escapeCsv = (value: any) => {
+      let out = value === null || value === undefined ? '' : String(value);
+      if (/^[=+\-@\t\r]/.test(out)) out = "'" + out;
+      return '"' + out.replace(/"/g, '""') + '"';
+    };
+    const headers = ['Row number', 'Full name', 'School email', 'School ID', 'Employee ID', 'Program', 'Year', 'Section', 'Gender', 'Position', 'Role', 'Employment type', 'Reason'];
+    const lines = [headers.map(escapeCsv).join(',')];
+    rejected.forEach((item: any) => {
+      const s = item.submitted || {};
+      lines.push([
+        item.rowNumber,
+        s.name,
+        s.email,
+        s.schoolId,
+        s.employeeId,
+        s.program,
+        s.year,
+        s.section,
+        s.gender,
+        s.position,
+        s.role,
+        s.employmentType,
+        item.reason,
+      ].map(escapeCsv).join(','));
+    });
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'account-import-rejected-rows.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const handleAddFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); 
@@ -227,7 +387,15 @@ export default function AdminDashboard() {
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/add`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, programPosition, role, program: role === 'FACULTY' ? newProgram : '' })
+        body: JSON.stringify({
+          name: normalizePersonName(name), email: `${email.trim().toLowerCase()}@${SCHOOL_DOMAIN}`, role, gender: gender || undefined,
+          schoolId: role === 'STUDENT' ? schoolId : undefined,
+          facultyId: role !== 'STUDENT' ? facultyId : undefined,
+          program: role === 'STUDENT' ? studentProgram : (role === 'FACULTY' ? newProgram : ''),
+          year: role === 'STUDENT' ? studentYear : undefined,
+          section: role === 'STUDENT' ? studentSection : undefined,
+          programPosition: role !== 'STUDENT' ? programPosition : undefined,
+        })
       });
       const data = await response.json();
       if (response.ok) {
@@ -235,6 +403,7 @@ export default function AdminDashboard() {
         setNewFacultyName(data.facultyName);
         setNewAccount({ id: data.userId, role: data.role });
         setName(''); setEmail(''); setProgramPosition(''); setNewProgram('');
+        setSchoolId(''); setFacultyId(''); setStudentProgram(''); setStudentYear(''); setStudentSection(''); setGender('');
         fetchAllData();
       } else { toast({ title: data.error, status: 'error' }); }
     } catch (error) { }
@@ -254,7 +423,7 @@ export default function AdminDashboard() {
   );
 
   const studentQ = studentSearch.trim().toLowerCase();
-  const allStudents = allUsers.filter(u => u.role === 'STUDENT');
+  const allStudents = allUsers.filter(u => u.role === 'STUDENT' && !isAccountDisabled(u));
   const visibleStudents = allStudents.filter(u => {
     const pp = u.programPosition || '';
     const c = parseCohort(pp);
@@ -264,6 +433,15 @@ export default function AdminDashboard() {
       matchesGender(u.gender, studentGender) &&
       (!studentQ || u.name.toLowerCase().includes(studentQ) || (u.email || '').toLowerCase().includes(studentQ) || (u.schoolId || '').toLowerCase().includes(studentQ));
   });
+  const disabledAccounts = allUsers.filter(u =>
+    ['STUDENT', 'FACULTY', 'DEAN'].includes(u.role) && isAccountDisabled(u)
+  );
+  const visibleDisabledAccounts = disabledAccounts.filter(u => {
+    const q = disabledSearch.trim().toLowerCase();
+    return (!disabledRoleFilter || u.role === disabledRoleFilter) &&
+      (!q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) ||
+        (u.schoolId || '').toLowerCase().includes(q) || (u.facultyId || '').toLowerCase().includes(q));
+  });
 
   const saveName = async () => {
     if (!nameEdit) return;
@@ -272,7 +450,7 @@ export default function AdminDashboard() {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/faculty/users/${nameEdit._id}/name`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: nameEditValue })
+        body: JSON.stringify({ name: normalizePersonName(nameEditValue) })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
@@ -353,6 +531,27 @@ export default function AdminDashboard() {
     setStatusSaving(false);
   };
 
+  const bulkColumns = bulkTemplateKind === 'student'
+    ? [
+      { field: 'name', label: 'Full name' },
+      { field: 'email', label: 'School email' },
+      { field: 'schoolId', label: 'School ID' },
+      { field: 'program', label: 'Program' },
+      { field: 'year', label: 'Year' },
+      { field: 'section', label: 'Section' },
+      { field: 'gender', label: 'Gender' },
+    ]
+    : [
+      { field: 'name', label: 'Full name' },
+      { field: 'email', label: 'School email' },
+      { field: 'employeeId', label: 'Employee ID' },
+      { field: 'position', label: 'Position' },
+      { field: 'program', label: 'Program' },
+      { field: 'role', label: 'Role' },
+      { field: 'employmentType', label: 'Employment type' },
+      { field: 'gender', label: 'Gender' },
+    ];
+
   return (
     <DashboardShell
       portalLabel="Admin Console"
@@ -363,8 +562,9 @@ export default function AdminDashboard() {
         { key: 'appointments', section: 'Operations', icon: 'inbox', label: 'Appointments', badge: appointments.filter(a => a.status === 'PENDING').length, active: activePage === 'appointments', onClick: () => setActivePage('appointments') },
         { key: 'home', section: 'Operations', icon: 'grid', label: 'Class Schedules', active: activePage === 'home', onClick: () => setActivePage('home') },
         { key: 'provision', section: 'People', icon: 'userPlus', label: 'Provision Account', active: activePage === 'provision', onClick: () => setActivePage('provision') },
-        { key: 'faculty', section: 'People', icon: 'users', label: `Faculty (${allUsers.filter(u => u.role === 'FACULTY').length || facultyList.length})`, active: activePage === 'users' && userTab === 'faculty', onClick: () => { setUserTab('faculty'); setActivePage('users'); } },
-        { key: 'students', section: 'People', icon: 'graduation', label: `Students (${allUsers.filter(u => u.role === 'STUDENT').length})`, active: activePage === 'users' && userTab === 'students', onClick: () => { setUserTab('students'); setActivePage('users'); } },
+        { key: 'faculty', section: 'People', icon: 'users', label: `Faculty (${allUsers.filter(u => u.role === 'FACULTY' && !isAccountDisabled(u)).length})`, active: activePage === 'users' && userTab === 'faculty', onClick: () => { setUserTab('faculty'); setActivePage('users'); } },
+        { key: 'students', section: 'People', icon: 'graduation', label: `Students (${allUsers.filter(u => u.role === 'STUDENT' && !isAccountDisabled(u)).length})`, active: activePage === 'users' && userTab === 'students', onClick: () => { setUserTab('students'); setActivePage('users'); } },
+        { key: 'disabled', section: 'People', icon: 'users', label: `Disabled (${disabledAccounts.length})`, active: activePage === 'users' && userTab === 'disabled', onClick: () => { setUserTab('disabled'); setActivePage('users'); } },
         { key: 'analytics', section: 'Reports', icon: 'chart', label: 'Reports & Analytics', active: activePage === 'analytics', onClick: () => setActivePage('analytics') },
         { key: 'records', section: 'Reports', icon: 'file', label: 'Consultation Records', active: activePage === 'records', onClick: () => setActivePage('records') },
         { key: 'profile', section: 'Account', icon: 'user', label: 'My Profile', active: activePage === 'profile', onClick: () => setActivePage('profile') },
@@ -376,7 +576,7 @@ export default function AdminDashboard() {
         {activePage !== 'analytics' && <PageTitle>
           {activePage === 'home' && "Class Schedules"}
           {activePage === 'provision' && "Provision Account"}
-          {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : "Student Management")}
+          {activePage === 'users' && (userTab === 'faculty' ? "Faculty Management" : userTab === 'students' ? "Student Management" : "Disabled Accounts")}
           {activePage === 'appointments' && "Appointments"}
           {activePage === 'records' && "Consultation Records"}
           {activePage === 'profile' && "My Profile"}
@@ -420,6 +620,14 @@ export default function AdminDashboard() {
         )}
 
         {activePage === 'provision' && (
+          <Tabs variant="soft-rounded" size="sm" colorScheme="blue">
+            <TabList mb={4}>
+              <Tab>Single Account</Tab>
+              <Tab>Bulk Accounts</Tab>
+            </TabList>
+            <TabPanels>
+              <TabPanel px={0} pt={0}>
+          <VStack align="stretch" spacing={6}>
           <Box display="flex" gap={8} flexDir={{ base: 'column', xl: 'row' }}>
             <Box flex={{ base: 'none', xl: '0 0 520px' }}>
               <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
@@ -427,39 +635,102 @@ export default function AdminDashboard() {
                   <VStack spacing={4} align="stretch">
                     <FormControl isRequired>
                       <FormLabel color={textColor}>Full Name</FormLabel>
-                      <Input value={name} onChange={(e) => setName(e.target.value)} color={textColor} borderColor={borderColor}/>
+                      <Input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        onBlur={() => setName(normalizePersonName(name))}
+                        placeholder="First name MI. (optional) Last name"
+                        color={textColor}
+                        borderColor={borderColor}
+                      />
                     </FormControl>
 
                     <FormControl isRequired>
-                      <FormLabel color={textColor}>Email</FormLabel>
-                      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} color={textColor} borderColor={borderColor}/>
+                      <FormLabel color={textColor}>School email</FormLabel>
+                      <InputGroup>
+                        <Input
+                          type="text"
+                          placeholder="username"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          color={textColor}
+                          borderColor={borderColor}
+                          pattern="[^@\\s]+"
+                          required
+                        />
+                        <InputRightAddon>@{SCHOOL_DOMAIN}</InputRightAddon>
+                      </InputGroup>
                     </FormControl>
 
                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="start">
                       <FormControl isRequired>
                         <FormLabel color={textColor}>Access Level</FormLabel>
                         <Select value={role} onChange={(e) => setRole(e.target.value)} color={textColor} borderColor={borderColor}>
+                          <option value="STUDENT">Student</option>
                           <option value="FACULTY">Faculty Member</option>
                           <option value="DEAN">College Dean</option>
-                          <option value="ADMIN">System Admin</option>
                         </Select>
-                      </FormControl>
-
-                      <FormControl isRequired>
-                        <FormLabel color={textColor}>Program & Position</FormLabel>
-                        <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
-                          options={FACULTY_POSITIONS.map(position => ({ value: position, label: position }))} />
                       </FormControl>
                     </SimpleGrid>
 
-                    {role === 'FACULTY' && (
-                      <FormControl>
-                        <FormLabel color={textColor}>Faculty Program (optional)</FormLabel>
-                        <SearchableSelect placeholder="Not set" value={newProgram} onChange={setNewProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
-                      </FormControl>
+                    {role === 'STUDENT' ? (
+                      <VStack spacing={4} align="stretch">
+                        <FormControl isRequired maxW="520px" mx="auto">
+                          <FormLabel color={textColor} textAlign="center">School ID</FormLabel>
+                          <IdTray kind="STUDENT" value={schoolId} onChange={setSchoolId} />
+                        </FormControl>
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                          <FormControl isRequired>
+                            <FormLabel color={textColor}>Program</FormLabel>
+                            <SearchableSelect placeholder="Select program..." value={studentProgram} onChange={(v) => { setStudentProgram(v); setStudentYear(''); setStudentSection(''); }} searchable={false}
+                              options={Object.keys(cohortConfig).map(p => ({ value: p, label: p }))} />
+                          </FormControl>
+                        </SimpleGrid>
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                          <FormControl isRequired>
+                            <FormLabel color={textColor}>Year</FormLabel>
+                            <SearchableSelect placeholder="Select year..." value={studentYear} onChange={(v) => { setStudentYear(v); setStudentSection(''); }} searchable={false} isDisabled={!studentProgram}
+                              options={studentProgram ? Object.keys(cohortConfig[studentProgram]).map(y => ({ value: y, label: y })) : []} />
+                          </FormControl>
+                          <FormControl isRequired>
+                            <FormLabel color={textColor}>Section</FormLabel>
+                            <SearchableSelect placeholder="Select section..." value={studentSection} onChange={setStudentSection} searchable={false} isDisabled={!studentYear}
+                              options={studentProgram && studentYear ? cohortConfig[studentProgram][studentYear].map(s => ({ value: s, label: s })) : []} />
+                          </FormControl>
+                        </SimpleGrid>
+                        <FormControl isRequired>
+                          <FormLabel color={textColor}>Gender</FormLabel>
+                          <SearchableSelect placeholder="Select gender..." value={gender} onChange={setGender} searchable={false} options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
+                        </FormControl>
+                      </VStack>
+                    ) : (
+                      <VStack spacing={4} align="stretch">
+                        <FormControl isRequired maxW="520px" mx="auto">
+                          <FormLabel color={textColor} textAlign="center">Employee ID</FormLabel>
+                          <IdTray kind="FACULTY" value={facultyId} onChange={setFacultyId} />
+                        </FormControl>
+                        <FormControl isRequired>
+                          <FormLabel color={textColor}>Position</FormLabel>
+                          <SearchableSelect placeholder="Select position..." value={programPosition} onChange={setProgramPosition} maxW="100%"
+                            options={FACULTY_POSITIONS.map(position => ({ value: position, label: position }))} />
+                        </FormControl>
+                        {role === 'FACULTY' && (
+                          <FormControl>
+                            <FormLabel color={textColor}>Faculty Program (optional)</FormLabel>
+                            <SearchableSelect placeholder="Not set" value={newProgram} onChange={setNewProgram} maxW="100%" searchable={false} options={PROGRAM_OPTIONS} />
+                          </FormControl>
+                        )}
+                        <FormControl isRequired>
+                          <FormLabel color={textColor}>Gender</FormLabel>
+                          <SearchableSelect placeholder="Select gender..." value={gender} onChange={setGender} searchable={false} options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }]} />
+                        </FormControl>
+                      </VStack>
                     )}
 
-                    <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={loading}>Generate Account</ChakraButton>
+                    <ChakraButton type="submit" colorScheme="blue" w="100%" isLoading={loading}
+                      isDisabled={!gender || (role === 'STUDENT' ? !isIdComplete('STUDENT', schoolId) : !isIdComplete('FACULTY', facultyId))}>
+                      Generate Account
+                    </ChakraButton>
                   </VStack>
                 </form>
               </Box>
@@ -487,6 +758,95 @@ export default function AdminDashboard() {
               )}
             </Box>
           </Box>
+          </VStack>
+              </TabPanel>
+              <TabPanel px={0} pt={0}>
+          <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+            <Heading size="md" color={textColor} mb={1}>Bulk Account Provisioning</Heading>
+            <Text fontSize="sm" color={mutedText} mb={4}>
+              Use First name MI. (optional) Last name. Names are title-cased on import. Edit spreadsheet values in the preview, revalidate, then confirm to create accounts.
+            </Text>
+            <HStack flexWrap="wrap" spacing={3} mb={4}>
+              <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('student', 'xlsx')}>Download Student Template (Excel)</ChakraButton>
+              <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('student', 'csv')}>Download Student Template (CSV)</ChakraButton>
+              <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('faculty', 'xlsx')}>Download Faculty/Dean Template (Excel)</ChakraButton>
+              <ChakraButton size="sm" variant="outline" onClick={() => downloadBulkTemplate('faculty', 'csv')}>Download Faculty/Dean Template (CSV)</ChakraButton>
+            </HStack>
+            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} alignItems="end">
+              <FormControl>
+                <FormLabel color={textColor}>Template type</FormLabel>
+                <Select value={bulkTemplateKind} onChange={(e) => { setBulkTemplateKind(e.target.value as 'student' | 'faculty'); setBulkFile(null); setBulkPreview(null); setBulkSummary(null); setBulkNeedsValidation(false); }} color={textColor}>
+                  <option value="student">Student accounts</option>
+                  <option value="faculty">Faculty and Dean accounts</option>
+                </Select>
+              </FormControl>
+              <FormControl>
+                <FormLabel color={textColor}>Spreadsheet file</FormLabel>
+                <Input type="file" accept=".xlsx,.csv" p={1} onChange={(e) => { setBulkFile(e.target.files?.[0] || null); setBulkPreview(null); setBulkSummary(null); setBulkNeedsValidation(false); }} />
+              </FormControl>
+              <ChakraButton colorScheme="blue" onClick={previewBulkFile} isDisabled={!bulkFile} isLoading={bulkBusy}>Preview Accounts</ChakraButton>
+            </SimpleGrid>
+
+            {bulkPreview && (
+              <Box mt={5}>
+                <HStack justify="space-between" flexWrap="wrap" mb={3}>
+                  <Text fontWeight="semibold" color={textColor}>
+                    {bulkNeedsValidation ? 'Edits need validation. ' : ''}
+                    {bulkPreview.totalRows} rows: {bulkPreview.validRows} valid, {bulkPreview.rejectedRows} rejected
+                  </Text>
+                  <HStack>
+                    <ChakraButton size="sm" variant="outline" onClick={revalidateBulkRows} isLoading={bulkBusy}>Revalidate Rows</ChakraButton>
+                    {!bulkNeedsValidation && bulkPreview.rejectedRows > 0 && (
+                      <ChakraButton size="sm" variant="outline" onClick={downloadBulkErrorReport}>Download Rejected Rows</ChakraButton>
+                    )}
+                    <ChakraButton size="sm" colorScheme="green" onClick={confirmBulkFile} isDisabled={bulkNeedsValidation || bulkPreview.validRows === 0} isLoading={bulkBusy}>Confirm Import</ChakraButton>
+                  </HStack>
+                </HStack>
+                <ScrollTable><Table size="sm" minW="1200px">
+                  <Thead><Tr><Th>Row</Th><Th>Status</Th>{bulkColumns.map(column => <Th key={column.field} minW="150px">{column.label}</Th>)}<Th minW="240px">Validation</Th></Tr></Thead>
+                  <Tbody>
+                    {bulkPreview.rows.map((row: any) => (
+                      <Tr key={row.rowNumber}>
+                        <Td>{row.rowNumber}</Td>
+                        <Td><Badge colorScheme={bulkNeedsValidation ? 'orange' : row.valid ? 'green' : 'red'}>{bulkNeedsValidation ? 'Changed' : row.valid ? 'Valid' : 'Invalid'}</Badge></Td>
+                        {bulkColumns.map(column => (
+                          <Td key={column.field}>
+                            <Input
+                              size="sm"
+                              value={row.submitted?.[column.field] ?? ''}
+                              aria-label={`${column.label}, row ${row.rowNumber}`}
+                              onChange={(event) => updateBulkRow(row.rowNumber, column.field, event.target.value)}
+                              onBlur={(event) => {
+                                if (column.field === 'name') {
+                                  updateBulkRow(row.rowNumber, column.field, normalizePersonName(event.target.value));
+                                }
+                              }}
+                            />
+                          </Td>
+                        ))}
+                        <Td><Text fontSize="xs" color={bulkNeedsValidation || row.valid ? mutedText : 'red.500'}>
+                          {bulkNeedsValidation ? 'Edited; revalidate before confirming.' : row.valid ? 'Ready to create' : row.errors.join(' ')}
+                        </Text></Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table></ScrollTable>
+              </Box>
+            )}
+
+            {bulkSummary && (
+              <Box mt={5} p={4} borderWidth="1px" borderColor={borderColor} borderRadius="md">
+                <Text fontWeight="semibold" color={textColor}>Import complete</Text>
+                <Text fontSize="sm" color={mutedText}>Processed {bulkSummary.totalRows}: {bulkSummary.created} created, {bulkSummary.rejected} rejected.</Text>
+                {bulkSummary.rejectedRows?.length > 0 && (
+                  <ChakraButton mt={3} size="sm" variant="outline" onClick={downloadBulkErrorReport}>Download Error Report</ChakraButton>
+                )}
+              </Box>
+            )}
+          </Box>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
         )}
 
         {dataReady && activePage === 'users' && userTab === 'faculty' && (
@@ -547,7 +907,7 @@ export default function AdminDashboard() {
                         <HStack spacing={2}>
                           {userById[prof._id]?.role === 'FACULTY' && <ChakraButton size="xs" variant="outline" onClick={() => setScheduleOf(prof)}>Schedule</ChakraButton>}
                           <ChakraButton size="xs" variant="outline" onClick={() => userById[prof._id] && setAccountEdit(userById[prof._id])}>Edit</ChakraButton>
-                          {userById[prof._id]?.role === 'FACULTY' && (
+                          {(userById[prof._id]?.role === 'FACULTY' || userById[prof._id]?.role === 'DEAN') && (
                             <ChakraButton size="xs" variant="outline" colorScheme={isAccountDisabled(userById[prof._id]) ? 'green' : 'red'} onClick={() => setStatusTarget(userById[prof._id])}>
                               {isAccountDisabled(userById[prof._id]) ? 'Enable' : 'Disable'}
                             </ChakraButton>
@@ -617,6 +977,59 @@ export default function AdminDashboard() {
                           {isAccountDisabled(student) ? 'Enable' : 'Disable'}
                         </ChakraButton>
                       </HStack>
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table></ScrollTable>
+          </Box>
+        )}
+
+        {dataReady && activePage === 'users' && userTab === 'disabled' && (
+          <Box bg={cardBg} p={6} borderRadius="lg" borderWidth="1px" borderColor={borderColor} shadow="sm">
+            <FilterPanel
+              shown={visibleDisabledAccounts.length} total={disabledAccounts.length} noun="disabled accounts"
+              canClear={!!(disabledSearch || disabledRoleFilter)}
+              onClear={() => { setDisabledSearch(''); setDisabledRoleFilter(''); }}
+            >
+              <FilterField label="Role">
+                <SearchableSelect placeholder="All roles" value={disabledRoleFilter} onChange={setDisabledRoleFilter} maxW="100%"
+                  searchable={false}
+                  options={[
+                    { value: 'STUDENT', label: 'Student' },
+                    { value: 'FACULTY', label: 'Faculty' },
+                    { value: 'DEAN', label: 'Dean' },
+                  ]} />
+              </FilterField>
+              <Box gridColumn={{ base: 'auto', lg: '1 / -1' }}>
+                <FilterField label="Search">
+                  <Input
+                    placeholder="Name, email or ID..."
+                    value={disabledSearch}
+                    onChange={(e) => setDisabledSearch(e.target.value)}
+                    color={textColor} borderColor={borderColor} bg={cardBg}
+                  />
+                </FilterField>
+              </Box>
+            </FilterPanel>
+
+            <ScrollTable><Table variant="simple" size="md">
+              <Thead><Tr><Th color={mutedText}>Name</Th><Th color={mutedText}>Role</Th><Th color={mutedText}>Email</Th><Th color={mutedText}>ID</Th><Th color={mutedText}>Status</Th><Th color={mutedText}>Action</Th></Tr></Thead>
+              <Tbody>
+                {visibleDisabledAccounts.length === 0 && (
+                  <Tr><Td colSpan={6}><Text color={mutedText} py={6} textAlign="center">No disabled accounts match these filters.</Text></Td></Tr>
+                )}
+                {visibleDisabledAccounts.map(account => (
+                  <Tr key={account._id} _hover={{ bg: hoverBg }}>
+                    <Td color={textColor}><PersonCell name={account.name} sub={account.email} disabled /></Td>
+                    <Td color={textColor}>{account.role.charAt(0) + account.role.slice(1).toLowerCase()}</Td>
+                    <Td color={textColor}>{account.email}</Td>
+                    <Td color={textColor}>{account.role === 'STUDENT' ? (account.schoolId || '—') : (account.facultyId || '—')}</Td>
+                    <Td><Badge colorScheme={account.accountStatus === 'ARCHIVED' ? 'gray' : 'red'} borderRadius="full" px={2}>{account.accountStatus}</Badge></Td>
+                    <Td>
+                      <ChakraButton size="xs" variant="outline" colorScheme="green" onClick={() => setStatusTarget(account)}>
+                        Enable
+                      </ChakraButton>
                     </Td>
                   </Tr>
                 ))}
@@ -771,11 +1184,16 @@ export default function AdminDashboard() {
             <ModalCloseButton />
             <ModalBody pb={6}>
               <Text fontSize="sm" mb={3} color={mutedText}>
-                Use this to fix a name copied wrongly from the Google account. Appointments stay linked to the account.
+                Use First name MI. (optional) Last name. Names are capitalized automatically; middle names stay as entered. Appointments stay linked to the account.
               </Text>
               <FormControl isRequired mb={4}>
                 <FormLabel>Full name</FormLabel>
-                <Input value={nameEditValue} onChange={(e) => setNameEditValue(e.target.value)} />
+                <Input
+                  value={nameEditValue}
+                  onChange={(e) => setNameEditValue(e.target.value)}
+                  onBlur={() => setNameEditValue(normalizePersonName(nameEditValue))}
+                  placeholder="First name MI. (optional) Last name"
+                />
               </FormControl>
               <ChakraButton colorScheme="blue" w="100%" onClick={saveName} isLoading={nameSaving}>Save name</ChakraButton>
             </ModalBody>
@@ -806,10 +1224,18 @@ export default function AdminDashboard() {
             <ModalHeader>{isAccountDisabled(statusTarget) ? 'Enable account' : 'Disable account'} — {statusTarget?.name}</ModalHeader>
             <ModalCloseButton />
             <ModalBody>
+              {statusTarget?.accountStatus === 'ACTIVE' && (
+                <Alert status="warning" alignItems="flex-start" mb={3} borderRadius="md">
+                  <AlertIcon mt={0.5} />
+                  <Text fontSize="sm">
+                    This account is currently active. Disabling it will sign the user out on their next app request and tell them their account has been disabled.
+                  </Text>
+                </Alert>
+              )}
               <Text fontSize="sm" color={mutedText}>
                 {isAccountDisabled(statusTarget)
                   ? 'This account will be able to sign in again and will show up in booking lists.'
-                  : 'This account will not be able to sign in and will be hidden from booking lists. Their appointments, ID and records are kept, and you can enable it again any time.'}
+                  : 'They will no longer be able to sign in or appear in booking lists. Their appointments, ID and records are kept, and you can enable the account again any time.'}
               </Text>
             </ModalBody>
             <ModalFooter gap={2}>

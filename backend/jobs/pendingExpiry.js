@@ -3,6 +3,7 @@ const Appointment = require('../models/Appointment');
 const { notify, resolveStudentId, fmtDate, fmtTime } = require('../utils/notify');
 const { manilaNow } = require('../utils/manilaTime');
 const { isPendingExpired, expiryReason, EXPIRY_REASON_TAKEN } = require('../utils/appointmentTime');
+const { appendAppointmentHistory } = require('../utils/historyEvents');
 
 // Every minute: a request still PENDING when its start time is reached is rejected automatically,
 // and the student is told (in-app message plus email; APPOINTMENT_UPDATE is an emailed type).
@@ -21,6 +22,9 @@ async function expirePendingRequests(nowMs = Date.now()) {
     );
     if (!updated) continue;
     expired += 1;
+    await appendAppointmentHistory(updated, 'APPOINTMENT_STATUS_CHANGED', {
+      actorRole: 'SYSTEM', details: { fromStatus: apt.status, toStatus: updated.status },
+    });
     await notify(await resolveStudentId(updated), {
       type: 'APPOINTMENT_UPDATE',
       title: reason === EXPIRY_REASON_TAKEN ? 'Consultation request declined' : 'Consultation request expired',

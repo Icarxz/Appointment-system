@@ -48,6 +48,9 @@ app.use('/api/schedule-import', scheduleImportRoutes); // Faculty Schedule PDF I
 const analyticsRoutes = require('./routes/analytics');
 app.use('/api/analytics', analyticsRoutes); // Reports & Analytics (Admin/Dean only)
 
+const historyRoutes = require('./routes/history');
+app.use('/api/history', historyRoutes);
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {

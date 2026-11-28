@@ -5,7 +5,7 @@ const parseList = (v) => (v || '').split(',').map(s => s.replace(/[<>"']/g, '').
 
 // Google's verified ID-token payload + config + what we already know -> what to do.
 // payload: { email, email_verified, hd }   existingUser: User doc or null   rosterRole: string|null
-function decideSignIn({ payload, allowedDomains, adminEmails, existingUser, rosterRole }) {
+function decideSignIn({ payload, allowedDomains, adminEmails, existingUser, rosterRole, requireProvisionedAccounts = false }) {
   const email = (payload?.email || '').toLowerCase();
   if (!email || payload.email_verified !== true) {
     return { action: 'DENY', error: 'Your Google email is not verified.' };
@@ -15,15 +15,23 @@ function decideSignIn({ payload, allowedDomains, adminEmails, existingUser, rost
     return { action: 'DENY', error: 'Please sign in with your school Google account.' };
   }
   if (existingUser) {
-    if (['ARCHIVED', 'RESTRICTED', 'PENDING_APPROVAL'].includes(existingUser.accountStatus)) {
+    if (['ARCHIVED', 'RESTRICTED'].includes(existingUser.accountStatus)) {
+      return { action: 'DENY', error: 'This account has been disabled. Please contact the administrator.' };
+    }
+    if (existingUser.accountStatus === 'PENDING_APPROVAL') {
       return { action: 'DENY', error: 'This account is not active. Please contact the administrator.' };
     }
     // An address listed in ADMIN_EMAILS is always an Admin, even if the account was created earlier as something else.
     if (adminEmails.includes(email) && existingUser.role !== 'ADMIN') return { action: 'LOGIN', promoteTo: 'ADMIN' };
     return { action: 'LOGIN' };
   }
-  const role = adminEmails.includes(email) ? 'ADMIN' : (rosterRole || 'STUDENT');
-  return { action: 'CREATE', role };
+  const role = adminEmails.includes(email) ? 'ADMIN' : (rosterRole || null);
+  if (requireProvisionedAccounts) {
+    if (!role) {
+      return { action: 'DENY', error: 'No account was found for this email. Please contact the System Administrator to create your account.' };
+    }
+  }
+  return { action: 'CREATE', role: role || 'STUDENT' };
 }
 
 // A profile is complete once onboarding is done AND a student has an ID on file.
@@ -34,9 +42,15 @@ function isProfileComplete(user) {
   return true;
 }
 
+function requiresCredentialConfirmation(user) {
+  if (!user || user.credentialsConfirmedAt || user.onboardingComplete !== false) return false;
+  if (!['STUDENT', 'FACULTY', 'DEAN'].includes(user.role) || !user.programPosition) return false;
+  return user.role === 'STUDENT' ? !!user.schoolId : !!user.facultyId;
+}
+
 // The sign-in screens say which door the person used. The server still decides the role (from the roster / ADMIN_EMAILS /
 // the stored account); the audience only stops someone using the wrong door.
-//   'STUDENT' : Sign up > Student.   'STAFF' : Sign up > Faculty (also Dean and Admin).
+//   'STUDENT' : older Student sign-up client.   'STAFF' : older Faculty/Dean sign-in client.
 //   'LOGIN'   : Log in: existing accounts only, nobody is created here (see loginNeedsAccount).
 //   undefined : older clients, no check.
 // Returns an error text or null.
@@ -64,4 +78,4 @@ function loginNeedsAccount(audience, action, role) {
   return null;
 }
 
-module.exports = { decideSignIn, parseList, isProfileComplete, audienceMismatch, loginNeedsAccount };
+module.exports = { decideSignIn, parseList, isProfileComplete, requiresCredentialConfirmation, audienceMismatch, loginNeedsAccount };

@@ -3,12 +3,13 @@ import { useDisclosure } from '@chakra-ui/react';
 import OnboardingModal from './OnboardingModal';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 
-// Shown on a dashboard right after the first Google sign-in, until the person has filled in the details
-// Google can't supply. Faculty, Dean and Admin must finish it; students may close it and browse read-only
-// (the student dashboard has its own button to reopen it).
+// Collects profile details Google cannot supply for accounts that were not provisioned with them.
+// Provisioned Student, Faculty and Dean accounts review their existing details on My Profile instead.
 export default function ProfileGate({ role }: { role: string }) {
   const [open, setOpen] = useState(localStorage.getItem('onboardingComplete') === 'false');
   const { isOpen: privacyOpen, onOpen: onPrivacyOpen, onClose: onPrivacyClose } = useDisclosure();
+
+  if (localStorage.getItem('credentialConfirmationRequired') === 'true') return null;
 
   return (
     <>

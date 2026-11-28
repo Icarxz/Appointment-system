@@ -38,6 +38,8 @@ interface Props {
   profileActive?: boolean;
   /** Admin has no mailbox. */
   showMailbox?: boolean;
+  /** Keep a first-login user on My Profile until account details are confirmed. */
+  profileRequired?: boolean;
   /** Anything that must exist once per page (for example the first-login ProfileGate). */
   extras?: ReactNode;
   children: ReactNode;
@@ -47,7 +49,7 @@ const btnBase: React.CSSProperties = { border: 'none', cursor: 'pointer', fontFa
 
 // The one sidebar every portal shares. From 768px up it is a fixed column; below that it turns into a
 // top bar with a menu button that opens the same content in a drawer, so phones get the full screen width.
-export default function DashboardShell({ portalLabel, userName, nav, onOpenProfile, profileActive, showMailbox = true, extras, children }: Props) {
+export default function DashboardShell({ portalLabel, userName, nav, onOpenProfile, profileActive, showMailbox = true, profileRequired = false, extras, children }: Props) {
   const C = useNavPalette();
   const { toggleColorMode } = useColorMode();
   const navigate = useNavigate();
@@ -112,8 +114,9 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
 
   // Group the items under their section headings, keeping the order they were given in.
   // "Account" items are pinned to the bottom instead of following the other sections.
-  const mainNav = nav.filter(i => i.section !== 'Account');
-  const accountNav = nav.filter(i => i.section === 'Account');
+  const visibleNav = profileRequired ? nav.filter(i => i.key === 'profile') : nav;
+  const mainNav = visibleNav.filter(i => i.section !== 'Account');
+  const accountNav = visibleNav.filter(i => i.section === 'Account');
   const sectionLabel = (text: string) => (
     <div key={`h-${text}`} style={{ padding: '16px 10px 6px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5f7a99' }}>{text}</div>
   );
@@ -162,7 +165,7 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
           <header className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', background: C.sidebar, flexShrink: 0 }}>
             <IconButton aria-label="Open menu" icon={<HamburgerIcon boxSize={5} />} onClick={menu.onOpen} variant="ghost" color="#fff" _hover={{ bg: 'whiteAlpha.200' }} _active={{ bg: 'whiteAlpha.300' }} />
             <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.14em', color: '#fff', textTransform: 'uppercase', flex: 1, minWidth: 0 }}>{portalLabel}</span>
-            {showMailbox && <NotificationBell compact navText="#fff" navBg="rgba(255,255,255,0.12)" />}
+            {showMailbox && !profileRequired && <NotificationBell compact navText="#fff" navBg="rgba(255,255,255,0.12)" />}
           </header>
           <Drawer isOpen={menu.isOpen} placement="left" onClose={menu.onClose}>
             <DrawerOverlay />
@@ -178,7 +181,7 @@ export default function DashboardShell({ portalLabel, userName, nav, onOpenProfi
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0, position: 'relative' }}>
         {/* Desktop: the bell sits in the top right corner of the page. On phones it is in the top bar above. */}
-        {showMailbox && !isMobile && (
+        {showMailbox && !profileRequired && !isMobile && (
           <div className="no-print" style={{ position: 'absolute', top: 0, right: '14px', zIndex: 20, display: 'flex', alignItems: 'center', height: '64px' }}>
             <NotificationBell compact navText={C.dk ? '#e2e8f0' : '#0f2240'} navBg={C.dk ? 'rgba(255,255,255,0.10)' : '#eef2f7'} />
           </div>

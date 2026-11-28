@@ -23,6 +23,7 @@ const rateLimit = require('express-rate-limit');
 const { fromOcrDraft, validateDraft, importAccess, toScheduleRecord } = require('../utils/scheduleDraft');
 const { checkPdf, MAX_PDF_BYTES } = require('../utils/pdfUpload');
 const { runOcr, OcrError } = require('../utils/ocrRunner');
+const { appendHistoryEvent } = require('../utils/historyEvents');
 
 const router = express.Router();
 const ALLOWED = ['FACULTY', 'DEAN', 'ADMIN'];
@@ -114,6 +115,7 @@ const upcoming = async (facultyId) => {
 const toRows = (list) => list.map(({ dayOfWeek, startTime, endTime, subject, room }) => ({ dayOfWeek, startTime, endTime, ...(subject !== undefined ? { subject, room } : {}) }));
 
 router.post('/confirm', requireAuth(ALLOWED), async (req, res) => {
+  let scheduleChanged = false;
   try {
     const { facultyId, classes, consultationHours, metadata, workload, identityConfirmed, effectivityDate, scheduleFingerprint, fileHash } = req.body || {};
     const target = await loadTarget(req, res, facultyId);
@@ -141,22 +143,40 @@ router.post('/confirm', requireAuth(ALLOWED), async (req, res) => {
 
       if (!when.startsNow) { // future date: stage it; the daily job applies it on that date (and checks it again then)
         const staged = await ScheduleImport.create({ ...record, status: 'SCHEDULED' });
+        await appendHistoryEvent({
+          userId: facultyId, eventType: 'SCHEDULE_IMPORT_STAGED', actorId: req.user.userId, actorRole: req.user.role,
+          details: { importId: staged._id, effectivityDate, term: record.term, academicYear: record.academicYear },
+        });
         await notify([facultyId], { type: 'SCHEDULE_IMPORT', title: 'Schedule scheduled', message: `A new class schedule will take effect on ${effectivityDate}.`, page: 'schedule' });
         return res.json({ status: 'SCHEDULED', importId: staged._id, effectivityDate, warnings: check.warnings });
       }
 
       const applied = await applyImport({ facultyId, classes: rows.classes, consultationHours: rows.consultationHours, baseFingerprint: record.baseFingerprint }, { store: mongoStore, enforceBase: true });
       if (!applied.ok) {
-        await ScheduleImport.create({ ...record, status: 'FAILED', failureReason: applied.message });
+        const failed = await ScheduleImport.create({ ...record, status: 'FAILED', failureReason: applied.message });
+        await appendHistoryEvent({
+          userId: facultyId, eventType: 'SCHEDULE_IMPORT_FAILED', actorId: req.user.userId, actorRole: req.user.role,
+          details: { importId: failed._id, effectivityDate, reason: applied.message },
+        });
         return res.status(applied.code === 'STALE' ? 409 : 500).json({ error: applied.message, code: applied.code });
       }
+      scheduleChanged = true;
       await ScheduleImport.updateMany({ facultyId, status: 'ACTIVE' }, { $set: { status: 'SUPERSEDED' } });
       const done = await ScheduleImport.create({ ...record, status: 'ACTIVE', previousSnapshot: { classes: toRows(applied.snapshot.classes), hours: toRows(applied.snapshot.hours) }, activatedAt: new Date() });
+      await appendHistoryEvent({
+        userId: facultyId, eventType: 'SCHEDULE_IMPORT_ACTIVATED', actorId: req.user.userId, actorRole: req.user.role,
+        details: { importId: done._id, effectivityDate, term: record.term, academicYear: record.academicYear, classBlocks: done.classes.length, consultationBlocks: done.consultationHours.length },
+      });
       if (String(req.user.userId) !== String(facultyId)) await notify([facultyId], { type: 'SCHEDULE_IMPORT', title: 'Class schedule updated', message: 'Your class schedule and official consultation hours were replaced from your Faculty Individual Load.', page: 'schedule' });
       return res.json({ status: 'ACTIVE', importId: done._id, effectivityDate, counts: applied.counts, warnings: check.warnings });
     });
   } catch (error) {
-    res.status(500).json({ error: 'Server error while applying the schedule. The previous schedule was not changed unless this page says otherwise.' });
+    console.error('Schedule import confirmation failed:', error.message);
+    res.status(500).json({
+      error: scheduleChanged
+        ? 'The schedule was applied, but a follow-up step failed. Check your schedule history before retrying.'
+        : 'Server error while applying the schedule. The previous schedule was not changed.',
+    });
   }
 });
 
@@ -184,6 +204,10 @@ router.post('/:id/cancel', requireAuth(ALLOWED), async (req, res) => {
     if (imp.status !== 'SCHEDULED') return res.status(409).json({ error: 'Only a scheduled import that has not started yet can be cancelled.' });
     const r = await ScheduleImport.updateOne({ _id: imp._id, status: 'SCHEDULED' }, { $set: { status: 'CANCELLED' } });
     if (!r.modifiedCount) return res.status(409).json({ error: 'That import already started.' });
+    await appendHistoryEvent({
+      userId: imp.facultyId, eventType: 'SCHEDULE_IMPORT_CANCELLED', actorId: req.user.userId, actorRole: req.user.role,
+      details: { importId: imp._id, effectivityDate: imp.effectivityDate },
+    });
     res.json({ status: 'CANCELLED' });
   } catch (error) { res.status(500).json({ error: 'Server error cancelling the import.' }); }
 });
@@ -204,6 +228,10 @@ router.post('/:id/rollback', requireAuth(ALLOWED), async (req, res) => {
       try { await replaceSchedule(mongoStore, facultyId, imp.previousSnapshot.classes, imp.previousSnapshot.hours); }
       catch (e) { return res.status(500).json({ error: e.message }); }
       await ScheduleImport.updateOne({ _id: imp._id }, { $set: { status: 'ROLLED_BACK' } });
+      await appendHistoryEvent({
+        userId: facultyId, eventType: 'SCHEDULE_IMPORT_ROLLED_BACK', actorId: req.user.userId, actorRole: req.user.role,
+        details: { importId: imp._id, effectivityDate: imp.effectivityDate },
+      });
       res.json({ status: 'ROLLED_BACK' });
     });
   } catch (error) { res.status(500).json({ error: 'Server error undoing the import.' }); }
