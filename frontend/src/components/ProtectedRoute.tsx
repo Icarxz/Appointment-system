@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { isSafeAppLink } from '../utils/deepLink';
 
@@ -20,12 +20,18 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   const location = useLocation();
   const userRole = localStorage.getItem('userRole');
   const token = localStorage.getItem('token');
+  const invalidSession = !userRole || !token || isTokenExpired(token);
 
-  if (!userRole || !token || isTokenExpired(token)) {
+  useEffect(() => {
+    if (!invalidSession) return;
+    window.dispatchEvent(new Event('ccis-logout'));
+    localStorage.clear();
+  }, [invalidSession]);
+
+  if (invalidSession) {
     // Signed out (or session expired) while opening a notification link: remember where they were going,
     // so sign-in can continue there. Only an allowlisted path on this app is ever kept.
     const here = location.pathname + location.search;
-    localStorage.clear();
     if (isSafeAppLink(here)) sessionStorage.setItem('intendedRoute', here);
     return <Navigate to="/" replace />;
   }

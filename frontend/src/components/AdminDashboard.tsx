@@ -29,8 +29,7 @@ import RequestList from './RequestList';
 import AppointmentDetailsDrawer from './AppointmentDetailsDrawer';
 import WelcomeHeader from './WelcomeHeader';
 import FacultyScheduleModal from './FacultyScheduleModal';
-import SchedulePdfImporter from './SchedulePdfImporter';
-import BulkSchedulePdfImporter from './BulkSchedulePdfImporter';
+import { useImportSession } from '../context/ImportSessionContextCore';
 import { PAGE_PAD, useNavPalette } from '../utils/uiTokens';
 import { facultyStatusColor, facultyStatusLabel, facultyStatusOf, facultyStatusUntil } from './appointmentStatus';
 import { friendlyError, responseError } from '../utils/friendlyError';
@@ -61,6 +60,7 @@ export const formatTime = (timeStr: string) => {
 
 export default function AdminDashboard() {
   const toast = useToast();
+  const { actions: importActions } = useImportSession();
   const userName = localStorage.getItem('userName');
 
   const adminPages = ['appointments', 'home', 'provision', 'users', 'analytics', 'records', 'profile', 'history'] as const;
@@ -96,9 +96,6 @@ export default function AdminDashboard() {
   const [newFacultyName, setNewFacultyName] = useState('');
   const [newAccount, setNewAccount] = useState<{ id: string; role: string } | null>(null); // the account just created, so its class grid can open
 
-  const [provisionImportOpen, setProvisionImportOpen] = useState(false); // Provision Account: import a schedule PDF for the account just created
-  const [reviewOpen, setReviewOpen] = useState(false); // Class Schedules: review an OCR schedule draft (importer preview)
-  const [bulkOpen, setBulkOpen] = useState(false); // Class Schedules: bulk import of several schedule PDFs
   const [gridKey, setGridKey] = useState(0); // bumped after an import so the class grid reloads
   const [scheduleOf, setScheduleOf] = useState<any | null>(null); // faculty whose schedule is open
   const [emailEdit, setEmailEdit] = useState<any | null>(null); // account being moved to a school email
@@ -617,13 +614,11 @@ export default function AdminDashboard() {
                 options={facultyList.map(f => ({ value: f._id, label: f.name }))} />
             </FormControl>
             <HStack mb={3} justify="flex-end">
-              <ChakraButton size="sm" colorScheme="blue" onClick={() => setBulkOpen(true)} title="Upload several faculty schedule PDFs at once. Each file name picks the faculty; you review and confirm each one.">Bulk Import PDFs</ChakraButton>
-              <BulkSchedulePdfImporter isOpen={bulkOpen} onClose={() => setBulkOpen(false)} facultyList={facultyList} onApplied={() => setGridKey(k => k + 1)} />
+              <ChakraButton size="sm" colorScheme="blue" onClick={() => importActions.begin('bulk', 'admin', '', '', { facultyList, callbacks: { onApplied: () => setGridKey(k => k + 1) } })} title="Upload several faculty schedule PDFs at once. Each file name picks the faculty; you review and confirm each one.">Bulk Import PDFs</ChakraButton>
             </HStack>
             {selectedFacultyId && (
               <HStack mb={3} justify="flex-end">
-                <ChakraButton size="sm" variant="outline" onClick={() => setReviewOpen(true)} title="Upload a scanned Faculty Load PDF, review it, then confirm to replace the class schedule.">Import Schedule PDF</ChakraButton>
-                <SchedulePdfImporter key={selectedFacultyId} mode="admin" facultyId={selectedFacultyId} facultyName={facultyList.find(f => f._id === selectedFacultyId)?.name || ''} isOpen={reviewOpen} onClose={() => setReviewOpen(false)} onApplied={() => setGridKey(k => k + 1)} />
+                <ChakraButton size="sm" variant="outline" onClick={() => importActions.begin('single', 'admin', selectedFacultyId, facultyList.find(f => f._id === selectedFacultyId)?.name || '', { callbacks: { onApplied: () => setGridKey(k => k + 1) } })} title="Upload a scanned Faculty Load PDF, review it, then confirm to replace the class schedule.">Import Schedule PDF</ChakraButton>
               </HStack>
             )}
             {selectedFacultyId
@@ -755,8 +750,7 @@ export default function AdminDashboard() {
                     <Heading size="sm" color="green.500" mb={1}>Account created for {newFacultyName}</Heading>
                     <Text fontSize="sm" color={mutedText} mb={4}>Add their classes below (optional). You can change them later under Class Schedules.</Text>
                     <HStack mb={3} justify="flex-end">
-                      <ChakraButton size="sm" variant="outline" onClick={() => setProvisionImportOpen(true)} title="Upload a scanned Faculty Load PDF, review it, then confirm to replace the class schedule.">Import Schedule PDF</ChakraButton>
-                      <SchedulePdfImporter key={`p${newAccount.id}`} mode="admin" facultyId={newAccount.id} facultyName={newFacultyName} isOpen={provisionImportOpen} onClose={() => setProvisionImportOpen(false)} onApplied={() => setGridKey(k => k + 1)} />
+                      <ChakraButton size="sm" variant="outline" onClick={() => importActions.begin('single', 'admin', newAccount.id, newFacultyName, { callbacks: { onApplied: () => setGridKey(k => k + 1) } })} title="Upload a scanned Faculty Load PDF, review it, then confirm to replace the class schedule.">Import Schedule PDF</ChakraButton>
                     </HStack>
                     <ClassGridEditor key={`${newAccount.id}-${gridKey}`} facultyId={newAccount.id} facultyName={newFacultyName} />
                   </>
