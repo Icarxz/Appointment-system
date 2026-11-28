@@ -82,6 +82,7 @@ export default function PersonalHistoryPanel() {
   const [exporting, setExporting] = useState(false);
   const border = useColorModeValue('gray.200', 'whiteAlpha.300');
   const muted = useColorModeValue('gray.600', 'gray.300');
+  const heading = useColorModeValue('gray.800', 'gray.100');
   const navigate = useNavigate();
   const location = useLocation();
   const canOpenHistory = ['STUDENT', 'FACULTY', 'DEAN'].includes(localStorage.getItem('userRole') || '');
@@ -137,7 +138,7 @@ export default function PersonalHistoryPanel() {
         mb={4}
       >
         <Box>
-          <Heading size="sm">My history</Heading>
+          <Heading size="sm" color={heading}>My history</Heading>
           <Text fontSize="sm" color={muted} mt={1}>Your appointments, role changes, account events, and schedule history.</Text>
         </Box>
         <HStack spacing={2} flexShrink={0}>

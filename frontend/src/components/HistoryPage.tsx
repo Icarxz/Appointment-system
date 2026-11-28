@@ -140,6 +140,7 @@ export default function HistoryPage({ showScheduleAccount = false }: { showSched
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'consultations' | 'schedule'>('consultations');
   const muted = useColorModeValue('gray.600', 'gray.300');
+  const heading = useColorModeValue('gray.800', 'gray.100');
 
   useEffect(() => {
     let active = true;
@@ -260,7 +261,7 @@ export default function HistoryPage({ showScheduleAccount = false }: { showSched
 
   return (
     <Box flex="1" minH={0} overflowY="auto" p={{ base: 3, md: 6 }}>
-      <Heading size="lg" mb={4}>History</Heading>
+      <Heading size="lg" color={heading} mb={4}>History</Heading>
       {showScheduleAccount && (
         <HStack mb={4} spacing={2} flexWrap="wrap">
           <Button size="sm" variant={activeTab === 'consultations' ? 'solid' : 'outline'} colorScheme="blue" onClick={() => setActiveTab('consultations')}>Consultations</Button>
@@ -326,7 +327,7 @@ export default function HistoryPage({ showScheduleAccount = false }: { showSched
             return (
               <HistoryCard key={appointment._id}>
                 <Flex justify="space-between" align="start" gap={2} flexWrap="wrap">
-                  <Heading size="sm">{displayDate(appointment.date)}</Heading>
+                  <Heading size="sm" color={heading}>{displayDate(appointment.date)}</Heading>
                   <HStack spacing={2} flexWrap="wrap">
                     <Badge>{appointment.status}</Badge>
                     {earlierRole && <Badge colorScheme="purple">as {appointment.historyRole === 'STUDENT' ? 'Student' : 'Faculty'}</Badge>}
@@ -354,7 +355,7 @@ export default function HistoryPage({ showScheduleAccount = false }: { showSched
       {activeTab === 'schedule' && showScheduleAccount && (
         <VStack align="stretch" spacing={4}>
           <HistoryCard>
-            <Heading size="sm" mb={3}>Schedule imports</Heading>
+            <Heading size="sm" color={heading} mb={3}>Schedule imports</Heading>
             {!personalHistory?.schedule.imports.length
               ? <Text color={muted}>No schedule imports yet.</Text>
               : personalHistory.schedule.imports.map((item) => (
@@ -364,7 +365,7 @@ export default function HistoryPage({ showScheduleAccount = false }: { showSched
               ))}
           </HistoryCard>
           <HistoryCard>
-            <Heading size="sm" mb={3}>Manual schedule changes</Heading>
+            <Heading size="sm" color={heading} mb={3}>Manual schedule changes</Heading>
             {!scheduleEvents.length
               ? <Text color={muted}>No manual schedule changes recorded.</Text>
               : scheduleEvents.map((event) => (
@@ -372,7 +373,7 @@ export default function HistoryPage({ showScheduleAccount = false }: { showSched
               ))}
           </HistoryCard>
           <HistoryCard>
-            <Heading size="sm" mb={3}>Account and role history</Heading>
+            <Heading size="sm" color={heading} mb={3}>Account and role history</Heading>
             <Text fontWeight="semibold" mb={2}>Role timeline</Text>
             {roleTimeline.map((item, index) => (
               <Text key={`${item.role}-${index}`} fontSize="sm">{item.role} since {displayTimestamp(item.since)}</Text>
