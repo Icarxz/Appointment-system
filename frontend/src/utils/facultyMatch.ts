@@ -62,3 +62,8 @@ export function matchFacultyByFilename(fileName: string, faculty: FacultyLite[])
   const candidates = faculty.filter(f => facultyKeys(f.name).includes(key));
   return { key, status: candidates.length === 1 ? 'matched' : candidates.length > 1 ? 'ambiguous' : 'unmatched', candidates };
 }
+
+export function needsNameConfirmation(fileName: string, chosenFacultyId: string, faculty: FacultyLite[]): boolean {
+  if (!chosenFacultyId) return false;
+  return !matchFacultyByFilename(fileName, faculty).candidates.some(candidate => candidate._id === chosenFacultyId);
+}
